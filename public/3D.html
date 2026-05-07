@@ -109,7 +109,7 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'https://unpkg.com/three@0.132.2/examples/jsm/controls/PointerLockControls.js';
 
-        let camera, scene, renderer, controls;
+        let camera, scene, renderer, controls, centerCube;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let prevTime = performance.now();
         const velocity = new THREE.Vector3();
@@ -143,6 +143,13 @@
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
+
+            // Cube de démonstration au centre de la galerie
+            const cubeGeometry = new THREE.BoxGeometry(10, 10, 10);
+            const cubeMaterial = new THREE.MeshLambertMaterial({ color: 0x00d1ff });
+            centerCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            centerCube.position.set(0, 5, 0);
+            scene.add(centerCube);
 
             // 4. CONTROLES
             controls = new PointerLockControls(camera, document.body); // Le lock se fait sur tout le body
@@ -233,6 +240,9 @@
             }
 
             prevTime = time;
+            if (centerCube) {
+                centerCube.rotation.y += 0.01;
+            }
             renderer.render(scene, camera);
         }
     </script>
