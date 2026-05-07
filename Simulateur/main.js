@@ -1882,7 +1882,7 @@ async function handleSimulateNgspice() {
     } catch (error) {
         alert(
             "Impossible de lancer la simulation.\n" +
-                "Verifie que le serveur est lance avec: npm install puis npm start"
+                "Verifie que l'API /api/simulate est disponible et que ngspice est installe sur le serveur."
         );
         console.error(error);
     }

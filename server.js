@@ -6,6 +6,10 @@ const nodemailer = require('nodemailer'); // Nécessite 'npm install nodemailer'
 const http = require('http'); // Module natif Node.js
 const { Server } = require("socket.io"); // Module Socket.io
 const archiver = require('archiver'); // Nécessite 'npm install archiver'
+const { execFile } = require("node:child_process");
+const os = require("node:os");
+const { mkdtemp, readFile: readFileAsync, rm, writeFile } = require("node:fs/promises");
+const { pathToFileURL } = require("node:url");
 
 const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
@@ -20,6 +24,8 @@ const dirDocs = path.join(__dirname, 'doc');
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
+const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist.js")).href;
+let buildNgspiceDeckFn = null;
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -95,9 +101,154 @@ const uploadQuiz = multer({ storage: storageQuiz });
 // --- 4. MIDDLEWARES ---
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+function isProjectAccessible(projectKey) {
+    const aujourdhui = new Date().toISOString().split('T')[0];
+    const dateOuverture = planningProjets[projectKey];
+    return !dateOuverture || aujourdhui >= dateOuverture;
+}
+
+function sendProjectLocked(res, projectKey) {
+    const dateOuverture = planningProjets[projectKey];
+    const dateAffichee = dateOuverture ? dateOuverture.split('-').reverse().join('/') : "date à venir";
+    return res.send(`<script>alert("🔒 Projet disponible le ${dateAffichee}"); window.location='/projets.html';</script>`);
+}
+
+function withProjectDateGate(projectKey, handler) {
+    return (req, res) => {
+        if (!isProjectAccessible(projectKey)) return sendProjectLocked(res, projectKey);
+        return handler(req, res);
+    };
+}
+
+// Redirige l'ancienne page statique qui contournait les dates.
+app.get('/projets_backup.html', (req, res) => res.redirect('/projets.html'));
+app.get('/ContenuRobotique.html', withProjectDateGate('Robotique', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ContenuRobotique.html'))));
+app.get('/ultrason.html', withProjectDateGate('UltraSon', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ultrason.html'))));
+app.get('/StationMeteoConnectee.html', withProjectDateGate('Station_Meteo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'StationMeteoConnectee.html'))));
+app.get('/Digicode.html', withProjectDateGate('Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html'))));
+app.get('/Robo_Cytron_ESP32.html', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
+
 app.use(express.static('public'));
 app.use('/Simulateur', express.static(dirSimulateur));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
+
+async function getBuildNgspiceDeck() {
+    if (buildNgspiceDeckFn) {
+        return buildNgspiceDeckFn;
+    }
+    const module = await import(ngspiceDeckModuleUrl);
+    if (typeof module.buildNgspiceDeck !== "function") {
+        throw new Error("Module buildNgspiceDeck introuvable.");
+    }
+    buildNgspiceDeckFn = module.buildNgspiceDeck;
+    return buildNgspiceDeckFn;
+}
+
+function runNgspice(netlistPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        execFile(
+            "ngspice",
+            ["-b", "-o", outputPath, netlistPath],
+            { windowsHide: true, timeout: 25000, maxBuffer: 8 * 1024 * 1024 },
+            (error, stdout, stderr) => {
+                if (error) {
+                    reject({
+                        message: error.message,
+                        code: error.code,
+                        stdout: stdout || "",
+                        stderr: stderr || ""
+                    });
+                    return;
+                }
+                resolve({ stdout: stdout || "", stderr: stderr || "" });
+            }
+        );
+    });
+}
+
+function parseVoltMeasurements(log, voltmeters = []) {
+    const byRef = {};
+    for (const meter of voltmeters) {
+        const escapedName = String(meter.measureName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`${escapedName}\\s*=\\s*([+-]?\\d*\\.?\\d+(?:[eE][+-]?\\d+)?)`, "i");
+        const match = re.exec(log);
+        if (!match) {
+            continue;
+        }
+        const value = Number.parseFloat(match[1]);
+        if (Number.isFinite(value)) {
+            byRef[meter.reference] = value;
+        }
+    }
+    return byRef;
+}
+
+app.post("/api/simulate", async (req, res) => {
+    const state = req.body?.state;
+    let buildNgspiceDeck;
+    try {
+        buildNgspiceDeck = await getBuildNgspiceDeck();
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            phase: "init",
+            errors: ["Module netlist ngspice indisponible sur le serveur."],
+            details: { message: error?.message || "" }
+        });
+        return;
+    }
+
+    const built = buildNgspiceDeck(state);
+    if (!built.ok) {
+        res.status(400).json({
+            ok: false,
+            phase: "build",
+            errors: built.errors,
+            warnings: built.warnings,
+            netlist: built.netlist
+        });
+        return;
+    }
+
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sim-ngspice-"));
+    const netlistPath = path.join(tempDir, "circuit.cir");
+    const outputPath = path.join(tempDir, "ngspice.log");
+
+    try {
+        await writeFile(netlistPath, built.netlist, "utf8");
+        await runNgspice(netlistPath, outputPath);
+        const log = await readFileAsync(outputPath, "utf8");
+        const voltmeterValues = parseVoltMeasurements(log, built.voltmeters);
+        res.json({
+            ok: true,
+            warnings: built.warnings,
+            netlist: built.netlist,
+            log,
+            voltmeterValues
+        });
+    } catch (error) {
+        const missing = /not recognized|ENOENT|introuvable/i.test(error?.message || "");
+        res.status(500).json({
+            ok: false,
+            phase: "run",
+            errors: [
+                missing
+                    ? "ngspice introuvable. Sur Render, installe ngspice dans l'environnement de build/runtime."
+                    : "Echec d'execution ngspice."
+            ],
+            warnings: built.warnings,
+            netlist: built.netlist,
+            details: {
+                message: error?.message || "",
+                stdout: error?.stdout || "",
+                stderr: error?.stderr || ""
+            }
+        });
+    } finally {
+        await rm(tempDir, { recursive: true, force: true });
+    }
+});
 
 // --- 5. COMPTEUR ---
 let visitCount = 0;
@@ -147,11 +298,11 @@ app.get('/projets.html', (req, res) => {
 });
 
 // Pages de cours
-app.get('/Robotique', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ContenuRobotique.html')));
-app.get('/UltraSon', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ultrason.html')));
-app.get('/Station_Meteo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'StationMeteoConnectee.html')));
-app.get('/Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html')));
-app.get('/Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html')));
+app.get('/Robotique', withProjectDateGate('Robotique', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ContenuRobotique.html'))));
+app.get('/UltraSon', withProjectDateGate('UltraSon', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ultrason.html'))));
+app.get('/Station_Meteo', withProjectDateGate('Station_Meteo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'StationMeteoConnectee.html'))));
+app.get('/Digicode', withProjectDateGate('Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html'))));
+app.get('/Robo_Cytron_ESP32', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
 app.get('/apps', (req, res) => res.sendFile(path.join(__dirname, 'public', 'apps.html')));
 app.get('/docs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'docs.html')));
 app.get('/contact.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'contact.html')));
