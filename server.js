@@ -19,6 +19,7 @@ const dirUploads = path.join(__dirname, 'upload-tp');
 const dirDocs = path.join(__dirname, 'doc'); 
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
+const dirSimulateur = path.join(__dirname, 'Simulateur');
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -95,6 +96,7 @@ const uploadQuiz = multer({ storage: storageQuiz });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
+app.use('/Simulateur', express.static(dirSimulateur));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
 
 // --- 5. COMPTEUR ---
