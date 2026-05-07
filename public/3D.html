@@ -148,7 +148,8 @@
             const cubeGeometry = new THREE.BoxGeometry(10, 10, 10);
             const cubeMaterial = new THREE.MeshLambertMaterial({ color: 0x00d1ff });
             centerCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-            centerCube.position.set(0, 5, 0);
+            // Placé devant la caméra au démarrage pour être visible immédiatement
+            centerCube.position.set(0, 5, -30);
             scene.add(centerCube);
 
             // 4. CONTROLES
