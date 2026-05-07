@@ -11,6 +11,8 @@ const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
 const io = new Server(server); // On attache Socket.io au serveur HTTP
 const PORT = process.env.PORT || 3000;
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASS = process.env.ADMIN_PASS;
 
 // --- 1. CONFIGURATION DES CHEMINS ---
 const dirUploads = path.join(__dirname, 'upload-tp');
@@ -106,13 +108,17 @@ app.get('/api/counter', (req, res) => {
 
 // --- 6. AUTHENTIFICATION PROF ---
 const authentificationProf = (req, res, next) => {
+    if (!ADMIN_USER || !ADMIN_PASS) {
+        return res.status(500).send("Configuration admin manquante sur le serveur.");
+    }
+
     const auth = req.headers.authorization;
     if (!auth) {
         res.setHeader('WWW-Authenticate', 'Basic realm="Zone Prof"');
         return res.status(401).send("Identification requise.");
     }
     const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString().split(':');
-    if (credentials[0] === 'manuel75' && credentials[1] === 'Manu@75@Lucie') return next();
+    if (credentials[0] === ADMIN_USER && credentials[1] === ADMIN_PASS) return next();
     return res.status(401).send("Identifiants incorrects.");
 };
 
