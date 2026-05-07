@@ -1828,6 +1828,13 @@ function handleAbout() {
     alert("Mon Simulateur - Grille interactive avec zoom et deplacement.");
 }
 
+function sanitizeMeterReference(ref, fallback = "VM") {
+    const cleaned = String(ref || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, "");
+    return cleaned || fallback;
+}
+
 async function handleSimulateNgspice() {
     try {
         const response = await fetch("/api/simulate", {
@@ -1846,10 +1853,30 @@ async function handleSimulateNgspice() {
             console.error("ngspice error payload:", payload);
             return;
         }
+        const rawMeterValues = payload.voltmeterValues || {};
+        const formattedLines = [];
+        components.forEach((component) => {
+            if (component.type !== "voltmeter") {
+                return;
+            }
+            const key = sanitizeMeterReference(component.reference, "VM");
+            const value = rawMeterValues[key];
+            if (!Number.isFinite(value)) {
+                return;
+            }
+            component.value = `${value.toFixed(3)} V`;
+            formattedLines.push(`${component.reference || key}: ${component.value}`);
+        });
+        if (formattedLines.length > 0) {
+            draw();
+        }
         const warnings = payload.warnings && payload.warnings.length
             ? `\n\nAvertissements:\n- ${payload.warnings.join("\n- ")}`
             : "";
-        alert(`Simulation terminee avec succes.${warnings}\n\nLe detail est disponible dans la console.`);
+        const meterSummary = formattedLines.length
+            ? `\n\nMesures voltmetres:\n- ${formattedLines.join("\n- ")}`
+            : "\n\nAucune mesure voltmetre exploitable.";
+        alert(`Simulation terminee avec succes.${warnings}${meterSummary}\n\nLe detail est disponible dans la console.`);
         console.log("===== NETLIST NGSPICE =====\n" + payload.netlist);
         console.log("===== SORTIE NGSPICE =====\n" + payload.log);
     } catch (error) {

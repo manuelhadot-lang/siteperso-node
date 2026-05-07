@@ -246,6 +246,7 @@ export function buildNgspiceDeck(state, options = {}) {
     let lIdx = 1;
     let dIdx = 1;
     let vIdx = 1;
+    const voltmeters = [];
 
     for (const { component, terms } of compTerminals) {
         if (component.type === "ground" || component.type === "powerTerminal") {
@@ -274,6 +275,10 @@ export function buildNgspiceDeck(state, options = {}) {
         } else if (component.type === "supply") {
             const v = parseSpiceNumericValue(component.value, "5");
             lines.push(`${sanitizeRef(component.reference, "V", vIdx++)} ${n1} ${n2} DC ${v}`);
+        } else if (component.type === "voltmeter") {
+            const meterRef = sanitizeRef(component.reference, "VM", voltmeters.length + 1);
+            const measureName = `VM_${meterRef}`;
+            voltmeters.push({ reference: meterRef, nPlus: n1, nMinus: n2, measureName });
         }
     }
 
@@ -286,13 +291,16 @@ export function buildNgspiceDeck(state, options = {}) {
     }
 
     lines.push(".op");
-    lines.push(".tran 1u 10m startup");
+    voltmeters.forEach((meter) => {
+        lines.push(`.meas op ${meter.measureName} param='v(${meter.nPlus})-v(${meter.nMinus})'`);
+    });
     lines.push(".end");
 
     return {
         ok: errors.length === 0,
         netlist: lines.join("\n"),
         warnings,
-        errors
+        errors,
+        voltmeters
     };
 }
