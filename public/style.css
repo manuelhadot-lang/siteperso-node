@@ -1,0 +1,294 @@
+:root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #00d1ff;
+            --text-color: #f8fafc;
+            --secondary-text: #94a3b8;
+            --success: #10b981;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)),url("photo_classe.jpg");
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-attachment: fixed; /* L'image reste fixe quand on scrolle, effet très moderne */
+            background-position: center;
+        }
+
+        header 
+        {
+            background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.8)), url("photo_classe.jpg");
+            background-size: cover;
+            background-position: center;
+            padding: 20px 40px;
+            border-bottom: 2px solid var(--accent-color);
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 2px;
+            color: var(--accent-color);
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        /* Grille des chapitres */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            padding: 40px;
+        }
+
+        /* Style des cartes */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .card:hover {
+            transform: translateY(-8px);
+            border-color: var(--accent-color);
+            box-shadow: 0 10px 30px rgba(0, 209, 255, 0.2);
+        }
+
+        .card h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card p {
+            color: var(--secondary-text);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .badge {
+            background: rgba(0, 209, 255, 0.1);
+            color: var(--accent-color);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            align-self: flex-start;
+            margin-bottom: 1rem;
+            font-weight: bold;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem;
+            color: var(--secondary-text);
+            font-size: 0.8rem;
+        }
+
+        /* Animation d'entrée */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .status-panel 
+        {
+            position: absolute; /* Ou position: relative selon ton header */
+            top: 20px;
+            right: 20px;
+            background: rgba(30, 41, 59, 0.7); /* Bleu sombre transparent */
+            backdrop-filter: blur(10px); /* Floute l'image de classe derrière */
+            border: 1px solid rgba(0, 209, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'Orbitron', sans-serif; /* Ta police STI2D */
+            color: #f8fafc;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-item
+         {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+        }
+
+        .status-dot {
+            height: 8px;
+            width: 8px;
+            background-color: #39FF14; /* Vert néon */
+            border-radius: 50%;
+            box-shadow: 0 0 8px #39FF14;
+            animation: blink 1.5s infinite;
+        }
+
+        .status-label {
+            color: #94a3b8;
+            font-size: 0.7rem;
+        }
+
+        .status-count {
+            color: #00d1ff; /* Ton Cyan d'accentuation */
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .status-suffix {
+            font-size: 0.6rem;
+            color: #94a3b8;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        /* Style du Logo */
+        .logo-container {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            gap: 15px;
+        }
+
+        .site-logo {
+            height: 60px; /* Ajuste selon la taille de ton image */
+            width: auto;
+            filter: drop-shadow(0 0 5px rgba(0, 209, 255, 0.5)); /* Petit effet néon */
+        }
+
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .logo-subtitle {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            letter-spacing: 2px;
+        }
+        .card { animation: fadeIn 0.5s ease forwards; }
+
+                /* Titre de la séquence */
+        .sequence-title {
+            color: var(--accent-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 15px;
+            margin-bottom: 30px;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Carte de cours plus compacte */
+        .course-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Badge de type de fichier (PDF, TD, TP) */
+        .file-type {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            font-weight: bold;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .download-btn {
+            margin-top: auto;
+            text-align: center;
+            color: var(--accent-color);
+            text-decoration: none;
+            border: 1px solid var(--accent-color);
+            padding: 10px;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        .download-btn:hover {
+            background: var(--accent-color);
+            color: var(--bg-color);
+        }
+
+        /* Titre de la séquence */
+        .sequence-title {
+            color: var(--accent-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 15px;
+            margin-bottom: 30px;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Carte de cours plus compacte */
+        .course-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Badge de type de fichier (PDF, TD, TP) */
+        .file-type {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            font-weight: bold;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .download-btn {
+            margin-top: auto;
+            text-align: center;
+            color: var(--accent-color);
+            text-decoration: none;
+            border: 1px solid var(--accent-color);
+            padding: 10px;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        .download-btn:hover {
+            background: var(--accent-color);
+            color: var(--bg-color);
+        }
