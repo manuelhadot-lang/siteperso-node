@@ -36,6 +36,23 @@ function runNgspice(netlistPath, outputPath) {
     });
 }
 
+function parseVoltMeasurements(log, voltmeters = []) {
+    const byRef = {};
+    for (const meter of voltmeters) {
+        const escapedName = String(meter.measureName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`${escapedName}\\s*=\\s*([+-]?\\d*\\.?\\d+(?:[eE][+-]?\\d+)?)`, "i");
+        const match = re.exec(log);
+        if (!match) {
+            continue;
+        }
+        const value = Number.parseFloat(match[1]);
+        if (Number.isFinite(value)) {
+            byRef[meter.reference] = value;
+        }
+    }
+    return byRef;
+}
+
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
     const built = buildNgspiceDeck(state);
@@ -58,11 +75,13 @@ app.post("/api/simulate", async (req, res) => {
         await writeFile(netlistPath, built.netlist, "utf8");
         await runNgspice(netlistPath, outputPath);
         const log = await readFile(outputPath, "utf8");
+        const voltmeterValues = parseVoltMeasurements(log, built.voltmeters);
         res.json({
             ok: true,
             warnings: built.warnings,
             netlist: built.netlist,
-            log
+            log,
+            voltmeterValues
         });
     } catch (error) {
         const missing = /not recognized|ENOENT|introuvable/i.test(error?.message || "");
