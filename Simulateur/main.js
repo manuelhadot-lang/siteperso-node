@@ -1940,7 +1940,7 @@ function hasConnectedGroundInScene() {
     }
 
     const dsu = new ConnectivityDisjointSet();
-    const nodeKey = (x, y) => `${x}:${y}`;
+    const nodeKey = (x, y) => makeNodeKey(x, y);
 
     wires.forEach((wire) => {
         const points = getWirePathPoints(wire);
