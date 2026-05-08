@@ -11,9 +11,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SIM_ENGINE_BUILD_TAG = "v2-ground-segment-fix-2026-05-08b";
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(__dirname));
+app.get("/api/version", (req, res) => {
+    res.json({
+        ok: true,
+        service: "simulateur-standalone-server",
+        simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
+        pid: process.pid
+    });
+});
 
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;

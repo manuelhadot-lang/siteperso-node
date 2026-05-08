@@ -26,6 +26,7 @@ const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
 let buildNgspiceDeckFn = null;
+const SIM_ENGINE_BUILD_TAG = "v2-ground-segment-fix-2026-05-08b";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -132,6 +133,15 @@ app.get('/Robo_Cytron_ESP32.html', withProjectDateGate('Robo_Cytron_ESP32', (req
 app.use(express.static('public'));
 app.use('/Simulateur', express.static(dirSimulateur));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
+app.get('/api/version', (req, res) => {
+    res.json({
+        ok: true,
+        service: "siteperso-main-server",
+        simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
+        ngspiceDeckModuleUrl,
+        pid: process.pid
+    });
+});
 
 async function getBuildNgspiceDeck() {
     if (buildNgspiceDeckFn) {
