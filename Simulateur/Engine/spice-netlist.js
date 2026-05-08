@@ -292,7 +292,7 @@ export function buildNgspiceDeck(state, options = {}) {
 
     lines.push(".op");
     voltmeters.forEach((meter) => {
-        lines.push(`.meas op ${meter.measureName} param='v(${meter.nPlus})-v(${meter.nMinus})'`);
+        lines.push(`.meas op ${meter.measureName} FIND v(${meter.nPlus},${meter.nMinus})`);
     });
     lines.push(".end");
 
