@@ -26,7 +26,7 @@ const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
 let buildNgspiceDeckFn = null;
-const SIM_ENGINE_BUILD_TAG = "v2-terminals-unified-2026-05-08c";
+const SIM_ENGINE_BUILD_TAG = "v2-gridstep-ground-radius-2026-05-08d";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -336,7 +336,9 @@ app.post("/api/simulate", async (req, res) => {
         return;
     }
 
-    const built = buildNgspiceDeck(state);
+    const gs = Number(req.body?.gridStep);
+    const deckOpts = Number.isFinite(gs) && gs > 0 ? { gridStep: gs } : {};
+    const built = buildNgspiceDeck(state, deckOpts);
     if (!built.ok) {
         res.status(400).json({
             ok: false,

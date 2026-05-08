@@ -5,7 +5,7 @@ import {
     SPICE_OPTIONS_LINE
 } from "./spice-utils.js";
 
-export const BUILD_TAG = "v2-terminals-unified-2026-05-08c";
+export const BUILD_TAG = "v2-gridstep-ground-radius-2026-05-08d";
 
 function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";

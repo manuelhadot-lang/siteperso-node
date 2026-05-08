@@ -3,6 +3,8 @@ import { DisjointSet } from "./disjoint-set.js";
 import { pointKey } from "./spice-utils.js";
 
 const SEGMENT_EPS = 1;
+/** Rayon de rattachement GND ↔ réseau (sommets + proximité segment). ~1.35 × pas grille tolère légers décalages éditeur / projet importés. */
+const GROUND_ATTACH_FACTOR = 1.35;
 
 function isGroundComponent(component) {
     const type = String(component?.type || "").toLowerCase();
@@ -113,8 +115,9 @@ export function buildTopology(state, options = {}) {
         }
     }
     const allWirePoints = wires.flatMap((wire) => getWirePoints(wire));
-    const groundSnapMaxDistSq = (gridStep * 0.6) * (gridStep * 0.6);
-    const groundNearSegmentSq = (gridStep * 0.45) * (gridStep * 0.45);
+    const groundAttachR = gridStep * GROUND_ATTACH_FACTOR;
+    const groundSnapMaxDistSq = groundAttachR * groundAttachR;
+    const groundNearSegmentSq = groundAttachR * groundAttachR;
 
     const componentTerminals = [];
     const fallbackGroundKeys = [];
