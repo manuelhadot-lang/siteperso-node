@@ -5,7 +5,7 @@ import {
     SPICE_OPTIONS_LINE
 } from "./spice-utils.js";
 
-export const BUILD_TAG = "v2-gridstep-ground-radius-2026-05-08d";
+export const BUILD_TAG = "v2-diagnostics-vdc-path-2026-05-08e";
 
 function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";
@@ -103,6 +103,8 @@ export function compileSpiceDeck(topology) {
             ensureNodeStats(n2).hasSource = true;
             floatingSeedNodes.add(n1);
             floatingSeedNodes.add(n2);
+            /* Continuite DC pour diagnostics : une source V impose la tension entre ses bornes */
+            addConductiveEdge(n1, n2);
         } else if (component.type === "voltmeter") {
             const meterRef = sanitizeRef(component.reference, "VM", voltmeters.length + 1);
             voltmeters.push({ reference: meterRef, nPlus: n1, nMinus: n2, measureName: `VM_${meterRef}` });
