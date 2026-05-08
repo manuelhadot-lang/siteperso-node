@@ -5,12 +5,19 @@ import {
     SPICE_OPTIONS_LINE
 } from "./spice-utils.js";
 
+export const BUILD_TAG = "v2-ground-segment-fix-2026-05-08b";
+
 function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";
 }
 
 export function compileSpiceDeck(topology) {
-    const lines = ["* Netlist generee automatiquement (v2)", SPICE_OPTIONS_LINE, SPICE_DIODE_MODEL_LINE];
+    const lines = [
+        "* Netlist generee automatiquement (v2)",
+        `* BUILD_TAG: ${BUILD_TAG}`,
+        SPICE_OPTIONS_LINE,
+        SPICE_DIODE_MODEL_LINE
+    ];
     const warnings = [...(topology.warnings || [])];
     const errors = [];
     const voltmeters = [];
