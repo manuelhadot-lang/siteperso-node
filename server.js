@@ -186,16 +186,61 @@ function parseVoltMeasurements(log, voltmeters = []) {
 
 function parseNodeVoltages(log) {
     const byNode = {};
-    const lineRegex = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*$/gm;
-    let match;
-    while ((match = lineRegex.exec(log)) !== null) {
-        const nodeName = String(match[1] || "").trim().toLowerCase();
-        const value = Number.parseFloat(match[2]);
-        if (!nodeName || !Number.isFinite(value)) {
+    const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/;
+
+    // Format explicite: v(node)=value
+    const explicitRegex = /v\(\s*([^)]+?)\s*\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/gi;
+    let explicit;
+    while ((explicit = explicitRegex.exec(log)) !== null) {
+        const nodeName = String(explicit[1] || "").trim().toLowerCase();
+        const value = Number.parseFloat(explicit[2]);
+        if (nodeName && Number.isFinite(value)) {
+            byNode[nodeName] = value;
+        }
+    }
+
+    const lines = String(log || "").split(/\r?\n/);
+
+    // Format "Operating Point" classique: "<node> <value>"
+    for (const line of lines) {
+        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*$/);
+        if (!m) {
             continue;
         }
-        byNode[nodeName] = value;
+        const nodeName = m[1].toLowerCase();
+        const value = Number.parseFloat(m[2]);
+        if (Number.isFinite(value)) {
+            byNode[nodeName] = value;
+        }
     }
+
+    // Format table .print op :
+    // "Index   v(n1)   v(n2)"
+    // "0       2.5     5"
+    for (let i = 0; i < lines.length - 1; i += 1) {
+        const header = lines[i];
+        if (!/\bindex\b/i.test(header) || !/v\(/i.test(header)) {
+            continue;
+        }
+        const valueLine = lines[i + 1] || "";
+        const headerMatches = [...header.matchAll(/v\(\s*([^)]+?)\s*\)/gi)];
+        if (headerMatches.length === 0) {
+            continue;
+        }
+        const nums = valueLine.match(new RegExp(numberRe.source, "g")) || [];
+        // 1re colonne = index, puis les tensions
+        if (nums.length < headerMatches.length + 1) {
+            continue;
+        }
+        for (let k = 0; k < headerMatches.length; k += 1) {
+            const nodeName = String(headerMatches[k][1] || "").trim().toLowerCase();
+            const value = Number.parseFloat(nums[k + 1]);
+            if (nodeName && Number.isFinite(value)) {
+                byNode[nodeName] = value;
+            }
+        }
+    }
+
     return byNode;
 }
 
