@@ -68,6 +68,20 @@ const SUPPLY_LONG_Y = -0.205;
 const SUPPLY_SHORT_Y = 0.225;
 /** Borne haute / basse : nombre entier de carreaux depuis le centre (alignement grille). */
 const SUPPLY_TERMINAL_STEPS = 2;
+const TERMINAL_COORD_EPS = 1e-6;
+
+function snapTerminalPoint(point) {
+    const snap = (value) =>
+        Number.isFinite(value)
+            ? (Math.abs(value - Math.round(value)) <= TERMINAL_COORD_EPS
+                ? Math.round(value)
+                : Number(value.toFixed(6)))
+            : value;
+    return {
+        x: snap(point.x),
+        y: snap(point.y)
+    };
+}
 
 export function getComponentBounds(component, gridStep) {
     if (component.type === "supply") {
@@ -214,30 +228,30 @@ export function getComponentBounds(component, gridStep) {
 
 export function getComponentTerminals(component, gridStep) {
     if (component.type === "ground") {
-        const p = worldPointFromLocal(component, 0, -gridStep);
+        const p = snapTerminalPoint(worldPointFromLocal(component, 0, -gridStep));
         return { a: p, b: p };
     }
 
     if (component.type === "supply") {
         const d = SUPPLY_TERMINAL_STEPS * gridStep;
         return {
-            a: worldPointFromLocal(component, 0, -d),
-            b: worldPointFromLocal(component, 0, d)
+            a: snapTerminalPoint(worldPointFromLocal(component, 0, -d)),
+            b: snapTerminalPoint(worldPointFromLocal(component, 0, d))
         };
     }
 
     if (component.type === "powerTerminal") {
         const g = gridStep;
-        const p = worldPointFromLocal(component, 0, g);
+        const p = snapTerminalPoint(worldPointFromLocal(component, 0, g));
         return { a: p, b: p };
     }
 
     if (component.type === "transistorNpn") {
         const d = gridStep;
         return {
-            a: worldPointFromLocal(component, -d, 0),
-            b: worldPointFromLocal(component, d, -2 * d),
-            c: worldPointFromLocal(component, d, 2 * d)
+            a: snapTerminalPoint(worldPointFromLocal(component, -d, 0)),
+            b: snapTerminalPoint(worldPointFromLocal(component, d, -2 * d)),
+            c: snapTerminalPoint(worldPointFromLocal(component, d, 2 * d))
         };
     }
 
@@ -246,10 +260,10 @@ export function getComponentTerminals(component, gridStep) {
     const sin = Math.sin(angle);
 
     function terminalAt(localX) {
-        return {
+        return snapTerminalPoint({
             x: component.x + localX * cos,
             y: component.y + localX * sin
-        };
+        });
     }
 
     return {

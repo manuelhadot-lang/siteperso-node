@@ -259,6 +259,7 @@ body {
 .app-area {
     flex: 1;
     min-height: 0;
+    position: relative;
 }
 
 #gridCanvas {
@@ -329,4 +330,75 @@ body {
 
 .dialog-cancel {
     opacity: 0.9;
+}
+
+.sim-diagnostics {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: min(480px, calc(100% - 24px));
+    max-height: 40%;
+    overflow: auto;
+    display: none;
+    background: var(--menu-dropdown-bg);
+    border: 1px solid var(--topbar-border);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    padding: 10px 12px;
+    z-index: 20;
+}
+
+.sim-diagnostics.is-visible {
+    display: block;
+}
+
+.sim-diagnostics-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.sim-diagnostics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.sim-diagnostics-clear {
+    border: 1px solid var(--topbar-border);
+    background: transparent;
+    color: var(--menu-text);
+    border-radius: 8px;
+    font-size: 11px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.sim-diagnostics-clear:hover {
+    background: var(--menu-hover);
+}
+
+.sim-diagnostics-title.ok {
+    color: #22c55e;
+}
+
+.sim-diagnostics-title.warn {
+    color: #f59e0b;
+}
+
+.sim-diagnostics-title.error {
+    color: #ef4444;
+}
+
+.sim-diagnostics-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.sim-diagnostics-list li + li {
+    margin-top: 4px;
 }

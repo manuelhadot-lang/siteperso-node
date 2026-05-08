@@ -1,5 +1,6 @@
 const GRID_STEP_DEFAULT = 40;
 const SUPPLY_TERMINAL_STEPS = 2;
+const NODE_COORD_EPS = 1e-6;
 
 class DisjointSet {
     constructor() {
@@ -96,7 +97,13 @@ function sanitizeRef(ref, fallbackPrefix, idx) {
 }
 
 function pointKey(x, y) {
-    return `${x}:${y}`;
+    const nx = Number.isFinite(x)
+        ? (Math.abs(x - Math.round(x)) <= NODE_COORD_EPS ? Math.round(x) : Number(x.toFixed(6)))
+        : x;
+    const ny = Number.isFinite(y)
+        ? (Math.abs(y - Math.round(y)) <= NODE_COORD_EPS ? Math.round(y) : Number(y.toFixed(6)))
+        : y;
+    return `${nx}:${ny}`;
 }
 
 function rotateLocal(component, localX, localY) {
