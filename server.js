@@ -26,7 +26,7 @@ const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
 let buildNgspiceDeckFn = null;
-const SIM_ENGINE_BUILD_TAG = "v2-diagnostics-vdc-path-2026-05-08e";
+const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-node0-parse-2026-05-08f";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -286,6 +286,10 @@ function parseNodeVoltages(log) {
                 byNode[nodeName] = value;
             }
         }
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(byNode, "0")) {
+        byNode["0"] = 0;
     }
 
     return byNode;
