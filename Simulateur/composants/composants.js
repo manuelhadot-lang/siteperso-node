@@ -227,7 +227,12 @@ export function getComponentBounds(component, gridStep) {
 }
 
 export function getComponentTerminals(component, gridStep) {
-    if (component.type === "ground") {
+    const type = String(component?.type || "").toLowerCase();
+    const value = String(component?.value || "").toLowerCase();
+    const isGroundLike =
+        type === "ground" || type.includes("ground") || type === "sourceground" || value === "gnd";
+
+    if (isGroundLike) {
         const p = snapTerminalPoint(worldPointFromLocal(component, 0, -gridStep));
         return { a: p, b: p };
     }
@@ -240,7 +245,12 @@ export function getComponentTerminals(component, gridStep) {
         };
     }
 
-    if (component.type === "powerTerminal") {
+    const isPowerTerminalLike =
+        type === "powerterminal" ||
+        type.includes("powerterminal") ||
+        component.type === "powerTerminal";
+
+    if (isPowerTerminalLike) {
         const g = gridStep;
         const p = snapTerminalPoint(worldPointFromLocal(component, 0, g));
         return { a: p, b: p };

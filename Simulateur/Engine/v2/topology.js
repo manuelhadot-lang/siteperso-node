@@ -1,7 +1,7 @@
+import { getComponentTerminals } from "../../composants/composants.js";
 import { DisjointSet } from "./disjoint-set.js";
 import { pointKey } from "./spice-utils.js";
 
-const SUPPLY_TERMINAL_STEPS = 2;
 const SEGMENT_EPS = 1;
 
 function isGroundComponent(component) {
@@ -12,41 +12,7 @@ function isGroundComponent(component) {
 
 function isPowerTerminalComponent(component) {
     const type = String(component?.type || "").toLowerCase();
-    return type === "powerterminal" || type === "sourcepowerterminal" || type === "sourcepowertinal" || type.includes("powerterminal");
-}
-
-function rotateLocal(component, localX, localY) {
-    const angle = ((component.rotation || 0) * Math.PI) / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    return { x: component.x + localX * cos - localY * sin, y: component.y + localX * sin + localY * cos };
-}
-
-function getTerminals(component, gridStep) {
-    if (isGroundComponent(component)) {
-        return { a: rotateLocal(component, 0, -gridStep) };
-    }
-    if (component.type === "supply") {
-        const d = SUPPLY_TERMINAL_STEPS * gridStep;
-        return { a: rotateLocal(component, 0, -d), b: rotateLocal(component, 0, d) };
-    }
-    if (isPowerTerminalComponent(component)) {
-        return { a: rotateLocal(component, 0, gridStep) };
-    }
-    if (component.type === "transistorNpn") {
-        return {
-            a: rotateLocal(component, -gridStep, 0),
-            b: rotateLocal(component, gridStep, -2 * gridStep),
-            c: rotateLocal(component, gridStep, 2 * gridStep)
-        };
-    }
-    const angle = ((component.rotation || 0) * Math.PI) / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    return {
-        a: { x: component.x + (-2 * gridStep) * cos, y: component.y + (-2 * gridStep) * sin },
-        b: { x: component.x + (2 * gridStep) * cos, y: component.y + (2 * gridStep) * sin }
-    };
+    return type === "powerterminal" || type === "sourcepowerterminal" || type.includes("powerterminal");
 }
 
 function getWirePoints(wire) {
@@ -91,6 +57,46 @@ function isPointOnOrthogonalSegment(point, a, b, eps = SEGMENT_EPS) {
     return false;
 }
 
+/** Distance minimale au carré entre un point et un segment [a,b]. */
+function distPointToSegmentSq(px, py, ax, ay, bx, by) {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const abLenSq = abx * abx + aby * aby;
+    if (abLenSq === 0) {
+        return apx * apx + apy * apy;
+    }
+    let t = (apx * abx + apy * aby) / abLenSq;
+    t = Math.max(0, Math.min(1, t));
+    const cx = ax + t * abx;
+    const cy = ay + t * aby;
+    const dx = px - cx;
+    const dy = py - cy;
+    return dx * dx + dy * dy;
+}
+
+/** Liste des bornes (même snap que l’éditeur / les fils via composants.js). */
+function buildTerminalEntries(component, gridStep) {
+    const raw = getComponentTerminals(component, gridStep);
+    const order = ["a", "b", "c"];
+    const seenKeys = new Set();
+    const entries = [];
+    for (const name of order) {
+        const p = raw[name];
+        if (!p || typeof p.x !== "number" || typeof p.y !== "number") {
+            continue;
+        }
+        const key = pointKey(p.x, p.y);
+        if (seenKeys.has(key)) {
+            continue;
+        }
+        seenKeys.add(key);
+        entries.push({ name, point: { x: p.x, y: p.y }, key });
+    }
+    return entries;
+}
+
 export function buildTopology(state, options = {}) {
     const gridStep = options.gridStep || 40;
     const components = Array.isArray(state?.components) ? state.components : [];
@@ -108,19 +114,17 @@ export function buildTopology(state, options = {}) {
     }
     const allWirePoints = wires.flatMap((wire) => getWirePoints(wire));
     const groundSnapMaxDistSq = (gridStep * 0.6) * (gridStep * 0.6);
+    const groundNearSegmentSq = (gridStep * 0.45) * (gridStep * 0.45);
 
     const componentTerminals = [];
     const fallbackGroundKeys = [];
     for (const component of components) {
-        const terms = Object.entries(getTerminals(component, gridStep)).map(([name, p]) => ({
-            name,
-            point: p,
-            key: pointKey(p.x, p.y)
-        }));
+        let terms = buildTerminalEntries(component, gridStep);
         if (isGroundComponent(component) && terms.length > 0) {
             const near = nearestPoint(allWirePoints, terms[0].point, groundSnapMaxDistSq);
             if (near) {
                 terms[0].key = pointKey(near.x, near.y);
+                terms[0].point = { x: near.x, y: near.y };
             }
         }
         for (const term of terms) {
@@ -128,6 +132,18 @@ export function buildTopology(state, options = {}) {
         }
         if (isGroundComponent(component) && terms.length > 0) {
             fallbackGroundKeys.push(terms[0].key);
+            const { point: gp } = terms[0];
+            for (const wire of wires) {
+                const pts = getWirePoints(wire);
+                for (let i = 1; i < pts.length; i += 1) {
+                    const a = pts[i - 1];
+                    const b = pts[i];
+                    if (distPointToSegmentSq(gp.x, gp.y, a.x, a.y, b.x, b.y) <= groundNearSegmentSq) {
+                        dsu.union(terms[0].key, pointKey(a.x, a.y));
+                        dsu.union(terms[0].key, pointKey(b.x, b.y));
+                    }
+                }
+            }
         }
         componentTerminals.push({ component, terms });
     }
