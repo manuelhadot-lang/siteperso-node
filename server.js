@@ -184,6 +184,43 @@ function parseVoltMeasurements(log, voltmeters = []) {
     return byRef;
 }
 
+function parseNodeVoltages(log) {
+    const byNode = {};
+    const lineRegex = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*$/gm;
+    let match;
+    while ((match = lineRegex.exec(log)) !== null) {
+        const nodeName = String(match[1] || "").trim().toLowerCase();
+        const value = Number.parseFloat(match[2]);
+        if (!nodeName || !Number.isFinite(value)) {
+            continue;
+        }
+        byNode[nodeName] = value;
+    }
+    return byNode;
+}
+
+function mergeVoltmeterMeasurements(log, voltmeters = []) {
+    const directValues = parseVoltMeasurements(log, voltmeters);
+    const nodeVoltages = parseNodeVoltages(log);
+    const merged = { ...directValues };
+
+    for (const meter of voltmeters) {
+        if (Number.isFinite(merged[meter.reference])) {
+            continue;
+        }
+        const nPlus = String(meter.nPlus || "").toLowerCase();
+        const nMinus = String(meter.nMinus || "").toLowerCase();
+        if (!(nPlus in nodeVoltages) || !(nMinus in nodeVoltages)) {
+            continue;
+        }
+        const computed = nodeVoltages[nPlus] - nodeVoltages[nMinus];
+        if (Number.isFinite(computed)) {
+            merged[meter.reference] = computed;
+        }
+    }
+    return merged;
+}
+
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
     let buildNgspiceDeck;
@@ -227,7 +264,7 @@ app.post("/api/simulate", async (req, res) => {
         const combinedLog = [log, runResult.stdout || "", runResult.stderr || ""]
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
-        const voltmeterValues = parseVoltMeasurements(combinedLog, built.voltmeters);
+        const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters);
         res.json({
             ok: true,
             warnings: built.warnings,
