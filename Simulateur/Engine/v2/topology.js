@@ -2,6 +2,7 @@ import { DisjointSet } from "./disjoint-set.js";
 import { pointKey } from "./spice-utils.js";
 
 const SUPPLY_TERMINAL_STEPS = 2;
+const SEGMENT_EPS = 1;
 
 function isGroundComponent(component) {
     const type = String(component?.type || "").toLowerCase();
@@ -55,6 +56,41 @@ function getWirePoints(wire) {
     return [{ x: wire.ax, y: wire.ay }, { x: wire.bx, y: wire.by }];
 }
 
+function nearestPoint(points, target, maxDistSq) {
+    let best = null;
+    let bestDistSq = maxDistSq;
+    for (const p of points) {
+        const dx = p.x - target.x;
+        const dy = p.y - target.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= bestDistSq) {
+            bestDistSq = d2;
+            best = p;
+        }
+    }
+    return best;
+}
+
+function isPointOnOrthogonalSegment(point, a, b, eps = SEGMENT_EPS) {
+    if (Math.abs(a.x - b.x) <= eps) {
+        if (Math.abs(point.x - a.x) > eps) {
+            return false;
+        }
+        const minY = Math.min(a.y, b.y) - eps;
+        const maxY = Math.max(a.y, b.y) + eps;
+        return point.y >= minY && point.y <= maxY;
+    }
+    if (Math.abs(a.y - b.y) <= eps) {
+        if (Math.abs(point.y - a.y) > eps) {
+            return false;
+        }
+        const minX = Math.min(a.x, b.x) - eps;
+        const maxX = Math.max(a.x, b.x) + eps;
+        return point.x >= minX && point.x <= maxX;
+    }
+    return false;
+}
+
 export function buildTopology(state, options = {}) {
     const gridStep = options.gridStep || 40;
     const components = Array.isArray(state?.components) ? state.components : [];
@@ -70,14 +106,23 @@ export function buildTopology(state, options = {}) {
             dsu.union(pointKey(pts[i - 1].x, pts[i - 1].y), pointKey(pts[i].x, pts[i].y));
         }
     }
+    const allWirePoints = wires.flatMap((wire) => getWirePoints(wire));
+    const groundSnapMaxDistSq = (gridStep * 0.6) * (gridStep * 0.6);
 
     const componentTerminals = [];
     const fallbackGroundKeys = [];
     for (const component of components) {
         const terms = Object.entries(getTerminals(component, gridStep)).map(([name, p]) => ({
             name,
+            point: p,
             key: pointKey(p.x, p.y)
         }));
+        if (isGroundComponent(component) && terms.length > 0) {
+            const near = nearestPoint(allWirePoints, terms[0].point, groundSnapMaxDistSq);
+            if (near) {
+                terms[0].key = pointKey(near.x, near.y);
+            }
+        }
         for (const term of terms) {
             dsu.make(term.key);
         }
@@ -85,6 +130,24 @@ export function buildTopology(state, options = {}) {
             fallbackGroundKeys.push(terms[0].key);
         }
         componentTerminals.push({ component, terms });
+    }
+
+    // Connexion des bornes posees sur un segment (jonctions en T sans sommet explicite).
+    for (const { terms } of componentTerminals) {
+        for (const term of terms) {
+            for (const wire of wires) {
+                const pts = getWirePoints(wire);
+                for (let i = 1; i < pts.length; i += 1) {
+                    const a = pts[i - 1];
+                    const b = pts[i];
+                    if (!isPointOnOrthogonalSegment(term.point, a, b)) {
+                        continue;
+                    }
+                    dsu.union(term.key, pointKey(a.x, a.y));
+                    dsu.union(term.key, pointKey(b.x, b.y));
+                }
+            }
+        }
     }
 
     const rootNameMap = new Map();
