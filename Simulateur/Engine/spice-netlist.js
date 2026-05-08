@@ -255,6 +255,7 @@ export function buildNgspiceDeck(state, options = {}) {
     let vIdx = 1;
     const voltmeters = [];
     const nodeMeasures = [];
+    let hasElementConnectedToGround = false;
 
     for (const { component, terms } of compTerminals) {
         if (component.type === "ground" || component.type === "powerTerminal") {
@@ -266,6 +267,9 @@ export function buildNgspiceDeck(state, options = {}) {
         }
         const n1 = nodeOf(terms[0].key);
         const n2 = nodeOf(terms[1].key);
+        if (n1 === "0" || n2 === "0") {
+            hasElementConnectedToGround = true;
+        }
         if (n1 === n2) {
             warnings.push(`Composant '${component.reference || component.type}' en court-circuit local (${n1}).`);
         }
@@ -296,25 +300,28 @@ export function buildNgspiceDeck(state, options = {}) {
 
     if (!nameRootMap.has("0")) {
         errors.push("Aucune masse detectee : ajoute un composant 'Masse' pour definir le noeud 0.");
+    } else if (!hasElementConnectedToGround) {
+        errors.push("Masse detectee mais non connectee au circuit : relie GND a un fil actif.");
     }
 
     lines.push(".op");
-    voltmeters.forEach((meter) => {
-        lines.push(`.meas op ${meter.measureName} FIND v(${meter.nPlus},${meter.nMinus})`);
-    });
-    const measuredNodes = new Map();
+    const measuredNodes = new Set();
+    const nodePrintTerms = [];
     voltmeters.forEach((meter) => {
         [meter.nPlus, meter.nMinus].forEach((nodeName) => {
             if (measuredNodes.has(nodeName)) {
                 return;
             }
-            const token = sanitizeMeasureToken(nodeName, "N", measuredNodes.size + 1);
+            measuredNodes.add(nodeName);
+            const token = sanitizeMeasureToken(nodeName, "N", measuredNodes.size);
             const measureName = `NODE_${token}`;
-            measuredNodes.set(nodeName, measureName);
             nodeMeasures.push({ nodeName, measureName });
-            lines.push(`.meas op ${measureName} FIND v(${nodeName})`);
+            nodePrintTerms.push(`v(${nodeName})`);
         });
     });
+    if (nodePrintTerms.length > 0) {
+        lines.push(`.print op ${nodePrintTerms.join(" ")}`);
+    }
     lines.push(".end");
 
     return {
