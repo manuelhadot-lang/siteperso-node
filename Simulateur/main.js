@@ -1988,7 +1988,7 @@ async function handleSimulateNgspice() {
         const response = await fetch("/api/simulate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ state: getProjectState() })
+            body: JSON.stringify({ state: getProjectState(), gridStep: GRID_STEP })
         });
         const payload = await response.json();
         if (!payload.ok) {

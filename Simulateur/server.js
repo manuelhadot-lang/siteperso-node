@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SIM_ENGINE_BUILD_TAG = "v2-terminals-unified-2026-05-08c";
+const SIM_ENGINE_BUILD_TAG = "v2-gridstep-ground-radius-2026-05-08d";
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(__dirname));
@@ -26,7 +26,9 @@ app.get("/api/version", (req, res) => {
 
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
-    const built = buildNgspiceDeck(state);
+    const gs = Number(req.body?.gridStep);
+    const deckOpts = Number.isFinite(gs) && gs > 0 ? { gridStep: gs } : {};
+    const built = buildNgspiceDeck(state, deckOpts);
     if (!built.ok) {
         res.status(400).json({
             ok: false,
