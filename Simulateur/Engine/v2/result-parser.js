@@ -102,6 +102,11 @@ function parseNodeVoltages(log) {
         }
     }
 
+    /* ngspice n'affiche souvent pas la ligne du noeud de reference (0) ; tension implicite = 0 */
+    if (!Object.prototype.hasOwnProperty.call(byNode, "0")) {
+        byNode["0"] = 0;
+    }
+
     return byNode;
 }
 

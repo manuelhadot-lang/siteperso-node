@@ -5,7 +5,7 @@ import {
     SPICE_OPTIONS_LINE
 } from "./spice-utils.js";
 
-export const BUILD_TAG = "v2-diagnostics-vdc-path-2026-05-08e";
+export const BUILD_TAG = "v2-voltmeter-node0-parse-2026-05-08f";
 
 function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";
