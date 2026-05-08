@@ -169,14 +169,20 @@ function runNgspice(netlistPath, outputPath) {
 
 function parseVoltMeasurements(log, voltmeters = []) {
     const byRef = {};
+    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
+    const parseMaybeNumber = (raw) => {
+        const normalized = String(raw || "").trim().replace(",", ".");
+        const value = Number.parseFloat(normalized);
+        return Number.isFinite(value) ? value : null;
+    };
     for (const meter of voltmeters) {
         const escapedName = String(meter.measureName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const re = new RegExp(`${escapedName}\\s*=\\s*([+-]?\\d*\\.?\\d+(?:[eE][+-]?\\d+)?)`, "i");
+        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
         const match = re.exec(log);
         if (!match) {
             continue;
         }
-        const value = Number.parseFloat(match[1]);
+        const value = parseMaybeNumber(match[1]);
         if (Number.isFinite(value)) {
             byRef[meter.reference] = value;
         }
@@ -186,14 +192,19 @@ function parseVoltMeasurements(log, voltmeters = []) {
 
 function parseNodeVoltages(log) {
     const byNode = {};
-    const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/;
+    const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?/;
+    const parseMaybeNumber = (raw) => {
+        const normalized = String(raw || "").trim().replace(",", ".");
+        const value = Number.parseFloat(normalized);
+        return Number.isFinite(value) ? value : null;
+    };
 
     // Format explicite: v(node)=value
-    const explicitRegex = /v\(\s*([^)]+?)\s*\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/gi;
+    const explicitRegex = /v\(\s*([^)]+?)\s*\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)/gi;
     let explicit;
     while ((explicit = explicitRegex.exec(log)) !== null) {
         const nodeName = String(explicit[1] || "").trim().toLowerCase();
-        const value = Number.parseFloat(explicit[2]);
+        const value = parseMaybeNumber(explicit[2]);
         if (nodeName && Number.isFinite(value)) {
             byNode[nodeName] = value;
         }
@@ -203,12 +214,12 @@ function parseNodeVoltages(log) {
 
     // Format "Operating Point" classique: "<node> <value>"
     for (const line of lines) {
-        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*$/);
+        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)\s*$/);
         if (!m) {
             continue;
         }
         const nodeName = m[1].toLowerCase();
-        const value = Number.parseFloat(m[2]);
+        const value = parseMaybeNumber(m[2]);
         if (Number.isFinite(value)) {
             byNode[nodeName] = value;
         }
@@ -234,7 +245,7 @@ function parseNodeVoltages(log) {
         }
         for (let k = 0; k < headerMatches.length; k += 1) {
             const nodeName = String(headerMatches[k][1] || "").trim().toLowerCase();
-            const value = Number.parseFloat(nums[k + 1]);
+            const value = parseMaybeNumber(nums[k + 1]);
             if (nodeName && Number.isFinite(value)) {
                 byNode[nodeName] = value;
             }
