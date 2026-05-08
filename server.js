@@ -26,7 +26,7 @@ const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
 let buildNgspiceDeckFn = null;
-const SIM_ENGINE_BUILD_TAG = "v2-gridstep-ground-radius-2026-05-08d";
+const SIM_ENGINE_BUILD_TAG = "v2-diagnostics-vdc-path-2026-05-08e";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
