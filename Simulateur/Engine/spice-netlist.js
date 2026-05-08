@@ -306,7 +306,6 @@ export function buildNgspiceDeck(state, options = {}) {
 
     lines.push(".op");
     const measuredNodes = new Set();
-    const nodePrintTerms = [];
     voltmeters.forEach((meter) => {
         [meter.nPlus, meter.nMinus].forEach((nodeName) => {
             if (measuredNodes.has(nodeName)) {
@@ -316,12 +315,8 @@ export function buildNgspiceDeck(state, options = {}) {
             const token = sanitizeMeasureToken(nodeName, "N", measuredNodes.size);
             const measureName = `NODE_${token}`;
             nodeMeasures.push({ nodeName, measureName });
-            nodePrintTerms.push(`v(${nodeName})`);
         });
     });
-    if (nodePrintTerms.length > 0) {
-        lines.push(`.print op ${nodePrintTerms.join(" ")}`);
-    }
     lines.push(".end");
 
     return {
