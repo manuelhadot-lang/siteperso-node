@@ -21,6 +21,11 @@ const canvas = document.getElementById("gridCanvas");
 const ctx = canvas.getContext("2d");
 const newProjectDialog = document.getElementById("newProjectDialog");
 const openProjectInput = document.getElementById("openProjectInput");
+const simDiagnosticsPanel = document.getElementById("simDiagnostics");
+const simDiagnosticsTitle = document.getElementById("simDiagnosticsTitle");
+const simDiagnosticsList = document.getElementById("simDiagnosticsList");
+const simDiagnosticsClear = document.getElementById("simDiagnosticsClear");
+let simDiagnosticsAutoHideTimer = null;
 
 const GRID_STEP = 40;
 const MIN_ZOOM = 0.2;
@@ -1835,6 +1840,64 @@ function sanitizeMeterReference(ref, fallback = "VM") {
     return cleaned || fallback;
 }
 
+function formatSimulationDiagnostics(diagnostics) {
+    if (!diagnostics || typeof diagnostics !== "object") {
+        return [];
+    }
+    const lines = [];
+    if (Array.isArray(diagnostics.floatingNets) && diagnostics.floatingNets.length > 0) {
+        lines.push(`Noeuds flottants detectes: ${diagnostics.floatingNets.join(", ")}`);
+    }
+    if (diagnostics.sourceConnectedToGround === false) {
+        lines.push("Aucune source reliee a la masse par un chemin conducteur.");
+    }
+    if (Array.isArray(diagnostics.unsupportedComponents) && diagnostics.unsupportedComponents.length > 0) {
+        lines.push(`Composants ignores pour l'instant: ${diagnostics.unsupportedComponents.join(", ")}`);
+    }
+    return lines;
+}
+
+function renderSimulationDiagnosticsPanel(title, level, items = []) {
+    if (!simDiagnosticsPanel) {
+        return;
+    }
+    if (simDiagnosticsAutoHideTimer) {
+        clearTimeout(simDiagnosticsAutoHideTimer);
+        simDiagnosticsAutoHideTimer = null;
+    }
+    if (!items || items.length === 0) {
+        simDiagnosticsPanel.classList.remove("is-visible");
+        if (simDiagnosticsList) {
+            simDiagnosticsList.innerHTML = "";
+        }
+        return;
+    }
+    if (simDiagnosticsTitle) {
+        simDiagnosticsTitle.className = `sim-diagnostics-title ${level || "warn"}`;
+        simDiagnosticsTitle.textContent = title;
+    }
+    if (!simDiagnosticsList) {
+        return;
+    }
+    simDiagnosticsList.innerHTML = "";
+    items.forEach((line) => {
+        const li = document.createElement("li");
+        li.textContent = line;
+        simDiagnosticsList.appendChild(li);
+    });
+    simDiagnosticsPanel.classList.add("is-visible");
+
+    if (level === "ok") {
+        simDiagnosticsAutoHideTimer = window.setTimeout(() => {
+            simDiagnosticsPanel.classList.remove("is-visible");
+            if (simDiagnosticsList) {
+                simDiagnosticsList.innerHTML = "";
+            }
+            simDiagnosticsAutoHideTimer = null;
+        }, 4500);
+    }
+}
+
 class ConnectivityDisjointSet {
     constructor() {
         this.parent = new Map();
@@ -1924,11 +1987,14 @@ async function handleSimulateNgspice() {
     const groundCheck = hasConnectedGroundInScene();
     if (!groundCheck.ok) {
         if (groundCheck.reason === "missing") {
-            alert("Simulation impossible.\nAjoute un composant Masse (GND) relie au circuit.");
+            renderSimulationDiagnosticsPanel("Simulation impossible", "error", [
+                "Ajoute un composant Masse (GND) relie au circuit."
+            ]);
         } else {
-            alert(
-                "Simulation impossible.\nMasse detectee mais non connectee au circuit.\nRelie GND a un fil actif (par exemple le retour de l'alimentation)."
-            );
+            renderSimulationDiagnosticsPanel("Simulation impossible", "error", [
+                "Masse detectee mais non connectee au circuit.",
+                "Relie GND a un fil actif (par exemple le retour de l'alimentation)."
+            ]);
         }
         return;
     }
@@ -1941,12 +2007,14 @@ async function handleSimulateNgspice() {
         });
         const payload = await response.json();
         if (!payload.ok) {
+            const diagLines = formatSimulationDiagnostics(payload.diagnostics);
             const lines = [
                 "Simulation impossible.",
                 ...(payload.errors || []),
-                ...(payload.warnings || []).map((warning) => `Avertissement: ${warning}`)
+                ...(payload.warnings || []).map((warning) => `Avertissement: ${warning}`),
+                ...diagLines.map((line) => `Diagnostic: ${line}`)
             ];
-            alert(lines.join("\n"));
+            renderSimulationDiagnosticsPanel("Simulation impossible", "error", lines.slice(1));
             console.error("ngspice error payload:", payload);
             return;
         }
@@ -1967,20 +2035,20 @@ async function handleSimulateNgspice() {
         if (formattedLines.length > 0) {
             draw();
         }
-        const warnings = payload.warnings && payload.warnings.length
-            ? `\n\nAvertissements:\n- ${payload.warnings.join("\n- ")}`
-            : "";
-        const meterSummary = formattedLines.length
-            ? `\n\nMesures voltmetres:\n- ${formattedLines.join("\n- ")}`
-            : "\n\nAucune mesure voltmetre exploitable.";
-        alert(`Simulation terminee avec succes.${warnings}${meterSummary}\n\nLe detail est disponible dans la console.`);
+        const diagLines = formatSimulationDiagnostics(payload.diagnostics);
+        const panelLines = [
+            ...(payload.warnings || []).map((warning) => `Avertissement: ${warning}`),
+            ...diagLines.map((line) => `Diagnostic: ${line}`),
+            ...(formattedLines.length > 0 ? formattedLines.map((line) => `Mesure: ${line}`) : ["Aucune mesure voltmetre exploitable."])
+        ];
+        renderSimulationDiagnosticsPanel("Simulation terminee", payload.warnings?.length ? "warn" : "ok", panelLines);
         console.log("===== NETLIST NGSPICE =====\n" + payload.netlist);
         console.log("===== SORTIE NGSPICE =====\n" + payload.log);
     } catch (error) {
-        alert(
-            "Impossible de lancer la simulation.\n" +
-                "Verifie que l'API /api/simulate est disponible et que ngspice est installe sur le serveur."
-        );
+        renderSimulationDiagnosticsPanel("Simulation impossible", "error", [
+            "Impossible de lancer la simulation.",
+            "Verifie que l'API /api/simulate est disponible et que ngspice est installe sur le serveur."
+        ]);
         console.error(error);
     }
 }
@@ -2504,6 +2572,21 @@ window.addEventListener("keydown", (event) => {
         draw();
     }
 });
+
+if (simDiagnosticsClear) {
+    simDiagnosticsClear.addEventListener("click", () => {
+        if (simDiagnosticsAutoHideTimer) {
+            clearTimeout(simDiagnosticsAutoHideTimer);
+            simDiagnosticsAutoHideTimer = null;
+        }
+        if (simDiagnosticsList) {
+            simDiagnosticsList.innerHTML = "";
+        }
+        if (simDiagnosticsPanel) {
+            simDiagnosticsPanel.classList.remove("is-visible");
+        }
+    });
+}
 
 wireMenuActions();
 setupComponentMenuDragAndDrop();

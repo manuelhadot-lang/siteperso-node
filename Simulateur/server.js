@@ -1,10 +1,11 @@
 import express from "express";
-import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildNgspiceDeck } from "./Engine/spice-netlist.js";
+import { buildNgspiceDeck } from "./Engine/spice-netlist-v2.js";
+import { runNgspice as runNgspiceV2 } from "./Engine/v2/ngspice-runner.js";
+import { mergeVoltmeterMeasurements as mergeVoltmeterMeasurementsV2 } from "./Engine/v2/result-parser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,172 +14,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(__dirname));
-
-function runNgspice(netlistPath, outputPath) {
-    return new Promise((resolve, reject) => {
-        execFile(
-            "ngspice",
-            ["-b", "-o", outputPath, netlistPath],
-            { windowsHide: true, timeout: 25000, maxBuffer: 8 * 1024 * 1024 },
-            (error, stdout, stderr) => {
-                if (error) {
-                    reject({
-                        message: error.message,
-                        code: error.code,
-                        stdout: stdout || "",
-                        stderr: stderr || ""
-                    });
-                    return;
-                }
-                resolve({ stdout: stdout || "", stderr: stderr || "" });
-            }
-        );
-    });
-}
-
-function parseVoltMeasurements(log, voltmeters = []) {
-    const byRef = {};
-    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-    for (const meter of voltmeters) {
-        const escapedName = String(meter.measureName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
-        const match = re.exec(log);
-        if (!match) {
-            continue;
-        }
-        const value = parseMaybeNumber(match[1]);
-        if (Number.isFinite(value)) {
-            byRef[meter.reference] = value;
-        }
-    }
-    return byRef;
-}
-
-function parseNamedMeasurements(log, measureItems = []) {
-    const byName = {};
-    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-    for (const item of measureItems) {
-        const escapedName = String(item?.measureName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        if (!escapedName) {
-            continue;
-        }
-        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
-        const match = re.exec(log);
-        if (!match) {
-            continue;
-        }
-        const value = parseMaybeNumber(match[1]);
-        if (Number.isFinite(value)) {
-            byName[item.measureName] = value;
-        }
-    }
-    return byName;
-}
-
-function parseNodeVoltages(log) {
-    const byNode = {};
-    const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?/;
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-
-    // Format explicite: v(node)=value
-    const explicitRegex = /v\(\s*([^)]+?)\s*\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)/gi;
-    let explicit;
-    while ((explicit = explicitRegex.exec(log)) !== null) {
-        const nodeName = String(explicit[1] || "").trim().toLowerCase();
-        const value = parseMaybeNumber(explicit[2]);
-        if (nodeName && Number.isFinite(value)) {
-            byNode[nodeName] = value;
-        }
-    }
-
-    const lines = String(log || "").split(/\r?\n/);
-
-    // Format "Operating Point" classique: "<node> <value>"
-    for (const line of lines) {
-        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)\s*$/);
-        if (!m) {
-            continue;
-        }
-        const nodeName = m[1].toLowerCase();
-        const value = parseMaybeNumber(m[2]);
-        if (Number.isFinite(value)) {
-            byNode[nodeName] = value;
-        }
-    }
-
-    // Format table .print op :
-    // "Index   v(n1)   v(n2)"
-    // "0       2.5     5"
-    for (let i = 0; i < lines.length - 1; i += 1) {
-        const header = lines[i];
-        if (!/\bindex\b/i.test(header) || !/v\(/i.test(header)) {
-            continue;
-        }
-        const valueLine = lines[i + 1] || "";
-        const headerMatches = [...header.matchAll(/v\(\s*([^)]+?)\s*\)/gi)];
-        if (headerMatches.length === 0) {
-            continue;
-        }
-        const nums = valueLine.match(new RegExp(numberRe.source, "g")) || [];
-        // 1re colonne = index, puis les tensions
-        if (nums.length < headerMatches.length + 1) {
-            continue;
-        }
-        for (let k = 0; k < headerMatches.length; k += 1) {
-            const nodeName = String(headerMatches[k][1] || "").trim().toLowerCase();
-            const value = parseMaybeNumber(nums[k + 1]);
-            if (nodeName && Number.isFinite(value)) {
-                byNode[nodeName] = value;
-            }
-        }
-    }
-
-    return byNode;
-}
-
-function mergeVoltmeterMeasurements(log, voltmeters = [], nodeMeasures = []) {
-    const directValues = parseVoltMeasurements(log, voltmeters);
-    const namedNodeValues = parseNamedMeasurements(log, nodeMeasures);
-    const nodeVoltages = parseNodeVoltages(log);
-    const merged = { ...directValues };
-
-    for (const nodeMeasure of nodeMeasures) {
-        const measured = namedNodeValues[nodeMeasure.measureName];
-        if (Number.isFinite(measured)) {
-            nodeVoltages[String(nodeMeasure.nodeName || "").toLowerCase()] = measured;
-        }
-    }
-
-    for (const meter of voltmeters) {
-        if (Number.isFinite(merged[meter.reference])) {
-            continue;
-        }
-        const nPlus = String(meter.nPlus || "").toLowerCase();
-        const nMinus = String(meter.nMinus || "").toLowerCase();
-        if (!(nPlus in nodeVoltages) || !(nMinus in nodeVoltages)) {
-            continue;
-        }
-        const computed = nodeVoltages[nPlus] - nodeVoltages[nMinus];
-        if (Number.isFinite(computed)) {
-            merged[meter.reference] = computed;
-        }
-    }
-    return merged;
-}
 
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
@@ -189,7 +24,8 @@ app.post("/api/simulate", async (req, res) => {
             phase: "build",
             errors: built.errors,
             warnings: built.warnings,
-            netlist: built.netlist
+            netlist: built.netlist,
+            diagnostics: built.diagnostics || null
         });
         return;
     }
@@ -200,7 +36,7 @@ app.post("/api/simulate", async (req, res) => {
 
     try {
         await writeFile(netlistPath, built.netlist, "utf8");
-        const runResult = await runNgspice(netlistPath, outputPath);
+        const runResult = await runNgspiceV2(netlistPath, outputPath);
         let log = "";
         try {
             log = await readFile(outputPath, "utf8");
@@ -210,13 +46,14 @@ app.post("/api/simulate", async (req, res) => {
         const combinedLog = [log, runResult.stdout || "", runResult.stderr || ""]
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
-        const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
+        const voltmeterValues = mergeVoltmeterMeasurementsV2(combinedLog, built.voltmeters, built.nodeMeasures || []);
         res.json({
             ok: true,
             warnings: built.warnings,
             netlist: built.netlist,
             log: combinedLog || log,
-            voltmeterValues
+            voltmeterValues,
+            diagnostics: built.diagnostics || null
         });
     } catch (error) {
         const missing = /not recognized|ENOENT|introuvable/i.test(error?.message || "");
@@ -230,6 +67,7 @@ app.post("/api/simulate", async (req, res) => {
             ],
             warnings: built.warnings,
             netlist: built.netlist,
+            diagnostics: built.diagnostics || null,
             details: {
                 message: error?.message || "",
                 stdout: error?.stdout || "",

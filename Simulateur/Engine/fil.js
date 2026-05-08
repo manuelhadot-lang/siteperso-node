@@ -1,5 +1,12 @@
 export function makeNodeKey(x, y) {
-    return `${x}:${y}`;
+    const eps = 1e-6;
+    const nx = Number.isFinite(x)
+        ? (Math.abs(x - Math.round(x)) <= eps ? Math.round(x) : Number(x.toFixed(6)))
+        : x;
+    const ny = Number.isFinite(y)
+        ? (Math.abs(y - Math.round(y)) <= eps ? Math.round(y) : Number(y.toFixed(6)))
+        : y;
+    return `${nx}:${ny}`;
 }
 
 /** Tolérance pour trait horizontal / vertical (bornes avec rotation = flottants proches de la grille) */

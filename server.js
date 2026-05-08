@@ -24,7 +24,7 @@ const dirDocs = path.join(__dirname, 'doc');
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
-const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist.js")).href;
+const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
 let buildNgspiceDeckFn = null;
 
 // --- CHARGEMENT DES ELEVES ---

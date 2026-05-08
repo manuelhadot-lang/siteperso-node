@@ -152,6 +152,13 @@
 
     <main class="app-area">
         <canvas id="gridCanvas"></canvas>
+        <section id="simDiagnostics" class="sim-diagnostics" aria-live="polite">
+            <div class="sim-diagnostics-header">
+                <div id="simDiagnosticsTitle" class="sim-diagnostics-title">Diagnostics</div>
+                <button id="simDiagnosticsClear" class="sim-diagnostics-clear" type="button">Effacer</button>
+            </div>
+            <ul id="simDiagnosticsList" class="sim-diagnostics-list"></ul>
+        </section>
     </main>
     <dialog id="newProjectDialog" class="app-dialog">
         <form method="dialog" class="dialog-content">
