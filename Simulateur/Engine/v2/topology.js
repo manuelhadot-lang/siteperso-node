@@ -3,6 +3,17 @@ import { pointKey } from "./spice-utils.js";
 
 const SUPPLY_TERMINAL_STEPS = 2;
 
+function isGroundComponent(component) {
+    const type = String(component?.type || "").toLowerCase();
+    const value = String(component?.value || "").toLowerCase();
+    return type === "ground" || type === "sourceground" || type === "gnd" || value === "gnd";
+}
+
+function isPowerTerminalComponent(component) {
+    const type = String(component?.type || "").toLowerCase();
+    return type === "powerterminal" || type === "sourcepowerterminal" || type === "sourcepowertinal";
+}
+
 function rotateLocal(component, localX, localY) {
     const angle = ((component.rotation || 0) * Math.PI) / 180;
     const cos = Math.cos(angle);
@@ -11,14 +22,14 @@ function rotateLocal(component, localX, localY) {
 }
 
 function getTerminals(component, gridStep) {
-    if (component.type === "ground") {
+    if (isGroundComponent(component)) {
         return { a: rotateLocal(component, 0, -gridStep) };
     }
     if (component.type === "supply") {
         const d = SUPPLY_TERMINAL_STEPS * gridStep;
         return { a: rotateLocal(component, 0, -d), b: rotateLocal(component, 0, d) };
     }
-    if (component.type === "powerTerminal") {
+    if (isPowerTerminalComponent(component)) {
         return { a: rotateLocal(component, 0, gridStep) };
     }
     if (component.type === "transistorNpn") {
@@ -61,6 +72,7 @@ export function buildTopology(state, options = {}) {
     }
 
     const componentTerminals = [];
+    const fallbackGroundKeys = [];
     for (const component of components) {
         const terms = Object.entries(getTerminals(component, gridStep)).map(([name, p]) => ({
             name,
@@ -68,6 +80,9 @@ export function buildTopology(state, options = {}) {
         }));
         for (const term of terms) {
             dsu.make(term.key);
+        }
+        if (isGroundComponent(component) && terms.length > 0) {
+            fallbackGroundKeys.push(terms[0].key);
         }
         componentTerminals.push({ component, terms });
     }
@@ -95,7 +110,7 @@ export function buildTopology(state, options = {}) {
     };
 
     for (const { component, terms } of componentTerminals) {
-        if (component.type !== "ground" || terms.length === 0) {
+        if (!isGroundComponent(component) || terms.length === 0) {
             continue;
         }
         const root = dsu.find(terms[0].key);
@@ -103,9 +118,16 @@ export function buildTopology(state, options = {}) {
         rootNameMap.set(root, "0");
         nameRootMap.set("0", root);
     }
+    if (groundRoots.size === 0 && fallbackGroundKeys.length > 0) {
+        const root = dsu.find(fallbackGroundKeys[0]);
+        groundRoots.add(root);
+        rootNameMap.set(root, "0");
+        nameRootMap.set("0", root);
+        warnings.push("Masse forcee sur le noeud GND detecte (compatibilite).");
+    }
 
     for (const { component, terms } of componentTerminals) {
-        if (component.type !== "powerTerminal" || terms.length === 0) {
+        if (!isPowerTerminalComponent(component) || terms.length === 0) {
             continue;
         }
         const root = dsu.find(terms[0].key);
