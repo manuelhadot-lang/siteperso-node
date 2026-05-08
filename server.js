@@ -217,14 +217,22 @@ app.post("/api/simulate", async (req, res) => {
 
     try {
         await writeFile(netlistPath, built.netlist, "utf8");
-        await runNgspice(netlistPath, outputPath);
-        const log = await readFileAsync(outputPath, "utf8");
-        const voltmeterValues = parseVoltMeasurements(log, built.voltmeters);
+        const runResult = await runNgspice(netlistPath, outputPath);
+        let log = "";
+        try {
+            log = await readFileAsync(outputPath, "utf8");
+        } catch {
+            // Certaines variantes/runtime d'ngspice peuvent ne pas ecrire le log attendu.
+        }
+        const combinedLog = [log, runResult.stdout || "", runResult.stderr || ""]
+            .filter((part) => typeof part === "string" && part.trim().length > 0)
+            .join("\n");
+        const voltmeterValues = parseVoltMeasurements(combinedLog, built.voltmeters);
         res.json({
             ok: true,
             warnings: built.warnings,
             netlist: built.netlist,
-            log,
+            log: combinedLog || log,
             voltmeterValues
         });
     } catch (error) {
