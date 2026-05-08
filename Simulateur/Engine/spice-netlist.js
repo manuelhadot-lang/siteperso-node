@@ -152,6 +152,13 @@ function getWirePoints(wire) {
     ];
 }
 
+function sanitizeMeasureToken(raw, fallbackPrefix, idx) {
+    const cleaned = String(raw || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, "_");
+    return cleaned || `${fallbackPrefix}${idx}`;
+}
+
 export function buildNgspiceDeck(state, options = {}) {
     const gridStep = options.gridStep || GRID_STEP_DEFAULT;
     const components = Array.isArray(state?.components) ? state.components : [];
@@ -247,6 +254,7 @@ export function buildNgspiceDeck(state, options = {}) {
     let dIdx = 1;
     let vIdx = 1;
     const voltmeters = [];
+    const nodeMeasures = [];
 
     for (const { component, terms } of compTerminals) {
         if (component.type === "ground" || component.type === "powerTerminal") {
@@ -294,6 +302,19 @@ export function buildNgspiceDeck(state, options = {}) {
     voltmeters.forEach((meter) => {
         lines.push(`.meas op ${meter.measureName} FIND v(${meter.nPlus},${meter.nMinus})`);
     });
+    const measuredNodes = new Map();
+    voltmeters.forEach((meter) => {
+        [meter.nPlus, meter.nMinus].forEach((nodeName) => {
+            if (measuredNodes.has(nodeName)) {
+                return;
+            }
+            const token = sanitizeMeasureToken(nodeName, "N", measuredNodes.size + 1);
+            const measureName = `NODE_${token}`;
+            measuredNodes.set(nodeName, measureName);
+            nodeMeasures.push({ nodeName, measureName });
+            lines.push(`.meas op ${measureName} FIND v(${nodeName})`);
+        });
+    });
     lines.push(".end");
 
     return {
@@ -301,6 +322,7 @@ export function buildNgspiceDeck(state, options = {}) {
         netlist: lines.join("\n"),
         warnings,
         errors,
-        voltmeters
+        voltmeters,
+        nodeMeasures
     };
 }
