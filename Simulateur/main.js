@@ -1984,21 +1984,6 @@ function hasConnectedGroundInScene() {
 }
 
 async function handleSimulateNgspice() {
-    const groundCheck = hasConnectedGroundInScene();
-    if (!groundCheck.ok) {
-        if (groundCheck.reason === "missing") {
-            renderSimulationDiagnosticsPanel("Simulation impossible", "error", [
-                "Ajoute un composant Masse (GND) relie au circuit."
-            ]);
-        } else {
-            renderSimulationDiagnosticsPanel("Simulation impossible", "error", [
-                "Masse detectee mais non connectee au circuit.",
-                "Relie GND a un fil actif (par exemple le retour de l'alimentation)."
-            ]);
-        }
-        return;
-    }
-
     try {
         const response = await fetch("/api/simulate", {
             method: "POST",
