@@ -59,6 +59,32 @@ function parseVoltMeasurements(log, voltmeters = []) {
     return byRef;
 }
 
+function parseNamedMeasurements(log, measureItems = []) {
+    const byName = {};
+    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
+    const parseMaybeNumber = (raw) => {
+        const normalized = String(raw || "").trim().replace(",", ".");
+        const value = Number.parseFloat(normalized);
+        return Number.isFinite(value) ? value : null;
+    };
+    for (const item of measureItems) {
+        const escapedName = String(item?.measureName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (!escapedName) {
+            continue;
+        }
+        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
+        const match = re.exec(log);
+        if (!match) {
+            continue;
+        }
+        const value = parseMaybeNumber(match[1]);
+        if (Number.isFinite(value)) {
+            byName[item.measureName] = value;
+        }
+    }
+    return byName;
+}
+
 function parseNodeVoltages(log) {
     const byNode = {};
     const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?/;
@@ -124,10 +150,18 @@ function parseNodeVoltages(log) {
     return byNode;
 }
 
-function mergeVoltmeterMeasurements(log, voltmeters = []) {
+function mergeVoltmeterMeasurements(log, voltmeters = [], nodeMeasures = []) {
     const directValues = parseVoltMeasurements(log, voltmeters);
+    const namedNodeValues = parseNamedMeasurements(log, nodeMeasures);
     const nodeVoltages = parseNodeVoltages(log);
     const merged = { ...directValues };
+
+    for (const nodeMeasure of nodeMeasures) {
+        const measured = namedNodeValues[nodeMeasure.measureName];
+        if (Number.isFinite(measured)) {
+            nodeVoltages[String(nodeMeasure.nodeName || "").toLowerCase()] = measured;
+        }
+    }
 
     for (const meter of voltmeters) {
         if (Number.isFinite(merged[meter.reference])) {
@@ -176,7 +210,7 @@ app.post("/api/simulate", async (req, res) => {
         const combinedLog = [log, runResult.stdout || "", runResult.stderr || ""]
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
-        const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters);
+        const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
         res.json({
             ok: true,
             warnings: built.warnings,
