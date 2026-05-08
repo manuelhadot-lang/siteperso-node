@@ -1835,7 +1835,104 @@ function sanitizeMeterReference(ref, fallback = "VM") {
     return cleaned || fallback;
 }
 
+class ConnectivityDisjointSet {
+    constructor() {
+        this.parent = new Map();
+    }
+
+    make(x) {
+        if (!this.parent.has(x)) {
+            this.parent.set(x, x);
+        }
+    }
+
+    find(x) {
+        this.make(x);
+        let p = this.parent.get(x);
+        while (p !== this.parent.get(p)) {
+            p = this.parent.get(p);
+        }
+        let cur = x;
+        while (cur !== p) {
+            const next = this.parent.get(cur);
+            this.parent.set(cur, p);
+            cur = next;
+        }
+        return p;
+    }
+
+    union(a, b) {
+        const ra = this.find(a);
+        const rb = this.find(b);
+        if (ra !== rb) {
+            this.parent.set(ra, rb);
+        }
+    }
+}
+
+function hasConnectedGroundInScene() {
+    const groundComponents = components.filter((component) => component.type === "ground");
+    if (groundComponents.length === 0) {
+        return { ok: false, reason: "missing" };
+    }
+
+    const dsu = new ConnectivityDisjointSet();
+    const nodeKey = (x, y) => `${x}:${y}`;
+
+    wires.forEach((wire) => {
+        const points = getWirePathPoints(wire);
+        points.forEach((point) => dsu.make(nodeKey(point.x, point.y)));
+        for (let i = 1; i < points.length; i += 1) {
+            dsu.union(
+                nodeKey(points[i - 1].x, points[i - 1].y),
+                nodeKey(points[i].x, points[i].y)
+            );
+        }
+    });
+
+    const componentTerminalKeys = [];
+    components.forEach((component) => {
+        const terminals = getComponentTerminals(component, GRID_STEP);
+        const terminalPoints = [terminals.a, terminals.b, terminals.c].filter(Boolean);
+        terminalPoints.forEach((point) => {
+            const key = nodeKey(point.x, point.y);
+            dsu.make(key);
+            componentTerminalKeys.push({ component, key });
+        });
+    });
+
+    const groundRoots = new Set();
+    componentTerminalKeys.forEach(({ component, key }) => {
+        if (component.type === "ground") {
+            groundRoots.add(dsu.find(key));
+        }
+    });
+
+    const activeConnectedToGround = componentTerminalKeys.some(({ component, key }) => {
+        if (component.type === "ground") {
+            return false;
+        }
+        return groundRoots.has(dsu.find(key));
+    });
+
+    return activeConnectedToGround
+        ? { ok: true, reason: null }
+        : { ok: false, reason: "floating" };
+}
+
 async function handleSimulateNgspice() {
+    const groundCheck = hasConnectedGroundInScene();
+    if (!groundCheck.ok) {
+        if (groundCheck.reason === "missing") {
+            alert("Simulation impossible.\nAjoute un composant Masse (GND) relie au circuit.");
+        } else {
+            alert(
+                "Simulation impossible.\nMasse detectee mais non connectee au circuit.\nRelie GND a un fil actif (par exemple le retour de l'alimentation)."
+            );
+        }
+        return;
+    }
+
     try {
         const response = await fetch("/api/simulate", {
             method: "POST",
