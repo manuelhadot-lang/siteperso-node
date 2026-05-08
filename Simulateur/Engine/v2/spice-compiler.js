@@ -11,6 +11,17 @@ function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";
 }
 
+function isGroundLike(component) {
+    const type = String(component?.type || "").toLowerCase();
+    const value = String(component?.value || "").toLowerCase();
+    return type === "ground" || type === "sourceground" || type.includes("ground") || value === "gnd";
+}
+
+function isPowerTerminalLike(component) {
+    const type = String(component?.type || "").toLowerCase();
+    return type === "powerterminal" || type === "sourcepowerterminal" || type.includes("powerterminal");
+}
+
 export function compileSpiceDeck(topology) {
     const lines = [
         "* Netlist generee automatiquement (v2)",
@@ -57,7 +68,7 @@ export function compileSpiceDeck(topology) {
     let vIdx = 1;
 
     for (const { component, terms } of topology.componentTerminals) {
-        if (component.type === "ground" || component.type === "powerTerminal") {
+        if (isGroundLike(component) || isPowerTerminalLike(component)) {
             continue;
         }
         if (terms.length < 2) {

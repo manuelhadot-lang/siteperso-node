@@ -7,12 +7,12 @@ const SEGMENT_EPS = 1;
 function isGroundComponent(component) {
     const type = String(component?.type || "").toLowerCase();
     const value = String(component?.value || "").toLowerCase();
-    return type === "ground" || type === "sourceground" || type === "gnd" || value === "gnd";
+    return type === "ground" || type === "sourceground" || type === "gnd" || type.includes("ground") || value === "gnd";
 }
 
 function isPowerTerminalComponent(component) {
     const type = String(component?.type || "").toLowerCase();
-    return type === "powerterminal" || type === "sourcepowerterminal" || type === "sourcepowertinal";
+    return type === "powerterminal" || type === "sourcepowerterminal" || type === "sourcepowertinal" || type.includes("powerterminal");
 }
 
 function rotateLocal(component, localX, localY) {
