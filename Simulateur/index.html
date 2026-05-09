@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Simulateur (reset)</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="dark">
+    <header class="toolbar">
+        <span class="title">Simulateur</span>
+        <button type="button" data-tool="select" class="active">Selection</button>
+        <button type="button" data-tool="wire">Fil</button>
+        <button type="button" data-tool="resistance">R</button>
+        <button type="button" data-tool="supply">Source</button>
+        <button type="button" data-tool="ground">Masse</button>
+        <button type="button" data-tool="voltmeter">Voltmetre</button>
+        <button type="button" id="simulateBtn">Simuler</button>
+        <button type="button" id="editValueBtn">Valeur</button>
+        <button type="button" id="rotateBtn">Tourner</button>
+        <button type="button" id="clearBtn">Tout effacer</button>
+    </header>
+    <div id="status" role="status"></div>
+    <canvas id="canvas"></canvas>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
