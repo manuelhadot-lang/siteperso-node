@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-node0-parse-2026-05-08f";
+const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-print-op-parse-vparen-2026-05-09a";
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(__dirname));

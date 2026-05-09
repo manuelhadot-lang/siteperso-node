@@ -187,9 +187,13 @@ function normalizeComponent(rawComponent) {
     }
 
     let value =
-        typeof rawComponent.value === "string"
-            ? rawComponent.value
-            : getDefaultValue(rawComponent.type);
+        rawComponent.value == null || rawComponent.value === ""
+            ? getDefaultValue(rawComponent.type)
+            : typeof rawComponent.value === "string"
+              ? rawComponent.value
+              : typeof rawComponent.value === "number" && Number.isFinite(rawComponent.value)
+                ? String(rawComponent.value)
+                : getDefaultValue(rawComponent.type);
     if (rawComponent.type === "ground" && /^\s*0\s*V\s*$/i.test(String(value).trim())) {
         value = "GND";
     }
