@@ -25,6 +25,10 @@ let wireDraftStart = null;
 let isPanning = false;
 let panStart = null;
 
+/** @type {{ comp:any, grabX:number, grabY:number}|null} */
+let componentDrag = null;
+const DRAGWIRE_EPS = 0.01;
+
 function snapToGrid(x, y) {
     return {
         x: Math.round(x / GRID_STEP) * GRID_STEP,
@@ -102,12 +106,47 @@ function createComponent(type, x, y) {
 function findComponentAt(world) {
     for (let i = components.length - 1; i >= 0; i -= 1) {
         const c = components[i];
-        const d = GRID_STEP * 2;
+        const d =
+            c.type === "supply"
+                ? GRID_STEP * 3.25
+                : c.type === "ground"
+                  ? GRID_STEP * 1.6
+                  : GRID_STEP * 2;
         if (Math.abs(world.x - c.x) <= d && Math.abs(world.y - c.y) <= d) {
             return c;
         }
     }
     return null;
+}
+
+function terminalsSnapshot(comp, cx, cy) {
+    const c = { ...comp, x: cx, y: cy };
+    return getComponentTerminals(c, GRID_STEP);
+}
+
+function nearGridPoint(px, py, ax, ay) {
+    return Math.abs(px - ax) < DRAGWIRE_EPS && Math.abs(py - ay) < DRAGWIRE_EPS;
+}
+
+function rewiresAfterComponentMove(comp, prevX, prevY) {
+    const old = terminalsSnapshot(comp, prevX, prevY);
+    const neu = getComponentTerminals(comp, GRID_STEP);
+    ["a", "b", "c"].forEach((key) => {
+        const o = old[key];
+        const n = neu[key];
+        if (!o || !n) {
+            return;
+        }
+        for (const wire of wires) {
+            const pts = wire.points || [];
+            for (const p of pts) {
+                if (nearGridPoint(p.x, p.y, o.x, o.y)) {
+                    p.x = n.x;
+                    p.y = n.y;
+                }
+            }
+        }
+    });
 }
 
 function orthoWire(a, b) {
@@ -131,7 +170,7 @@ function drawGridAndWires(themeColor) {
     ctx.lineWidth = 1;
     const gx0 = Math.floor(startWX / GRID_STEP) * GRID_STEP;
     const gy0 = Math.floor(startWY / GRID_STEP) * GRID_STEP;
-    const n = Math.ceil(canvas.width / step) + 3;
+    const n = Math.ceil(canvas.width / (GRID_STEP * zoom)) + 4;
 
     ctx.beginPath();
     for (let i = -2; i < n; i += 1) {
@@ -277,9 +316,12 @@ async function handleSimulate() {
 function setTool(name) {
     activeTool = name;
     wireDraftStart = null;
+    componentDrag = null;
     document.querySelectorAll("[data-tool]").forEach((b) =>
         b.classList.toggle("active", b.dataset.tool === name)
     );
+    canvas.style.cursor =
+        activeTool === "select" ? "grab" : activeTool === "wire" ? "crosshair" : "crosshair";
 }
 
 function clearAll() {
@@ -315,6 +357,7 @@ canvas.addEventListener("mousedown", (e) => {
     if (e.button === 2) {
         isPanning = true;
         panStart = { x: e.clientX, y: e.clientY, ox: offsetX, oy: offsetY };
+        componentDrag = null;
         return;
     }
     const rect = canvas.getBoundingClientRect();
@@ -325,6 +368,7 @@ canvas.addEventListener("mousedown", (e) => {
         if (!wireDraftStart) {
             wireDraftStart = s;
             setStatus("", ["Fil : clic sur le deuxième point."]);
+            componentDrag = null;
             return;
         }
         wires.push({
@@ -332,6 +376,7 @@ canvas.addEventListener("mousedown", (e) => {
             points: orthoWire(wireDraftStart, { x: w.x, y: w.y })
         });
         wireDraftStart = null;
+        componentDrag = null;
         draw();
         return;
     }
@@ -339,12 +384,20 @@ canvas.addEventListener("mousedown", (e) => {
     if (supportsComponent(activeTool)) {
         const s = snapToGrid(w.x, w.y);
         createComponent(activeTool, s.x, s.y);
+        componentDrag = null;
         draw();
         return;
     }
 
+    /* Selection : clic ou glisser-déposer pour déplacer */
     const hit = findComponentAt(w);
     selectedId = hit ? hit.id : null;
+    if (hit) {
+        componentDrag = { comp: hit, grabX: w.x - hit.x, grabY: w.y - hit.y };
+        canvas.style.cursor = "grabbing";
+    } else {
+        componentDrag = null;
+    }
     draw();
 });
 
@@ -353,13 +406,49 @@ canvas.addEventListener("mousemove", (e) => {
         offsetX = panStart.ox + (e.clientX - panStart.x) / zoom;
         offsetY = panStart.oy + (e.clientY - panStart.y) / zoom;
         draw();
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+    if (componentDrag && (e.buttons & 1)) {
+        const { comp } = componentDrag;
+        const prevX = comp.x;
+        const prevY = comp.y;
+        const nx = snapToGrid(w.x - componentDrag.grabX, w.y - componentDrag.grabY);
+        comp.x = nx.x;
+        comp.y = nx.y;
+        rewiresAfterComponentMove(comp, prevX, prevY);
+        draw();
+        return;
+    }
+
+    if (activeTool === "select" && !componentDrag) {
+        const hit = findComponentAt(w);
+        canvas.style.cursor = hit ? "grab" : "crosshair";
     }
 });
+
+function refreshCanvasCursor() {
+    canvas.style.cursor =
+        activeTool === "select" ? "grab" : activeTool === "wire" ? "crosshair" : "crosshair";
+}
 
 canvas.addEventListener("mouseup", (e) => {
     if (e.button === 2) {
         isPanning = false;
         panStart = null;
+        return;
+    }
+    componentDrag = null;
+    refreshCanvasCursor();
+});
+
+window.addEventListener("mouseup", () => {
+    if (componentDrag) {
+        componentDrag = null;
+        refreshCanvasCursor();
     }
 });
 
@@ -367,6 +456,40 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 document.querySelectorAll("[data-tool]").forEach((btn) => {
     btn.addEventListener("click", () => setTool(btn.dataset.tool));
+});
+
+document.querySelector(".toolbar").addEventListener("dragstart", (e) => {
+    const btn = e.target.closest("[data-drag-tool][data-tool]");
+    if (!btn?.dataset.tool) {
+        return;
+    }
+    e.dataTransfer.effectAllowed = "copy";
+    e.dataTransfer.setData("text/sim-tool", btn.dataset.tool);
+    e.dataTransfer.setData("text/plain", btn.dataset.tool);
+});
+
+canvas.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const ty = [...(e.dataTransfer.types || [])];
+    if (ty.includes("text/sim-tool") || ty.includes("text/plain")) {
+        e.dataTransfer.dropEffect = "copy";
+    }
+});
+
+canvas.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const tp = String(e.dataTransfer.getData("text/plain")).trim();
+    const tool =
+        e.dataTransfer.getData("text/sim-tool") ||
+        tp ||
+    if (!supportsComponent(tool)) {
+        return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const s = snapToGrid(w.x, w.y);
+    createComponent(tool, s.x, s.y);
+    draw();
 });
 
 document.getElementById("simulateBtn").addEventListener("click", () => handleSimulate());
@@ -402,8 +525,9 @@ window.addEventListener("resize", () => {
 
 resizeCanvas();
 draw();
+refreshCanvasCursor();
 setStatus("", [
-    "Clic gauche : placer ou sélectionner. Molette : zoom.",
-    "Clic droit (maintenir) + glisser : déplacer la vue.",
-    "Fil : outil Fil puis deux points sur la grille."
+    "Placement : clic sur la grille avec R / Source / Masse / Voltmètre, ou glisser-déposer un bouton sur le dessin.",
+    "Déplacement : Mode Sélection puis glisser un composant (les extrémités de fils suivent).",
+    "Molette : zoom. Clic droit + glisser : vue. Fil : deux points sur la grille."
 ]);
