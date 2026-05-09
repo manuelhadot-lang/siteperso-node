@@ -1,27 +1,49 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Simulateur (reset)</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simulateur — grille</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body data-theme="dark">
-    <header class="toolbar">
-        <span class="title">Simulateur</span>
-        <button type="button" data-tool="select" class="active">Selection</button>
-        <button type="button" data-tool="wire">Fil</button>
-        <button type="button" draggable="true" data-drag-tool="true" data-tool="resistance" title="Glisser sur le dessin ou cliquer">R</button>
-        <button type="button" draggable="true" data-drag-tool="true" data-tool="supply" title="Glisser sur le dessin ou cliquer">Source</button>
-        <button type="button" draggable="true" data-drag-tool="true" data-tool="ground" title="Glisser sur le dessin ou cliquer">Masse</button>
-        <button type="button" draggable="true" data-drag-tool="true" data-tool="voltmeter" title="Glisser sur le dessin ou cliquer">Voltmetre</button>
-        <button type="button" id="simulateBtn">Simuler</button>
-        <button type="button" id="editValueBtn">Valeur</button>
-        <button type="button" id="rotateBtn">Tourner</button>
-        <button type="button" id="clearBtn">Tout effacer</button>
-    </header>
-    <div id="status" role="status"></div>
-    <canvas id="canvas"></canvas>
-    <script type="module" src="main.js"></script>
+<body>
+  <header id="topbar">
+    <nav class="menubar" aria-label="Menu principal">
+      <details class="menu-root">
+        <summary id="menu-composants-summary">Composants</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-composants-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--resistor" id="pick-resistor" role="menuitem" title="Glisser sur la grille pour placer">Résistance</button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-commandes-summary">Commandes</summary>
+        <div
+          class="submenu submenu--panel"
+          role="region"
+          aria-labelledby="menu-commandes-summary"
+        >
+          <ul class="commands-list">
+            <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
+            <li>Molette pour zoom</li>
+            <li><kbd>R</kbd> rotation du composant sélectionné (horizontal ↔ vertical)</li>
+            <li><kbd>Suppr</kbd> suppression du composant sélectionné</li>
+            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier l’orientation (pour collage / nouveau glissé)</li>
+            <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
+          </ul>
+        </div>
+      </details>
+    </nav>
+  </header>
+
+  <div id="stage" aria-label="Grille déplaçable à la souris">
+    <div id="world">
+      <div id="circuit-grid" aria-hidden="true"></div>
+      <div id="components-layer" aria-hidden="true"></div>
+    </div>
+  </div>
+  <script src="main.js"></script>
 </body>
 </html>

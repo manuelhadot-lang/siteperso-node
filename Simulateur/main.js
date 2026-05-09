@@ -1,533 +1,747 @@
-import { drawComponent, getDefaultValue, supportsComponent, getComponentTerminals } from "./composants/composants.js";
+(function () {
+  const stage = document.getElementById("stage");
+  const world = document.getElementById("world");
+  const componentsLayer = document.getElementById("components-layer");
+  const circuitGrid = document.getElementById("circuit-grid");
+  const pickResistorBtn = document.getElementById("pick-resistor");
 
-const GRID_STEP = 40;
-const ZOOM_MIN = 0.35;
-const ZOOM_MAX = 4;
-const ZOOM_FACTOR = 1.12;
+  /** @typedef {'h' | 'v'} Orient */
 
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const statusEl = document.getElementById("status");
+  /** @typedef {{ id: string; rIndex: number; jx: number; jy: number; orient: Orient }} Resistor */
 
-let zoom = 1;
-let offsetX = 0;
-let offsetY = 0;
+  const CELL = 28;
+  const SPAN_CELLS = 4;
+  const SPAN_PX = SPAN_CELLS * CELL;
+  const BODY_ROW_H = CELL;
+  const CY = BODY_ROW_H / 2;
 
-/** @type {{ id:string, type:string, x:number, y:number, rotation?:number, reference:string, value:string }[]} */
-let components = [];
-/** @type {{ id:string, points:{x:number,y:number}[]}[]} */
-let wires = [];
+  const PAD_L = 8;
 
-let activeTool = "select";
-let selectedId = null;
+  /** traçage horizontal ; vertical = meme logique axe Y */
+  const PACK_W = PAD_L + SPAN_PX + 10;
 
-let wireDraftStart = null;
-let isPanning = false;
-let panStart = null;
+  const JUNCTION_ROW_OFFSET_TOP = 14 + 4 + CY;
 
-/** @type {{ comp:any, grabX:number, grabY:number}|null} */
-let componentDrag = null;
-const DRAGWIRE_EPS = 0.01;
+  const JOINT_R = 5;
+  const JOINT_MARGIN = 1.5;
+  const RECT_H = CELL;
+  const RECT_W = 2 * CELL;
 
-function snapToGrid(x, y) {
-    return {
-        x: Math.round(x / GRID_STEP) * GRID_STEP,
-        y: Math.round(y / GRID_STEP) * GRID_STEP
-    };
-}
+  const V_LABEL_SLOT = 32;
+  const V_LABEL_GAP = 4;
 
-function worldToScreen(wx, wy) {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    return {
-        x: (wx + offsetX) * zoom + cx,
-        y: (wy + offsetY) * zoom + cy
-    };
-}
+  const MIN_SCALE = 0.2;
+  const MAX_SCALE = 5;
 
-function screenToWorld(sx, sy) {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    return {
-        x: (sx - cx) / zoom - offsetX,
-        y: (sy - cy) / zoom - offsetY
-    };
-}
+  const OHM = "\u2126";
 
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - document.querySelector(".toolbar").offsetHeight;
-}
+  /** @type {Resistor[]} */
+  let resistors = [];
+  let resistorSeq = 0;
 
-function setStatus(kind, lines) {
-    statusEl.textContent = lines.filter(Boolean).join("\n") || "";
-    statusEl.className = kind ? kind : "";
-}
+  /** @type {string | null} */
+  let selectedId = null;
 
-function sanitizeMeterReference(ref, fallback = "VM") {
-    const cleaned = String(ref || "")
-        .toUpperCase()
-        .replace(/[^A-Z0-9_]/g, "");
-    return cleaned || fallback;
-}
+  /** @type {null | Pick<Resistor,'orient'>} */
+  let clipboardTpl = null;
 
-const nextPrefix = { R: 1, VM: 1 };
+  /** dernier pointeur sur la grille (pour coller) */
+  let lastPointerWorld = { wx: 0, wy: 0 };
 
-function newReference(type) {
-    if (type === "supply") {
-        return "VCC";
+  const undoStack = [];
+  const redoStack = [];
+
+  let tx = 0;
+  let ty = 0;
+  let scale = 1;
+
+  /** @type {number | null} */
+  let pointerId = null;
+  let lastX = 0;
+  let lastY = 0;
+
+  /** @type {HTMLElement | null} */
+  let dragGhost = null;
+  /** @type {number | null} */
+  let resistorPickPointerId = null;
+
+  /** @type {null | {
+   * sid: string;
+   * pointerId: number;
+   * jx0: number;
+   * jy0: number;
+   * anchorWx: number;
+   * anchorWy: number;
+   * baselineJson: string;
+   * moved: boolean;
+   * }} */
+  let resistorMoveSession = null;
+
+  function uid() {
+    return globalThis.crypto && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `r_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  }
+
+  function snapshot() {
+    return JSON.stringify(resistors);
+  }
+
+  /** @param {() => void} fn */
+  function commit(fn) {
+    undoStack.push(snapshot());
+    redoStack.length = 0;
+    fn();
+    syncSeqFromModels();
+    renderAll();
+  }
+
+  function undo() {
+    if (undoStack.length === 0) return;
+    redoStack.push(snapshot());
+    resistors = JSON.parse(undoStack.pop());
+    syncSeqFromModels();
+    selectedId =
+      selectedId && resistors.some((r) => r.id === selectedId) ? selectedId : null;
+    renderAll();
+  }
+
+  function redo() {
+    if (redoStack.length === 0) return;
+    undoStack.push(snapshot());
+    resistors = JSON.parse(redoStack.pop());
+    syncSeqFromModels();
+    selectedId =
+      selectedId && resistors.some((r) => r.id === selectedId) ? selectedId : null;
+    renderAll();
+  }
+
+  function syncSeqFromModels() {
+    resistorSeq = resistors.reduce((m, r) => Math.max(m, r.rIndex), 0);
+  }
+
+  function applyTransform() {
+    world.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  function snapWorldFallback(v) {
+    return Math.round(v / CELL) * CELL;
+  }
+
+  function snapToIntersection(wx, wy) {
+    if (!circuitGrid) {
+      return { x: snapWorldFallback(wx), y: snapWorldFallback(wy) };
     }
-    if (type === "ground") {
-        return "";
-    }
-    if (type === "voltmeter") {
-        const n = nextPrefix.VM++;
-        return `VM${n}`;
-    }
-    if (type === "resistance") {
-        const n = nextPrefix.R++;
-        return `R${n}`;
-    }
-    return "?";
-}
+    const ox = circuitGrid.offsetLeft;
+    const oy = circuitGrid.offsetTop;
+    const x = Math.round((wx - ox) / CELL) * CELL + ox;
+    const y = Math.round((wy - oy) / CELL) * CELL + oy;
+    return { x, y };
+  }
 
-function createComponent(type, x, y) {
-    components.push({
-        id: crypto.randomUUID(),
-        type,
-        x,
-        y,
-        rotation: 0,
-        reference: newReference(type),
-        value: getDefaultValue(type)
+  function closeAllMenus() {
+    document.querySelectorAll(".menubar details.menu-root").forEach((d) => {
+      d.open = false;
     });
-}
+  }
 
-function findComponentAt(world) {
-    for (let i = components.length - 1; i >= 0; i -= 1) {
-        const c = components[i];
-        const d =
-            c.type === "supply"
-                ? GRID_STEP * 3.25
-                : c.type === "ground"
-                  ? GRID_STEP * 1.6
-                  : GRID_STEP * 2;
-        if (Math.abs(world.x - c.x) <= d && Math.abs(world.y - c.y) <= d) {
-            return c;
-        }
-    }
-    return null;
-}
-
-function terminalsSnapshot(comp, cx, cy) {
-    const c = { ...comp, x: cx, y: cy };
-    return getComponentTerminals(c, GRID_STEP);
-}
-
-function nearGridPoint(px, py, ax, ay) {
-    return Math.abs(px - ax) < DRAGWIRE_EPS && Math.abs(py - ay) < DRAGWIRE_EPS;
-}
-
-function rewiresAfterComponentMove(comp, prevX, prevY) {
-    const old = terminalsSnapshot(comp, prevX, prevY);
-    const neu = getComponentTerminals(comp, GRID_STEP);
-    ["a", "b", "c"].forEach((key) => {
-        const o = old[key];
-        const n = neu[key];
-        if (!o || !n) {
-            return;
-        }
-        for (const wire of wires) {
-            const pts = wire.points || [];
-            for (const p of pts) {
-                if (nearGridPoint(p.x, p.y, o.x, o.y)) {
-                    p.x = n.x;
-                    p.y = n.y;
-                }
-            }
-        }
-    });
-}
-
-function orthoWire(a, b) {
-    const snappedA = snapToGrid(a.x, a.y);
-    const snappedB = snapToGrid(b.x, b.y);
-    if (Math.abs(snappedA.x - snappedB.x) < 1e-6 || Math.abs(snappedA.y - snappedB.y) < 1e-6) {
-        return [snappedA, snappedB];
-    }
-    const mid = { x: snappedB.x, y: snappedA.y };
-    return [snappedA, mid, snappedB];
-}
-
-function drawGridAndWires(themeColor) {
-    const minor = themeColor === "white" ? "rgba(27,31,36,0.12)" : "rgba(139,148,158,0.08)";
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const startWX = ((-cx) / zoom - offsetX);
-    const startWY = ((-cy) / zoom - offsetY);
-
-    ctx.strokeStyle = minor;
-    ctx.lineWidth = 1;
-    const gx0 = Math.floor(startWX / GRID_STEP) * GRID_STEP;
-    const gy0 = Math.floor(startWY / GRID_STEP) * GRID_STEP;
-    const n = Math.ceil(canvas.width / (GRID_STEP * zoom)) + 4;
-
-    ctx.beginPath();
-    for (let i = -2; i < n; i += 1) {
-        const wx = gx0 + i * GRID_STEP;
-        const s = worldToScreen(wx, 0);
-        const s0 = worldToScreen(wx, -1e9);
-        const s1 = worldToScreen(wx, 1e9);
-        ctx.moveTo(s0.x, s0.y);
-        ctx.lineTo(s1.x, s1.y);
-    }
-    ctx.stroke();
-
-    ctx.beginPath();
-    for (let j = -2; j < n; j += 1) {
-        const wy = gy0 + j * GRID_STEP;
-        const s0 = worldToScreen(-1e9, wy);
-        const s1 = worldToScreen(1e9, wy);
-        ctx.moveTo(s0.x, s0.y);
-        ctx.lineTo(s1.x, s1.y);
-    }
-    ctx.stroke();
-
-    ctx.strokeStyle = themeColor === "white" ? "rgba(9,105,218,0.45)" : "rgba(139,148,158,0.35)";
-    ctx.lineWidth = 2;
-    for (const w of wires) {
-        const pts = w.points || [];
-        if (pts.length < 2) {
-            continue;
-        }
-        ctx.beginPath();
-        const p0 = worldToScreen(pts[0].x, pts[0].y);
-        ctx.moveTo(p0.x, p0.y);
-        for (let i = 1; i < pts.length; i += 1) {
-            const p = worldToScreen(pts[i].x, pts[i].y);
-            ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-        for (const p of pts) {
-            const s = worldToScreen(p.x, p.y);
-            ctx.fillStyle = "#ef4444";
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-}
-
-function draw() {
-    const theme = document.body.dataset.theme || "dark";
-    ctx.fillStyle = theme === "white" ? "#f6f8fa" : "#0f1419";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const fg = theme === "white" ? "#1f2328" : "#e6edf3";
-
-    drawGridAndWires(theme);
-    const hiddenNodes = new Set();
-    components.forEach((c) =>
-        ["a", "b"].forEach((k) => {
-            const t = getComponentTerminals(c, GRID_STEP)[k];
-            if (t) {
-                hiddenNodes.add(`${t.x}:${t.y}`);
-            }
-        })
-    );
-    for (const c of components) {
-        const sel = selectedId === c.id;
-        ctx.globalAlpha = 1;
-        drawComponent(ctx, c, worldToScreen, GRID_STEP, sel ? "#58a6ff" : fg, hiddenNodes);
-    }
-}
-
-function getProjectState() {
-    return {
-        zoom,
-        offsetX,
-        offsetY,
-        theme: document.body.dataset.theme || "dark",
-        components: components.map((c) => ({ ...c })),
-        wires: wires.map((w) => ({
-            ...w,
-            points: (w.points || []).map((p) => ({ ...p }))
-        }))
-    };
-}
-
-async function handleSimulate() {
-    try {
-        const response = await fetch("/api/simulate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ state: getProjectState(), gridStep: GRID_STEP })
-        });
-        const payload = await response.json();
-        if (!payload.ok) {
-            const lines = [
-                "Simulation impossible.",
-                ...(payload.errors || []),
-                ...(payload.warnings || []).map((w) => `Avertissement : ${w}`)
-            ];
-            if (payload.diagnostics?.floatingNets?.length) {
-                lines.push(`Flottants : ${payload.diagnostics.floatingNets.join(", ")}`);
-            }
-            setStatus("err", lines);
-            console.error(payload);
-            return;
-        }
-
-        const raw = payload.voltmeterValues || {};
-        const msgs = [];
-        components.forEach((c) => {
-            if (c.type !== "voltmeter") {
-                return;
-            }
-            const key = sanitizeMeterReference(c.reference, "VM");
-            const v = raw[key];
-            if (!Number.isFinite(v)) {
-                return;
-            }
-            c.value = `${v.toFixed(3)} V`;
-            msgs.push(`${c.reference || key} : ${c.value}`);
-        });
-        draw();
-        const diag = payload.diagnostics;
-        const lines = [
-            "Simulation OK.",
-            ...(payload.warnings || []).map((w) => `${w}`),
-            ...(msgs.length ? msgs.map((m) => `Mesure : ${m}`) : ["(Aucune mesure voltmètre lisible.)"])
-        ];
-        if (diag?.sourceConnectedToGround === false) {
-            lines.push("Diagnostic : source pas reliée à la masse ?");
-        }
-        setStatus(payload.warnings?.length ? "ok" : "ok", lines);
-        console.log("NETLIST:\n" + payload.netlist);
-        console.log("LOG:\n" + (payload.log || ""));
-    } catch (e) {
-        console.error(e);
-        setStatus("err", [
-            "Pas de réponse serveur.",
-            "Lance « node server.js » à la racine du site OU « npm run start » dans Simulateur (port 3001)."
-        ]);
-    }
-}
-
-function setTool(name) {
-    activeTool = name;
-    wireDraftStart = null;
-    componentDrag = null;
-    document.querySelectorAll("[data-tool]").forEach((b) =>
-        b.classList.toggle("active", b.dataset.tool === name)
-    );
-    canvas.style.cursor =
-        activeTool === "select" ? "grab" : activeTool === "wire" ? "crosshair" : "crosshair";
-}
-
-function clearAll() {
-    if (!window.confirm("Effacer tout le schéma ?")) {
-        return;
-    }
-    components = [];
-    wires = [];
-    selectedId = null;
-    wireDraftStart = null;
-    draw();
-    setStatus("", []);
-}
-
-canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const worldX = (sx - cx) / zoom - offsetX;
-    const worldY = (sy - cy) / zoom - offsetY;
-    const mult = e.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom * mult));
-    offsetX = (sx - cx) / newZoom - worldX;
-    offsetY = (sy - cy) / newZoom - worldY;
-    zoom = newZoom;
-    draw();
-});
-
-canvas.addEventListener("mousedown", (e) => {
-    if (e.button === 2) {
-        isPanning = true;
-        panStart = { x: e.clientX, y: e.clientY, ox: offsetX, oy: offsetY };
-        componentDrag = null;
-        return;
-    }
-    const rect = canvas.getBoundingClientRect();
-    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-
-    if (activeTool === "wire") {
-        const s = snapToGrid(w.x, w.y);
-        if (!wireDraftStart) {
-            wireDraftStart = s;
-            setStatus("", ["Fil : clic sur le deuxième point."]);
-            componentDrag = null;
-            return;
-        }
-        wires.push({
-            id: crypto.randomUUID(),
-            points: orthoWire(wireDraftStart, { x: w.x, y: w.y })
-        });
-        wireDraftStart = null;
-        componentDrag = null;
-        draw();
-        return;
-    }
-
-    if (supportsComponent(activeTool)) {
-        const s = snapToGrid(w.x, w.y);
-        createComponent(activeTool, s.x, s.y);
-        componentDrag = null;
-        draw();
-        return;
-    }
-
-    /* Selection : clic ou glisser-déposer pour déplacer */
-    const hit = findComponentAt(w);
-    selectedId = hit ? hit.id : null;
-    if (hit) {
-        componentDrag = { comp: hit, grabX: w.x - hit.x, grabY: w.y - hit.y };
-        canvas.style.cursor = "grabbing";
+  /** Centre géométrique des deux jonctions (snap sur intersection) puis ancrage suivant orientation */
+  function setAnchorFromMidpoint(mpx, mpy, orient, m) {
+    const { x: sx, y: sy } = snapToIntersection(mpx, mpy);
+    if (orient === "h") {
+      m.jx = sx - SPAN_PX / 2;
+      m.jy = sy;
     } else {
-        componentDrag = null;
+      m.jx = sx;
+      m.jy = sy - SPAN_PX / 2;
     }
-    draw();
-});
+  }
 
-canvas.addEventListener("mousemove", (e) => {
-    if (isPanning && panStart) {
-        offsetX = panStart.ox + (e.clientX - panStart.x) / zoom;
-        offsetY = panStart.oy + (e.clientY - panStart.y) / zoom;
-        draw();
-        return;
+  /** @param {Resistor} m */
+  function midPoint(m) {
+    if (m.orient === "h") return { x: m.jx + SPAN_PX / 2, y: m.jy };
+    return { x: m.jx, y: m.jy + SPAN_PX / 2 };
+  }
+
+  /**
+   * @param {SVGElement} svg
+   * @param {Orient} orient
+   */
+  function drawResistorSymbol(svg, orient) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+
+    if (orient === "h") {
+      const jxL = PAD_L;
+      const jxR = PAD_L + SPAN_PX;
+      const innerA = jxL + JOINT_R + JOINT_MARGIN;
+      const innerB = jxR - JOINT_R - JOINT_MARGIN;
+      const rectW = Math.min(RECT_W, Math.max(12, innerB - innerA));
+      const mid = (innerA + innerB) / 2;
+      const rx0 = mid - rectW / 2;
+      const rx1 = mid + rectW / 2;
+      const ry = 0;
+
+      svg.setAttribute("viewBox", `-2 0 ${PACK_W} ${BODY_ROW_H}`);
+      svg.setAttribute("width", String(PACK_W));
+      svg.setAttribute("height", String(BODY_ROW_H));
+
+      const lineL = lineSeg(NS, jxL + JOINT_R, CY, rx0, CY);
+      const lineR = lineSeg(NS, rx1, CY, jxR - JOINT_R, CY);
+      const box = rectEl(NS, rx0, ry, rectW, RECT_H);
+
+      svg.appendChild(lineL);
+      svg.appendChild(lineR);
+      svg.appendChild(box);
+      svg.appendChild(circ(NS, jxL, CY));
+      svg.appendChild(circ(NS, jxR, CY));
+    } else {
+      const jyTop = PAD_L;
+      const jyBot = PAD_L + SPAN_PX;
+      const innerA = jyTop + JOINT_R + JOINT_MARGIN;
+      const innerB = jyBot - JOINT_R - JOINT_MARGIN;
+      const rectH = Math.min(RECT_W, Math.max(12, innerB - innerA));
+      const midY = (innerA + innerB) / 2;
+      const ry0 = midY - rectH / 2;
+      const ry1 = midY + rectH / 2;
+      const rx = 0;
+      const CX = CELL / 2;
+
+      svg.setAttribute("viewBox", `-2 0 ${BODY_ROW_H} ${PACK_W}`);
+      svg.setAttribute("width", String(BODY_ROW_H));
+      svg.setAttribute("height", String(PACK_W));
+
+      const lineU = vertLine(NS, CX, jyTop + JOINT_R, CX, ry0);
+      const lineD = vertLine(NS, CX, ry1, CX, jyBot - JOINT_R);
+      const box = rectEl(NS, rx, ry0, RECT_H, rectH);
+
+      svg.appendChild(lineU);
+      svg.appendChild(lineD);
+      svg.appendChild(box);
+      svg.appendChild(circ(NS, CX, jyTop));
+      svg.appendChild(circ(NS, CX, jyBot));
+    }
+  }
+
+  function lineSeg(NS, x1, y1, x2, y2) {
+    const ln = document.createElementNS(NS, "line");
+    ln.setAttribute("class", "resistor-trace");
+    ln.setAttribute("x1", String(x1));
+    ln.setAttribute("y1", String(y1));
+    ln.setAttribute("x2", String(x2));
+    ln.setAttribute("y2", String(y2));
+    return ln;
+  }
+
+  function vertLine(NS, x1, y1, x2, y2) {
+    return lineSeg(NS, x1, y1, x2, y2);
+  }
+
+  function rectEl(NS, x, y, w, h) {
+    const box = document.createElementNS(NS, "rect");
+    box.setAttribute("class", "resistor-box");
+    box.setAttribute("x", String(x));
+    box.setAttribute("y", String(y));
+    box.setAttribute("width", String(w));
+    box.setAttribute("height", String(h));
+    return box;
+  }
+
+  function circ(NS, cx, cy) {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("class", "resistor-joint");
+    c.setAttribute("cx", String(cx));
+    c.setAttribute("cy", String(cy));
+    c.setAttribute("r", String(JOINT_R));
+    return c;
+  }
+
+  /**
+   * @param {HTMLElement} el
+   * @param {Resistor} model
+   */
+  function layoutResistorDOM(el, model) {
+    if (model.orient === "h") {
+      el.classList.remove("resistor--v");
+      el.style.minWidth = `${PACK_W}px`;
+      el.style.minHeight = "";
+      el.style.left = `${model.jx - PAD_L}px`;
+      el.style.top = `${model.jy - JUNCTION_ROW_OFFSET_TOP}px`;
+    } else {
+      el.classList.add("resistor--v");
+      el.style.minWidth = "";
+      el.style.minHeight = `${PACK_W}px`;
+      const cxMid = CELL / 2;
+      const leftOffset = model.jx - (V_LABEL_SLOT + V_LABEL_GAP + cxMid);
+      const topOffset = model.jy - PAD_L;
+      el.style.left = `${leftOffset}px`;
+      el.style.top = `${topOffset}px`;
+    }
+  }
+
+  /** @param {Resistor | { rIndex: number; orient?: Orient }} data */
+  function buildResistorElement(data, ghost) {
+    const orient =
+      /** @type Orient */ ("orient" in data && data.orient === "v" ? "v" : "h");
+    const rIndex =
+      /** @type {number} */
+      ("rIndex" in data ? data.rIndex : resistorSeq + 1);
+    const id = ghost ? "" : /** @type {Resistor} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost ? "resistor resistor--ghost" : "resistor";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.orient = orient;
+
+    const idEl = document.createElement("div");
+    idEl.className = "resistor-id";
+    idEl.textContent = `R${rIndex}`;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "resistor-symbol");
+    drawResistorSymbol(svg, orient);
+
+    const valEl = document.createElement("div");
+    valEl.className = "resistor-value";
+    valEl.textContent = `1000${OHM}`;
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+    root.appendChild(valEl);
+
+    if (!ghost && "jx" in data) {
+      layoutResistorDOM(root, /** @type {Resistor} */ (data));
+      if (selectedId === id) root.classList.add("resistor--selected");
+      root.addEventListener("pointerdown", onPlacedResistorPointerDown);
+    } else if (ghost && orient === "h") {
+      root.style.minWidth = `${PACK_W}px`;
+    } else if (ghost && orient === "v") {
+      root.style.minHeight = `${PACK_W}px`;
     }
 
-    const rect = canvas.getBoundingClientRect();
-    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    return root;
+  }
 
-    if (componentDrag && (e.buttons & 1)) {
-        const { comp } = componentDrag;
-        const prevX = comp.x;
-        const prevY = comp.y;
-        const nx = snapToGrid(w.x - componentDrag.grabX, w.y - componentDrag.grabY);
-        comp.x = nx.x;
-        comp.y = nx.y;
-        rewiresAfterComponentMove(comp, prevX, prevY);
-        draw();
-        return;
+  function renderAll() {
+    componentsLayer.replaceChildren(
+      ...resistors.map((m) => buildResistorElement(m, false))
+    );
+  }
+
+  /** @param {string | null | undefined} id */
+  function getModel(id) {
+    return resistors.find((r) => r.id === id);
+  }
+
+  function clientToWorld(cx, cy) {
+    const rect = stage.getBoundingClientRect();
+    const mx = cx - rect.left;
+    const my = cy - rect.top;
+    return { wx: (mx - tx) / scale, wy: (my - ty) / scale };
+  }
+
+  /** @param {PointerEvent} e */
+  function onPlacedResistorPointerDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (dragGhost) return;
+    const el = e.currentTarget;
+    if (!(el instanceof HTMLElement) || !el.dataset.sid) return;
+    e.stopPropagation();
+
+    selectedId = el.dataset.sid;
+    renderAll();
+
+    if (pointerId !== null) {
+      try {
+        stage.releasePointerCapture(pointerId);
+      } catch (_) {}
+      pointerId = null;
+      stage.classList.remove("dragging");
     }
 
-    if (activeTool === "select" && !componentDrag) {
-        const hit = findComponentAt(w);
-        canvas.style.cursor = hit ? "grab" : "crosshair";
+    const model = getModel(selectedId);
+    if (!model) return;
+
+    const { wx, wy } = clientToWorld(e.clientX, e.clientY);
+
+    resistorMoveSession = {
+      sid: selectedId,
+      pointerId: e.pointerId,
+      jx0: model.jx,
+      jy0: model.jy,
+      anchorWx: wx,
+      anchorWy: wy,
+      baselineJson: snapshot(),
+      moved: false,
+    };
+    el.classList.add("resistor--dragging");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch (_) {}
+  }
+
+  /** @param {PointerEvent} e */
+  function onWindowResistorMove(e) {
+    if (!resistorMoveSession || resistorMoveSession.pointerId !== e.pointerId) return;
+    const model = getModel(resistorMoveSession.sid);
+    if (!model) return;
+
+    const { wx, wy } = clientToWorld(e.clientX, e.clientY);
+    const dwx = wx - resistorMoveSession.anchorWx;
+    const dwy = wy - resistorMoveSession.anchorWy;
+    resistorMoveSession.moved =
+      resistorMoveSession.moved || Math.abs(dwx) > 0.25 || Math.abs(dwy) > 0.25;
+
+    const s = snapToIntersection(
+      resistorMoveSession.jx0 + dwx,
+      resistorMoveSession.jy0 + dwy
+    );
+    model.jx = s.x;
+    model.jy = s.y;
+
+    const tel =
+      typeof CSS !== "undefined" && CSS.escape
+        ? componentsLayer.querySelector(`[data-sid="${CSS.escape(resistorMoveSession.sid)}"]`)
+        : componentsLayer.querySelector(`[data-sid="${resistorMoveSession.sid}"]`);
+    if (tel) layoutResistorDOM(tel, model);
+  }
+
+  /** @param {string} sid */
+  function findEl(sid) {
+    return typeof CSS !== "undefined" && CSS.escape
+      ? componentsLayer.querySelector(`[data-sid="${CSS.escape(sid)}"]`)
+      : componentsLayer.querySelector(`[data-sid="${sid}"]`);
+  }
+
+  /** @param {PointerEvent} e */
+  function onWindowResistorUp(e) {
+    if (!resistorMoveSession || resistorMoveSession.pointerId !== e.pointerId) return;
+    const sid = resistorMoveSession.sid;
+    const baselineJson = resistorMoveSession.baselineJson;
+    const moved = resistorMoveSession.moved;
+    try {
+      const el = findEl(sid);
+      el?.releasePointerCapture(e.pointerId);
+      el?.classList.remove("resistor--dragging");
+    } catch (_) {}
+
+    resistorMoveSession = null;
+
+    if (moved && baselineJson !== snapshot()) {
+      undoStack.push(baselineJson);
+      redoStack.length = 0;
     }
-});
+    renderAll();
+  }
 
-function refreshCanvasCursor() {
-    canvas.style.cursor =
-        activeTool === "select" ? "grab" : activeTool === "wire" ? "crosshair" : "crosshair";
-}
+  function recordPointerWorld(cx, cy) {
+    Object.assign(lastPointerWorld, clientToWorld(cx, cy));
+  }
 
-canvas.addEventListener("mouseup", (e) => {
-    if (e.button === 2) {
-        isPanning = false;
-        panStart = null;
-        return;
+  function removeSelected() {
+    if (!selectedId) return;
+    commit(() => {
+      resistors = resistors.filter((r) => r.id !== selectedId);
+      selectedId = null;
+    });
+  }
+
+  function rotateSelected() {
+    const m = getModel(selectedId);
+    if (!m) return;
+    commit(() => {
+      const mp = midPoint(m);
+      const nextOrient = /** @type Orient */ (m.orient === "h" ? "v" : "h");
+      m.orient = nextOrient;
+      setAnchorFromMidpoint(mp.x, mp.y, m.orient, m);
+    });
+  }
+
+  /** @param {KeyboardEvent} e */
+  function onKeyDown(e) {
+    const t = e.target;
+    if (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      /** @type {HTMLElement} */ (t).isContentEditable
+    ) {
+      return;
     }
-    componentDrag = null;
-    refreshCanvasCursor();
-});
 
-window.addEventListener("mouseup", () => {
-    if (componentDrag) {
-        componentDrag = null;
-        refreshCanvasCursor();
+    const mod = e.ctrlKey || e.metaKey;
+
+    if (mod && !e.altKey && (e.code === "KeyZ" || e.key?.toLowerCase() === "z")) {
+      if (e.shiftKey) redo();
+      else undo();
+      e.preventDefault();
+      return;
     }
-});
 
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-
-document.querySelectorAll("[data-tool]").forEach((btn) => {
-    btn.addEventListener("click", () => setTool(btn.dataset.tool));
-});
-
-document.querySelector(".toolbar").addEventListener("dragstart", (e) => {
-    const btn = e.target.closest("[data-drag-tool][data-tool]");
-    if (!btn?.dataset.tool) {
-        return;
+    if (mod && !e.altKey && e.code === "KeyY") {
+      redo();
+      e.preventDefault();
+      return;
     }
-    e.dataTransfer.effectAllowed = "copy";
-    e.dataTransfer.setData("text/sim-tool", btn.dataset.tool);
-    e.dataTransfer.setData("text/plain", btn.dataset.tool);
-});
 
-canvas.addEventListener("dragover", (e) => {
+    if (mod && e.code === "KeyC") {
+      const m = getModel(selectedId);
+      if (m) {
+        clipboardTpl = { orient: m.orient };
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (mod && e.code === "KeyV") {
+      if (!clipboardTpl) return;
+      e.preventDefault();
+      commit(() => {
+        resistorSeq += 1;
+        const nw = /** @type {Resistor} */ ({
+          id: uid(),
+          rIndex: resistorSeq,
+          orient: clipboardTpl.orient,
+          jx: 0,
+          jy: 0,
+        });
+        placeModelAtPastePoint(nw);
+        resistors.push(nw);
+        selectedId = nw.id;
+      });
+      return;
+    }
+
+    if (e.code === "Delete") {
+      if (selectedId) {
+        removeSelected();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (e.code === "KeyR" && !mod && !e.altKey) {
+      const m = getModel(selectedId);
+      if (!m) return;
+      rotateSelected();
+      e.preventDefault();
+    }
+  }
+
+  /** @param {Resistor} m */
+  function placeModelAtPastePoint(m) {
+    const { wx, wy } = lastPointerWorld;
+    if (m.orient === "h") {
+      const p = snapToIntersection(wx - SPAN_PX / 2, wy);
+      m.jx = p.x;
+      m.jy = p.y;
+    } else {
+      const pTop = snapToIntersection(wx, wy - SPAN_PX / 2);
+      m.jx = pTop.x;
+      m.jy = pTop.y;
+    }
+  }
+
+  function updateGhostPosition(clientX, clientY) {
+    if (!dragGhost) return;
+    dragGhost.style.left = `${clientX}px`;
+    dragGhost.style.top = `${clientY}px`;
+  }
+
+  function removeResistorGhost() {
+    dragGhost?.remove();
+    dragGhost = null;
+    resistorPickPointerId = null;
+    document.body.classList.remove("is-dragging-resistor");
+  }
+
+  /** @param {PointerEvent} e */
+  function onPickResistorDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (dragGhost) return;
+
+    closeAllMenus();
+
+    resistorPickPointerId = e.pointerId;
+
+    /** @type {Orient} orientation du fantôme : copie dernier Ctrl+C sinon horizontal */
+    const paletteOrient =
+      clipboardTpl?.orient ?? /** @type {Orient} */ ("h");
+    dragGhost = buildResistorElement(
+      {
+        id: "_ghost",
+        rIndex: resistorSeq + 1,
+        orient: paletteOrient,
+        jx: 0,
+        jy: 0,
+      },
+      true
+    );
+    dragGhost.dataset.orient = paletteOrient;
+    dragGhost.style.minWidth =
+      paletteOrient === "h" ? `${PACK_W}px` : "";
+    dragGhost.style.minHeight =
+      paletteOrient === "v" ? `${PACK_W}px` : "";
+
+    document.body.appendChild(dragGhost);
+    document.body.classList.add("is-dragging-resistor");
+    dragGhost.style.left = `${e.clientX}px`;
+    dragGhost.style.top = `${e.clientY}px`;
+    dragGhost.style.transform = "translate(-50%, -50%)";
+
+    window.addEventListener("pointermove", onResistorPaletteDragMove);
+    window.addEventListener("pointerup", onResistorPaletteDragUp);
+    window.addEventListener("pointercancel", onResistorPaletteDragUp);
+
+    try {
+      pickResistorBtn.setPointerCapture(e.pointerId);
+    } catch (_) {}
     e.preventDefault();
-    const ty = [...(e.dataTransfer.types || [])];
-    if (ty.includes("text/sim-tool") || ty.includes("text/plain")) {
-        e.dataTransfer.dropEffect = "copy";
-    }
-});
+  }
 
-canvas.addEventListener("drop", (e) => {
+  /** @param {PointerEvent} e */
+  function onResistorPaletteDragMove(e) {
+    if (resistorPickPointerId !== e.pointerId) return;
+    updateGhostPosition(e.clientX, e.clientY);
+  }
+
+  /** @param {PointerEvent} e */
+  function onResistorPaletteDragUp(e) {
+    if (resistorPickPointerId !== e.pointerId) return;
+
+    window.removeEventListener("pointermove", onResistorPaletteDragMove);
+    window.removeEventListener("pointerup", onResistorPaletteDragUp);
+    window.removeEventListener("pointercancel", onResistorPaletteDragUp);
+
+    try {
+      pickResistorBtn.releasePointerCapture(e.pointerId);
+    } catch (_) {}
+
+    const srect = stage.getBoundingClientRect();
+    const { clientX: cx, clientY: cy } = e;
+    const overStage =
+      cx >= srect.left && cx <= srect.right && cy >= srect.top && cy <= srect.bottom;
+
+    if (overStage) {
+      const palettePlaceOrient =
+        clipboardTpl?.orient ?? /** @type {Orient} */ ("h");
+      const { wx, wy } = clientToWorld(cx, cy);
+      commit(() => {
+        resistorSeq += 1;
+        const nw = /** @type {Resistor} */ ({
+          id: uid(),
+          rIndex: resistorSeq,
+          orient: palettePlaceOrient,
+          jx: 0,
+          jy: 0,
+        });
+        const pMid = snapToIntersection(wx, wy);
+        if (palettePlaceOrient === "h") {
+          nw.jx = pMid.x - SPAN_PX / 2;
+          nw.jy = pMid.y;
+        } else {
+          nw.jx = pMid.x;
+          nw.jy = pMid.y - SPAN_PX / 2;
+        }
+        resistors.push(nw);
+        selectedId = nw.id;
+      });
+    }
+
+    removeResistorGhost();
+  }
+
+  function onPanPointerDown(e) {
+    if (dragGhost) return;
+    if (e.button !== undefined && e.button !== 0) return;
+
+    if (!e.target.closest(".resistor")) {
+      selectedId = null;
+      renderAll();
+    }
+
+    pointerId = e.pointerId;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    stage.classList.add("dragging");
+    stage.setPointerCapture(e.pointerId);
     e.preventDefault();
-    const tp = String(e.dataTransfer.getData("text/plain")).trim();
-    const tool =
-        e.dataTransfer.getData("text/sim-tool") ||
-        tp ||
-    if (!supportsComponent(tool)) {
-        return;
-    }
-    const rect = canvas.getBoundingClientRect();
-    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-    const s = snapToGrid(w.x, w.y);
-    createComponent(tool, s.x, s.y);
-    draw();
-});
+  }
 
-document.getElementById("simulateBtn").addEventListener("click", () => handleSimulate());
-document.getElementById("clearBtn").addEventListener("click", () => clearAll());
+  function onPanPointerMove(e) {
+    recordPointerWorld(e.clientX, e.clientY);
+    if (pointerId !== e.pointerId) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    tx += dx;
+    ty += dy;
+    applyTransform();
+  }
 
-document.getElementById("rotateBtn").addEventListener("click", () => {
-    const c = components.find((x) => x.id === selectedId);
-    if (!c || c.type === "ground") {
-        return;
-    }
-    c.rotation = (((c.rotation || 0) + 90) % 360 + 360) % 360;
-    draw();
-});
+  /** @param {WheelEvent} e */
+  function onWheel(e) {
+    e.preventDefault();
+    recordPointerWorld(e.clientX, e.clientY);
 
-document.getElementById("editValueBtn").addEventListener("click", () => {
-    const c = components.find((x) => x.id === selectedId);
-    if (!c) {
-        setStatus("", ["Selectionne un composant."]);
-        return;
-    }
-    const promptText = prompt("Valeur (ex : 1000Ω, 4 V)", c.value || getDefaultValue(c.type));
-    if (promptText == null || !promptText.trim()) {
-        return;
-    }
-    c.value = promptText.trim();
-    draw();
-});
+    const rect = stage.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
-window.addEventListener("resize", () => {
-    resizeCanvas();
-    draw();
-});
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;
+    else if (e.deltaMode === 2) dy *= 100;
 
-resizeCanvas();
-draw();
-refreshCanvasCursor();
-setStatus("", [
-    "Placement : clic sur la grille avec R / Source / Masse / Voltmètre, ou glisser-déposer un bouton sur le dessin.",
-    "Déplacement : Mode Sélection puis glisser un composant (les extrémités de fils suivent).",
-    "Molette : zoom. Clic droit + glisser : vue. Fil : deux points sur la grille."
-]);
+    const oldScale = scale;
+    let newScale = oldScale * Math.exp(-dy * 0.0015);
+    newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+    if (newScale === oldScale) return;
+
+    const wx = (mx - tx) / oldScale;
+    const wy = (my - ty) / oldScale;
+    tx = mx - wx * newScale;
+    ty = my - wy * newScale;
+    scale = newScale;
+    applyTransform();
+  }
+
+  window.addEventListener("pointermove", onWindowResistorMove);
+  window.addEventListener("pointerup", onWindowResistorUp);
+  window.addEventListener("pointercancel", onWindowResistorUp);
+
+  stage.addEventListener("pointermove", (e) => recordPointerWorld(e.clientX, e.clientY));
+
+  pickResistorBtn.addEventListener("pointerdown", onPickResistorDown);
+
+  stage.addEventListener("pointerdown", onPanPointerDown);
+  stage.addEventListener("pointermove", onPanPointerMove);
+  stage.addEventListener("pointerup", endPanDrag);
+  stage.addEventListener("pointercancel", endPanDrag);
+  stage.addEventListener("lostpointercapture", () => {
+    pointerId = null;
+    stage.classList.remove("dragging");
+  });
+  stage.addEventListener("wheel", onWheel, { passive: false });
+
+  window.addEventListener("keydown", onKeyDown);
+
+  function endPanDrag(ev) {
+    if (pointerId !== ev.pointerId) return;
+    pointerId = null;
+    stage.classList.remove("dragging");
+    try {
+      stage.releasePointerCapture(ev.pointerId);
+    } catch (_) {}
+  }
+
+  applyTransform();
+
+  document.querySelectorAll(".menubar details.menu-root").forEach((root) => {
+    root.addEventListener("toggle", () => {
+      if (!root.open) return;
+      document.querySelectorAll(".menubar details.menu-root").forEach((other) => {
+        if (other !== root) other.open = false;
+      });
+    });
+  });
+})();
