@@ -28,7 +28,7 @@ const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "E
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js")).href;
 let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
-const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-print-op-no-v0-2026-05-09b";
+const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
