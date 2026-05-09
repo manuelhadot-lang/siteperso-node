@@ -1,95 +1,325 @@
-:root {
-    --bg: #0f1419;
-    --fg: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --panel: #161b22;
-}
-
-body[data-theme="white"] {
-    --bg: #f6f8fa;
-    --fg: #1f2328;
-    --muted: #656d76;
-    --accent: #0969da;
-    --panel: #ffffff;
-}
-
 * {
-    box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+:root {
+  --topbar-height: 44px;
+  --grid-cell: 28px;
 }
 
 html,
 body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: "Segoe UI", system-ui, sans-serif;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #888;
+  font-family: system-ui, sans-serif;
 }
 
-.toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    align-items: center;
-    padding: 0.5rem 0.75rem;
-    background: var(--panel);
-    border-bottom: 1px solid color-mix(in srgb, var(--fg), transparent 88%);
+#topbar {
+  position: fixed;
+  z-index: 200;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-height);
+  background: #111;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: stretch;
 }
 
-.title {
-    font-weight: 600;
-    margin-right: 1rem;
-    color: var(--muted);
+.menubar {
+  display: flex;
+  align-items: stretch;
+  padding: 0 0.35rem;
 }
 
-.toolbar button {
-    padding: 0.35rem 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--fg), transparent 82%);
-    background: var(--bg);
-    color: var(--fg);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
+.menu-root {
+  position: relative;
+  align-self: stretch;
 }
 
-.toolbar button:hover {
-    border-color: var(--accent);
+.menu-root > summary {
+  list-style: none;
+  height: 100%;
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #d0d0d0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
 }
 
-.toolbar button.active {
-    background: color-mix(in srgb, var(--accent), transparent 75%);
-    border-color: var(--accent);
+.menu-root > summary::-webkit-details-marker {
+  display: none;
 }
 
-#status {
-    position: fixed;
-    left: 0.75rem;
-    bottom: 0.65rem;
-    max-width: min(560px, 92vw);
-    padding: 0.45rem 0.65rem;
-    border-radius: 6px;
-    font-size: 12px;
-    line-height: 1.35;
-    background: color-mix(in srgb, var(--panel), transparent 15%);
-    border: 1px solid color-mix(in srgb, var(--fg), transparent 88%);
-    pointer-events: none;
-    white-space: pre-wrap;
-    z-index: 5;
+.menu-root > summary::after {
+  content: "";
+  border: solid #888;
+  border-width: 0 1px 1px 0;
+  display: inline-block;
+  padding: 3px;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+  opacity: 0.85;
 }
 
-#status.ok {
-    border-color: color-mix(in srgb, #3fb950, transparent 55%);
+.menu-root[open] > summary {
+  background: #1b1b1b;
 }
 
-#status.err {
-    border-color: color-mix(in srgb, #f85149, transparent 45%);
+.menu-root:not([open]) > summary:hover {
+  background: #181818;
 }
 
-#canvas {
-    display: block;
-    width: 100%;
-    height: calc(100% - 48px);
-    cursor: crosshair;
+.submenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 0;
+  padding: 0.3rem 0;
+  min-width: 11rem;
+  list-style: none;
+  background: #1b1b1b;
+  border: 1px solid #333;
+  border-top: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
+
+.submenu-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  color: #e0e0e0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.submenu-item:hover {
+  background: #2a2a2a;
+}
+
+.submenu--panel {
+  min-width: 17.5rem;
+  max-width: 22rem;
+  padding: 0.55rem 0.9rem 0.75rem;
+  color: #bdbdbd;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  cursor: default;
+}
+
+.commands-list {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.commands-list li {
+  margin-bottom: 0.4rem;
+}
+
+.commands-list li:last-child {
+  margin-bottom: 0;
+}
+
+.commands-list kbd {
+  font-family: inherit;
+  font-size: 0.82em;
+  padding: 0.06em 0.32em;
+  border-radius: 3px;
+  background: #252525;
+  border: 1px solid #444;
+  color: #e4e4e4;
+}
+
+#pick-resistor {
+  cursor: grab;
+}
+
+body.is-dragging-resistor #pick-resistor {
+  cursor: grabbing;
+}
+
+body.is-dragging-resistor #stage {
+  cursor: crosshair;
+}
+
+#stage {
+  position: fixed;
+  top: var(--topbar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#stage.dragging {
+  cursor: grabbing;
+}
+
+#world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+#circuit-grid {
+  position: absolute;
+  top: -200%;
+  left: -200%;
+  width: 500%;
+  height: 500%;
+  background-color: transparent;
+  background-image:
+    linear-gradient(to right, #3a3a3a 1px, transparent 1px),
+    linear-gradient(to bottom, #3a3a3a 1px, transparent 1px);
+  background-size: var(--grid-cell) var(--grid-cell);
+  background-position: 0 0;
+}
+
+#components-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.resistor {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
+  cursor: grab;
+  pointer-events: auto;
+  color: #b8b8b8;
+  transition: box-shadow 0.18s ease;
+}
+
+.resistor:active {
+  cursor: grabbing;
+}
+
+.resistor-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #d0d0d0;
+  pointer-events: none;
+}
+
+.resistor-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.resistor-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.resistor-box {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+}
+
+.resistor-joint {
+  fill: #e83232;
+  stroke: #601010;
+  stroke-width: 1;
+}
+
+.resistor-value {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  letter-spacing: 0.03em;
+  color: #9a9a9a;
+  pointer-events: none;
+}
+
+.resistor--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+/* Même géométrie que le composant posé, palette différente (aperçu DnD) */
+.resistor--ghost .resistor-id {
+  color: #aec6ff;
+}
+
+.resistor--ghost .resistor-value {
+  color: #6f8cbf;
+}
+
+.resistor--ghost .resistor-trace {
+  stroke: #7aabff;
+}
+
+.resistor--ghost .resistor-box {
+  stroke: #9dc4ff;
+}
+
+.resistor--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+.resistor.resistor--dragging {
+  cursor: grabbing;
+  opacity: 0.92;
+}
+
+.resistor:not(.resistor--ghost).resistor--selected {
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(150, 195, 255, 0.28),
+    0 4px 18px rgba(70, 120, 200, 0.22),
+    0 0 32px rgba(110, 160, 255, 0.14);
+}
+
+.resistor--v.resistor {
+  flex-direction: row;
+  align-items: center;
+  width: fit-content;
+}
+
+.resistor--v .resistor-id {
+  flex: 0 0 var(--resistor-v-label-slot, 32px);
+  max-width: 32px;
+  margin-bottom: 0;
+  margin-right: var(--resistor-v-label-gap, 4px);
+  text-align: right;
+  padding-right: 2px;
+}
+
+.resistor--v .resistor-value {
+  margin-top: 0;
+  margin-left: var(--resistor-v-label-gap, 4px);
+  flex: 0 0 auto;
+  text-align: left;
+}
+
