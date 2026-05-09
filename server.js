@@ -25,8 +25,10 @@ const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "Stati
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
+const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js")).href;
 let buildNgspiceDeckFn = null;
-const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-node0-parse-2026-05-08f";
+let mergeVoltmeterMeasurementsFn = null;
+const SIM_ENGINE_BUILD_TAG = "v2-voltmeter-print-op-no-v0-2026-05-09b";
 
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
@@ -139,6 +141,7 @@ app.get('/api/version', (req, res) => {
         service: "siteperso-main-server",
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
         ngspiceDeckModuleUrl,
+        ngspiceResultParserModuleUrl,
         pid: process.pid
     });
 });
@@ -153,6 +156,18 @@ async function getBuildNgspiceDeck() {
     }
     buildNgspiceDeckFn = module.buildNgspiceDeck;
     return buildNgspiceDeckFn;
+}
+
+async function getMergeVoltmeterMeasurements() {
+    if (mergeVoltmeterMeasurementsFn) {
+        return mergeVoltmeterMeasurementsFn;
+    }
+    const module = await import(ngspiceResultParserModuleUrl);
+    if (typeof module.mergeVoltmeterMeasurements !== "function") {
+        throw new Error("Module mergeVoltmeterMeasurements introuvable.");
+    }
+    mergeVoltmeterMeasurementsFn = module.mergeVoltmeterMeasurements;
+    return mergeVoltmeterMeasurementsFn;
 }
 
 function runNgspice(netlistPath, outputPath) {
@@ -177,164 +192,18 @@ function runNgspice(netlistPath, outputPath) {
     });
 }
 
-function parseVoltMeasurements(log, voltmeters = []) {
-    const byRef = {};
-    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-    for (const meter of voltmeters) {
-        const escapedName = String(meter.measureName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
-        const match = re.exec(log);
-        if (!match) {
-            continue;
-        }
-        const value = parseMaybeNumber(match[1]);
-        if (Number.isFinite(value)) {
-            byRef[meter.reference] = value;
-        }
-    }
-    return byRef;
-}
-
-function parseNamedMeasurements(log, measureItems = []) {
-    const byName = {};
-    const numberPattern = "([+-]?(?:\\d+\\.?,?\\d*|\\.\\d+|\\d+,\\d+)(?:[eE][+-]?\\d+)?)";
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-    for (const item of measureItems) {
-        const escapedName = String(item?.measureName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        if (!escapedName) {
-            continue;
-        }
-        const re = new RegExp(`${escapedName}\\s*=\\s*${numberPattern}`, "i");
-        const match = re.exec(log);
-        if (!match) {
-            continue;
-        }
-        const value = parseMaybeNumber(match[1]);
-        if (Number.isFinite(value)) {
-            byName[item.measureName] = value;
-        }
-    }
-    return byName;
-}
-
-function parseNodeVoltages(log) {
-    const byNode = {};
-    const numberRe = /[+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?/;
-    const parseMaybeNumber = (raw) => {
-        const normalized = String(raw || "").trim().replace(",", ".");
-        const value = Number.parseFloat(normalized);
-        return Number.isFinite(value) ? value : null;
-    };
-
-    // Format explicite: v(node)=value
-    const explicitRegex = /v\(\s*([^)]+?)\s*\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)/gi;
-    let explicit;
-    while ((explicit = explicitRegex.exec(log)) !== null) {
-        const nodeName = String(explicit[1] || "").trim().toLowerCase();
-        const value = parseMaybeNumber(explicit[2]);
-        if (nodeName && Number.isFinite(value)) {
-            byNode[nodeName] = value;
-        }
-    }
-
-    const lines = String(log || "").split(/\r?\n/);
-
-    // Format "Operating Point" classique: "<node> <value>"
-    for (const line of lines) {
-        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)\s*$/);
-        if (!m) {
-            continue;
-        }
-        const nodeName = m[1].toLowerCase();
-        const value = parseMaybeNumber(m[2]);
-        if (Number.isFinite(value)) {
-            byNode[nodeName] = value;
-        }
-    }
-
-    // Format table .print op :
-    // "Index   v(n1)   v(n2)"
-    // "0       2.5     5"
-    for (let i = 0; i < lines.length - 1; i += 1) {
-        const header = lines[i];
-        if (!/\bindex\b/i.test(header) || !/v\(/i.test(header)) {
-            continue;
-        }
-        const valueLine = lines[i + 1] || "";
-        const headerMatches = [...header.matchAll(/v\(\s*([^)]+?)\s*\)/gi)];
-        if (headerMatches.length === 0) {
-            continue;
-        }
-        const nums = valueLine.match(new RegExp(numberRe.source, "g")) || [];
-        // 1re colonne = index, puis les tensions
-        if (nums.length < headerMatches.length + 1) {
-            continue;
-        }
-        for (let k = 0; k < headerMatches.length; k += 1) {
-            const nodeName = String(headerMatches[k][1] || "").trim().toLowerCase();
-            const value = parseMaybeNumber(nums[k + 1]);
-            if (nodeName && Number.isFinite(value)) {
-                byNode[nodeName] = value;
-            }
-        }
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(byNode, "0")) {
-        byNode["0"] = 0;
-    }
-
-    return byNode;
-}
-
-function mergeVoltmeterMeasurements(log, voltmeters = [], nodeMeasures = []) {
-    const directValues = parseVoltMeasurements(log, voltmeters);
-    const namedNodeValues = parseNamedMeasurements(log, nodeMeasures);
-    const nodeVoltages = parseNodeVoltages(log);
-    const merged = { ...directValues };
-
-    for (const nodeMeasure of nodeMeasures) {
-        const measured = namedNodeValues[nodeMeasure.measureName];
-        if (Number.isFinite(measured)) {
-            nodeVoltages[String(nodeMeasure.nodeName || "").toLowerCase()] = measured;
-        }
-    }
-
-    for (const meter of voltmeters) {
-        if (Number.isFinite(merged[meter.reference])) {
-            continue;
-        }
-        const nPlus = String(meter.nPlus || "").toLowerCase();
-        const nMinus = String(meter.nMinus || "").toLowerCase();
-        if (!(nPlus in nodeVoltages) || !(nMinus in nodeVoltages)) {
-            continue;
-        }
-        const computed = nodeVoltages[nPlus] - nodeVoltages[nMinus];
-        if (Number.isFinite(computed)) {
-            merged[meter.reference] = computed;
-        }
-    }
-    return merged;
-}
-
 app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
     let buildNgspiceDeck;
+    let mergeVoltmeterMeasurements;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
+        mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
     } catch (error) {
         res.status(500).json({
             ok: false,
             phase: "init",
-            errors: ["Module netlist ngspice indisponible sur le serveur."],
+            errors: ["Modules ngspice (netlist ou parseur resultats) indisponibles sur le serveur."],
             details: { message: error?.message || "" }
         });
         return;
