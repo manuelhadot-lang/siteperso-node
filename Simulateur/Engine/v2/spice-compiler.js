@@ -5,7 +5,7 @@ import {
     SPICE_OPTIONS_LINE
 } from "./spice-utils.js";
 
-export const BUILD_TAG = "v2-voltmeter-node0-parse-2026-05-08f";
+export const BUILD_TAG = "v2-voltmeter-print-op-parse-vparen-2026-05-09a";
 
 function isPassiveType(type) {
     return type === "resistance" || type === "capacitor" || type === "inductor" || type === "diode";
@@ -126,6 +126,18 @@ export function compileSpiceDeck(topology) {
     }
 
     lines.push(".op");
+    if (voltmeters.length > 0) {
+        const vmNodes = new Set();
+        for (const meter of voltmeters) {
+            vmNodes.add(meter.nPlus);
+            vmNodes.add(meter.nMinus);
+        }
+        const nodeList = [...vmNodes];
+        for (let i = 0; i < nodeList.length; i += 8) {
+            const chunk = nodeList.slice(i, i + 8);
+            lines.push(`.print op ${chunk.map((n) => `v(${n})`).join(" ")}`);
+        }
+    }
     lines.push(".end");
 
     return {

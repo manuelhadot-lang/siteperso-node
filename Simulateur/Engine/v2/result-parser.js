@@ -67,6 +67,24 @@ function parseNodeVoltages(log) {
     }
 
     const lines = String(log || "").split(/\r?\n/);
+    /* Sortie ngspice (.print op / tableau tensions) : « v(N1)    4e+00 » sans signe '=' */
+    const vParenNumber =
+        /^\s*v\(\s*([^)]+?)\s*\)\s+([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)/i;
+    for (const line of lines) {
+        const pm = line.match(vParenNumber);
+        if (!pm) {
+            continue;
+        }
+        const inner = String(pm[1] || "").trim();
+        if (inner.includes(",")) {
+            continue;
+        }
+        const nodeName = inner.toLowerCase();
+        const value = parseMaybeNumber(pm[2]);
+        if (nodeName && Number.isFinite(value)) {
+            byNode[nodeName] = value;
+        }
+    }
     for (const line of lines) {
         const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s+([+-]?(?:\d+\.?\d*|\.\d+|\d+,\d+)(?:[eE][+-]?\d+)?)\s*$/);
         if (!m) {
