@@ -1,7 +1,7 @@
 /**
  * Construction d'un deck SPICE pour ngspice batch à partir du JSON éditeur
  * ({ comps, wires, wireNodes }).
- * @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 } | { kind: 'N'; nid: string }} WirePort
+ * @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 | 2 } | { kind: 'N'; nid: string }} WirePort
  * @typedef {{ id: string; from: WirePort; to: WirePort; points: { x:number; y:number }[] }} Wire
  */
 
@@ -28,11 +28,11 @@ function asWirePort(ep) {
   const o = /** @type {{ kind?: string; nid?: string; compId?: string; ti?: number }} */ (
     ep
   );
-  if (o.kind === "T" && typeof o.compId === "string" && (o.ti === 0 || o.ti === 1))
-    return { kind: /** @type {'T'} */ ("T"), compId: o.compId, ti: /** @type {0|1} */ (o.ti) };
+  if (o.kind === "T" && typeof o.compId === "string" && (o.ti === 0 || o.ti === 1 || o.ti === 2))
+    return { kind: /** @type {'T'} */ ("T"), compId: o.compId, ti: /** @type {0|1|2} */ (o.ti) };
   if (o.kind === "N" && typeof o.nid === "string") return { kind: "N", nid: o.nid };
-  if (typeof o.compId === "string" && (o.ti === 0 || o.ti === 1))
-    return { kind: "T", compId: o.compId, ti: /** @type {0|1} */ (o.ti) };
+  if (typeof o.compId === "string" && (o.ti === 0 || o.ti === 1 || o.ti === 2))
+    return { kind: "T", compId: o.compId, ti: /** @type {0|1|2} */ (o.ti) };
   if (typeof o.nid === "string") return { kind: "N", nid: o.nid };
   return null;
 }
@@ -134,7 +134,7 @@ function spanPx(gs) {
  * Coordonnées des bornes d'un composant (mêmes conventions que terminalsOfComp côté éditeur).
  * @param {object} comp
  * @param {number} span pixels grille (4 cases)
- * @returns {{ ti: 0 | 1; x: number; y: number }[]}
+ * @returns {{ ti: 0 | 1 | 2; x: number; y: number }[]}
  */
 function terminalCoords(comp, span) {
   const c = /** @type {{ kind?: string; jx?: number; jy?: number; orient?: string }} */ (comp);
@@ -163,7 +163,40 @@ function terminalCoords(comp, span) {
   if (k === "ground") {
     return [{ ti: /** @type {0|1} */ (0), x: jx, y: jy }];
   }
+  if (k === "siggen") {
+    const o = /** @type {{ flipX?: boolean }} */ (comp);
+    const flip = !!o.flipX;
+    const midY = jy + span / 2;
+    const botY = jy + span;
+    const cx = jx + span / 2;
+    if (!flip) {
+      return [
+        { ti: /** @type {0|1} */ (0), x: jx + span, y: midY },
+        { ti: /** @type {0|1} */ (1), x: cx, y: botY },
+      ];
+    }
+    return [
+      { ti: /** @type {0|1} */ (0), x: jx, y: midY },
+      { ti: /** @type {0|1} */ (1), x: cx, y: botY },
+    ];
+  }
+  if (k === "scope") {
+    const topY = jy + CELL_FROM_SPAN(span);
+    const botY = jy + span;
+    const midX = jx + span / 2;
+    const ch2Y = jy + span - CELL_FROM_SPAN(span);
+    return [
+      { ti: /** @type {0|1|2} */ (0), x: jx, y: topY },
+      { ti: /** @type {0|1|2} */ (1), x: jx, y: ch2Y },
+      { ti: /** @type {0|1|2} */ (2), x: midX, y: botY },
+    ];
+  }
   return [];
+}
+
+/** Une cellule pour positionner les broches oscilloscope depuis span (span = 4 cellules). */
+function CELL_FROM_SPAN(span) {
+  return span / 4;
 }
 
 /** Point sur segment Manhattan (axe-aligné). Tolérance pour erreur d'arrondi grille. */
@@ -329,6 +362,23 @@ function logicalTerminals(comp) {
       { ti: /** @type {0|1} */ (1), label: `${id}:Om${oi}:B` },
     ];
   }
+  if (kind === "siggen") {
+    const o = /** @type {{ sIndex?: number }} */ (comp);
+    const si = typeof o.sIndex === "number" ? o.sIndex : 0;
+    return [
+      { ti: /** @type {0|1} */ (0), label: `${id}:S${si}:out` },
+      { ti: /** @type {0|1} */ (1), label: `${id}:S${si}:gnd` },
+    ];
+  }
+  if (kind === "scope") {
+    const o = /** @type {{ scIndex?: number }} */ (comp);
+    const sc = typeof o.scIndex === "number" ? o.scIndex : 0;
+    return [
+      { ti: /** @type {0|1|2} */ (0), label: `${id}:Osc${sc}:CH1` },
+      { ti: /** @type {0|1|2} */ (1), label: `${id}:Osc${sc}:CH2` },
+      { ti: /** @type {0|1|2} */ (2), label: `${id}:Osc${sc}:GND` },
+    ];
+  }
   if (kind === "battery") {
     const o = /** @type {{ vIndex?: number }} */ (comp);
     const vn = typeof o.vIndex === "number" ? o.vIndex : 0;
@@ -370,6 +420,9 @@ export function buildNgspiceDeck(state, _opts) {
       ammeters: [],
       ohmeters: [],
       nodeMeasures: [],
+      analysisTran: false,
+      scopesTranMeta: [],
+      tranWavePathToken: "__TRAN_WAVE_PATH__",
     };
   }
 
@@ -386,10 +439,20 @@ export function buildNgspiceDeck(state, _opts) {
 
   const batteries = comps.filter((c) => c && typeof c === "object" && c.kind === "battery");
   /** @type {unknown[]} */
+  const siggenComps = comps.filter((c) => c && typeof c === "object" && c.kind === "siggen");
+  /** @type {unknown[]} */
+  const scopeComps = comps.filter((c) => c && typeof c === "object" && c.kind === "scope");
+  /** @type {unknown[]} */
   const ohmmeterComps = comps.filter((c) => c && typeof c === "object" && c.kind === "ohmmeter");
-  if (batteries.length === 0 && ohmmeterComps.length === 0) {
+  const useTranAnalysis = scopeComps.length > 0;
+  if (
+    batteries.length === 0 &&
+    ohmmeterComps.length === 0 &&
+    siggenComps.length === 0 &&
+    !(scopeComps.length > 0)
+  ) {
     errors.push(
-      "Ajoutez au moins une alimentation (pile) ou un ohmètre pour la simulation DC."
+      "Ajoutez au moins une alimentation (pile), un ohmètre, un générateur sinusoidal ou un oscilloscope pour la simulation."
     );
   }
 
@@ -474,6 +537,43 @@ export function buildNgspiceDeck(state, _opts) {
     if (firstGroundPk !== null) gndRoot = uf.find(portWireKey(firstGroundPk));
   }
 
+  /** Dès qu’au moins un symbole « Masse » existe, aligner équipotential sur ce réseau :
+   * sans pile ou avec pile, évite sous-réseaux isolés où seules résistances de wrdata /
+   * fils fins laisseraient Ni sans chemin jusqu’à 0.
+   *
+   * En pratique l’élève relie souvent Sig↔GND et Osc↔GND visuellement par des rails horizontaux
+   * qui peuvent rester géométriquement légers ; ces unions reflètent l’intent « référence commune » du schéma. */
+  if (errors.length === 0 && grounds.length > 0) {
+    const g0 = grounds[0];
+    const gid = /** @type {{ id?: string }} */ (g0).id;
+    if (typeof gid === "string") {
+      const kGlobGround = portWireKey({
+        kind: /** @type {"T"} */ ("T"),
+        compId: gid,
+        ti: /** @type {0 | 1} */ (0),
+      });
+      uf.add(kGlobGround);
+      let firstUnion = false;
+      for (const sg of siggenComps) {
+        const sid = /** @type {{ id?: string }} */ (/** @type {object} */ (sg)).id;
+        if (typeof sid !== "string") continue;
+        uf.union(kGlobGround, portWireKey({ kind: /** @type {"T"} */ ("T"), compId: sid, ti: 1 }));
+        firstUnion = true;
+      }
+      for (const sc of scopeComps) {
+        const cid = /** @type {{ id?: string }} */ (/** @type {object} */ (sc)).id;
+        if (typeof cid !== "string") continue;
+        uf.union(kGlobGround, portWireKey({ kind: /** @type {"T"} */ ("T"), compId: cid, ti: 2 }));
+        firstUnion = true;
+      }
+      if (firstUnion) {
+        warnings.push(
+          "Tout symbole Masse placé définit la référence commune : broches « masse » des générateurs S et « GND » des oscilloscopes y sont maintenant raccordées pour la simulation (évite nœuds N1, N3… isolés). Continuez à tracer des fils masse sur la grille pour un schéma lisible."
+        );
+      }
+    }
+  }
+
   /** @type {Set<string>} */
   const roots = new Set();
   for (const c of comps) {
@@ -546,6 +646,10 @@ export function buildNgspiceDeck(state, _opts) {
   /** @typedef {{ omIndex: number; displayLabel: string; spiceVInstance: string; spicePlus: string; spiceMinus: string }} OmInfo */
   /** @type {OmInfo[]} */
   const ohmeters = [];
+  /** Méta oscilloscopes pour colonnes du fichier wrdata (indices 1… relatif à la 1ère colonne de données après « time »). */
+  /** @typedef {{ scopeId: string; scIndex: number; displayLabel: string; colCh1: number; colCh2: number; colGnd: number }} ScopeTranMeta */
+  /** @type {ScopeTranMeta[]} */
+  const scopesTranMeta = [];
 
   /** @type {string[]} lines */
   const lines = [];
@@ -583,6 +687,36 @@ export function buildNgspiceDeck(state, _opts) {
     }
 
     lines.push("");
+    lines.push("* --- Générateurs sinusoidaux Sn (sortie ti=0, masse interne ti=1)");
+    for (const sg of siggenComps) {
+      const o = /** @type {{ id: string; sIndex?: number; amp?: number; freqHz?: number; offset?: number }} */ (
+        /** @type {object} */ (sg)
+      );
+      const cid = o.id;
+      const siIdx = typeof o.sIndex === "number" ? o.sIndex : 0;
+      const sid = sanitizeId(cid, "Sg");
+      const inst = `Vsig_${sid}`;
+      const VO =
+        typeof o.offset === "number" && Number.isFinite(o.offset) ? o.offset : 0;
+      const VA =
+        typeof o.amp === "number" && Number.isFinite(o.amp) ? Math.abs(o.amp) : 1;
+      const FREQ =
+        typeof o.freqHz === "number" && Number.isFinite(o.freqHz) ? Math.max(o.freqHz, 1e-6) : 50;
+      const kOut = portWireKey({ kind: "T", compId: cid, ti: 0 });
+      const kG = portWireKey({ kind: "T", compId: cid, ti: 1 });
+      const nOut = nodeSpice(kOut);
+      const nG = nodeSpice(kG);
+      if (nOut === "FLOAT" || nG === "FLOAT")
+        warnings.push(`Generateur S${siIdx} (${cid}) : borne flottante (sortie ou masse du generateur ?).`);
+      else dcConductiveEdges.push([normSpiceNodeLabel(nOut), normSpiceNodeLabel(nG)]);
+      if (useTranAnalysis)
+        lines.push(
+          `${inst} ${nOut} ${nG} SIN(${VO} ${VA} ${FREQ} 0 0)`
+        );
+      else lines.push(`${inst} ${nOut} ${nG} DC ${VO}`);
+    }
+
+    lines.push("");
     lines.push("* --- Passifs");
     for (const comp of comps) {
       if (!comp || typeof comp !== "object" || comp.kind !== "resistor") continue;
@@ -604,9 +738,17 @@ export function buildNgspiceDeck(state, _opts) {
       lines.push(`R_${id}_ohm ${n0} ${n1} ${ohms}`);
     }
 
+    if (useTranAnalysis && ohmmeterComps.length > 0) {
+      warnings.push(
+        "Ohmmètres ignorés pendant la simulation transitoire (présence d’un oscilloscope sur le schéma)."
+      );
+    }
+
     lines.push("");
-    lines.push("* --- Ohmmètres (source V DC 1 interne sans pile sur schéma → R équivalent = |1 / i(V)| en Ω)");
+    if (!useTranAnalysis) lines.push("* --- Ohmmètres (source V DC 1 interne sans pile sur schéma → R équivalent = |1 / i(V)| en Ω)");
+    else lines.push("* --- Ohmmètres désactivés (mode transitoire)");
     for (const comp of comps) {
+      if (useTranAnalysis) continue;
       if (!comp || typeof comp !== "object" || comp.kind !== "ohmmeter") continue;
       const o = /** @type {{ id: string; omIndex?: number }} */ (/** @type {object} */ (comp));
       const cid = o.id;
@@ -684,7 +826,7 @@ export function buildNgspiceDeck(state, _opts) {
     }
 
     for (const comp of comps) {
-      if (!comp || typeof comp !== "object" || comp.kind !== "voltmeter") continue;
+      if (useTranAnalysis || !comp || typeof comp !== "object" || comp.kind !== "voltmeter") continue;
       const o = /** @type {{ id: string; vmIndex?: number }} */ (/** @type {object} */ (comp));
       const cid = o.id;
       const vmIdx = typeof o.vmIndex === "number" ? o.vmIndex : 0;
@@ -721,60 +863,147 @@ export function buildNgspiceDeck(state, _opts) {
     }
 
     lines.push("");
-    lines.push(".OP");
+    if (useTranAnalysis) {
+      let fSweep = 50;
+      for (const sg of siggenComps) {
+        const o = /** @type {{ freqHz?: number }} */ (/** @type {object} */ (sg));
+        const fz = typeof o.freqHz === "number" && Number.isFinite(o.freqHz) ? Math.max(o.freqHz, 0.001) : 50;
+        fSweep = Math.min(fSweep, fz);
+      }
+      const periods = 4;
+      const tstopRaw = periods / Math.max(fSweep, 1e-6);
+      const tstop = Math.min(Math.max(tstopRaw, 0.002), 0.06);
+      const tstep = Math.min(Math.max(tstop / 2000, 1e-9), tstop / 100);
 
-    lines.push(".CONTROL");
-    lines.push("  set numdgt=10");
-    lines.push("  op");
-    lines.push(`  echo __VM_BEGIN__`);
+      let colIdx = 1;
+      lines.push("* --- Oscilloscopes — ne participent pas au circuit (référence de nœuds seulement)");
+      for (const sc of scopeComps) {
+        const o = /** @type {{ id: string; scIndex?: number }} */ (/** @type {object} */ (sc));
+        const cid = o.id;
+        const scIx = typeof o.scIndex === "number" ? o.scIndex : 0;
+        const k1 = portWireKey({ kind: "T", compId: cid, ti: 0 });
+        const k2 = portWireKey({ kind: "T", compId: cid, ti: 1 });
+        const kg = portWireKey({ kind: "T", compId: cid, ti: /** @type {0|1|2} */ (2) });
+        const ns1 = nodeSpice(k1);
+        const ns2 = nodeSpice(k2);
+        const ngnd = nodeSpice(kg);
+        if (ns1 === "FLOAT" || ns2 === "FLOAT" || ngnd === "FLOAT")
+          warnings.push(`Oscilloscope Osc${scIx} (${cid}) : borne CH1, CH2 ou GND isolée — courbes invalides si flottante.`);
+        scopesTranMeta.push({
+          scopeId: cid,
+          scIndex: scIx,
+          displayLabel: `Osc${scIx}`,
+          colCh1: colIdx,
+          colCh2: colIdx + 1,
+          colGnd: colIdx + 2,
+        });
+        colIdx += 3;
+      }
 
-    let i = 0;
-    for (const vm of voltmeters) {
-      const vmKey = `${vm.displayLabel}_${i++}`;
+      /** @type {string[]} */
+      const wrExprs = [];
+      for (const sm of scopesTranMeta) {
+        const sc = scopeComps.find(
+          /** @returns {boolean} */
+          (c) =>
+            !!(c && typeof c === "object" && /** @type {{ id?: string }} */ (c).id === sm.scopeId)
+        );
+        if (!sc) continue;
+        const scIx = typeof sm.scIndex === "number" ? sm.scIndex : 0;
+        const oscLbl = `Osc${scIx}`;
+        const cid = /** @type {{ id: string }} */ (/** @type {object} */ (sc)).id;
+        const k1 = portWireKey({ kind: "T", compId: cid, ti: 0 });
+        const k2 = portWireKey({ kind: "T", compId: cid, ti: 1 });
+        const kg = portWireKey({ kind: "T", compId: cid, ti: /** @type {0|1|2} */ (2) });
+
+        /** Broches oscilloscope : pas d’élément dans le deck → ngspice n’a aucun vecteur v(Nx). On retombe sur v(0). */
+        /** @param {string} probe @param {"CH1" | "CH2" | "GND"} lab */
+        const pushTranProbeVoltage = (probe, lab) => {
+          if (probe === "FLOAT") {
+            wrExprs.push("v(0)");
+            return;
+          }
+          const pn = normSpiceNodeLabel(probe);
+          if (dcNodeSet.has(pn)) {
+            wrExprs.push(`v(${pn})`);
+            return;
+          }
+          wrExprs.push("v(0)");
+          warnings.push(
+            `${oscLbl} (${cid}), ${lab} (nœud ${pn}) : pas d’élément conducteur sur ce réseau — enregistré comme v(0) (cas typique : CH2 laissée libre). CH1 − GND utilise toujours les bons nœuds.`
+          );
+        };
+
+        pushTranProbeVoltage(nodeSpice(k1), "CH1");
+        pushTranProbeVoltage(nodeSpice(k2), "CH2");
+        pushTranProbeVoltage(nodeSpice(kg), "GND");
+      }
+      lines.push(`* --- Transitoire ${tstop.toExponential()} s, pas ${tstep.toExponential()} s (${fSweep} Hz ref.)`);
+      lines.push(`.tran ${tstep} ${tstop} uic`);
+      lines.push("");
+      lines.push(".CONTROL");
+      lines.push("  set numdgt=10");
+      lines.push("  set filetype=ascii");
+      lines.push("  set wr_singlescale");
+      lines.push("  run");
       lines.push(
-        `  echo "__VM_ROW__|${vmKey}|${vm.displayLabel}|${vm.spicePlus}|${vm.spiceMinus}"`
+        `  wrdata __TRAN_WAVE_PATH__ time ${wrExprs.join(" ")}`.replace(/\s+/g, " ").trim()
       );
-      /*
-       * Dans .CONTROL après `op`, `print v(a)-v(0)` peut être faux / nul avec certaines versions
-       * alors que la tension entre a et la référence est correcte. Si la borne − est le nœud 0,
-       * utiliser `v(a)` (tension par rapport à la masse SPICE).
-       */
-      const p = vm.spicePlus;
-      const m = vm.spiceMinus;
-      let printLine = `  print v(${p})-v(${m})`;
-      if (m === "0") printLine = `  print v(${p})`;
-      else if (p === "0") printLine = `  print -v(${m})`;
-      lines.push(printLine);
+      lines.push("  quit");
+      lines.push(".ENDC");
+      lines.push("");
+      lines.push(".END");
+      lines.push("");
+    } else {
+      lines.push(".OP");
+
+      lines.push(".CONTROL");
+      lines.push("  set numdgt=10");
+      lines.push("  op");
+      lines.push(`  echo __VM_BEGIN__`);
+
+      let i = 0;
+      for (const vm of voltmeters) {
+        const vmKey = `${vm.displayLabel}_${i++}`;
+        lines.push(
+          `  echo "__VM_ROW__|${vmKey}|${vm.displayLabel}|${vm.spicePlus}|${vm.spiceMinus}"`
+        );
+        const p = vm.spicePlus;
+        const m = vm.spiceMinus;
+        let printLine = `  print v(${p})-v(${m})`;
+        if (m === "0") printLine = `  print v(${p})`;
+        else if (p === "0") printLine = `  print -v(${m})`;
+        lines.push(printLine);
+      }
+
+      lines.push(`  echo __VM_END__`);
+
+      lines.push(`  echo __AM_BEGIN__`);
+      let ai = 0;
+      for (const am of ammeters) {
+        const ak = `${am.displayLabel}_${ai++}`;
+        lines.push(`  echo "__AM_ROW__|${ak}|${am.displayLabel}|${am.spiceVInstance}"`);
+        lines.push(`  print i(${am.spiceVInstance})`);
+      }
+      lines.push(`  echo __AM_END__`);
+
+      lines.push(`  echo __OH_BEGIN__`);
+      let oi = 0;
+      for (const om of ohmeters) {
+        const ok = `ohm_${om.omIndex}_${oi++}`;
+        lines.push(`  echo "__OH_ROW__|${ok}|${om.omIndex}|${om.spiceVInstance}"`);
+        lines.push(`  print i(${om.spiceVInstance})`);
+      }
+      lines.push(`  echo __OH_END__`);
+
+      lines.push("  quit");
+      lines.push(".ENDC");
+
+      lines.push("");
+      lines.push(".END");
+
+      lines.push("");
     }
-
-    lines.push(`  echo __VM_END__`);
-
-    lines.push(`  echo __AM_BEGIN__`);
-    let ai = 0;
-    for (const am of ammeters) {
-      const ak = `${am.displayLabel}_${ai++}`;
-      lines.push(`  echo "__AM_ROW__|${ak}|${am.displayLabel}|${am.spiceVInstance}"`);
-      lines.push(`  print i(${am.spiceVInstance})`);
-    }
-    lines.push(`  echo __AM_END__`);
-
-    lines.push(`  echo __OH_BEGIN__`);
-    let oi = 0;
-    for (const om of ohmeters) {
-      const ok = `ohm_${om.omIndex}_${oi++}`;
-      /* Marqueur 100 % ASCII : certains ngspice / encodages Windows plantent sur « Ω » dans .CONTROL */
-      lines.push(`  echo "__OH_ROW__|${ok}|${om.omIndex}|${om.spiceVInstance}"`);
-      lines.push(`  print i(${om.spiceVInstance})`);
-    }
-    lines.push(`  echo __OH_END__`);
-
-    lines.push("  quit");
-    lines.push(".ENDC");
-
-    lines.push("");
-    lines.push(".END");
-
-    lines.push("");
   }
 
   const netlist = errors.length ? `* erreurs dans build — deck vide.\n${errors.join("\n* ")}\n` : lines.join("\n");
@@ -789,6 +1018,9 @@ export function buildNgspiceDeck(state, _opts) {
       ammeters,
       ohmeters: [],
       nodeMeasures: [],
+      analysisTran: false,
+      scopesTranMeta: [],
+      tranWavePathToken: "__TRAN_WAVE_PATH__",
     };
   }
 
@@ -801,5 +1033,8 @@ export function buildNgspiceDeck(state, _opts) {
     ammeters,
     ohmeters,
     nodeMeasures: [],
+    analysisTran: useTranAnalysis,
+    scopesTranMeta: useTranAnalysis ? scopesTranMeta : [],
+    tranWavePathToken: "__TRAN_WAVE_PATH__",
   };
 }

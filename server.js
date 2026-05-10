@@ -30,17 +30,43 @@ let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
 let mergeAmmeterMeasurementsFn = null;
 let mergeOhmmeterMeasurementsFn = null;
+let mergeScopePlotsFromTranWrdataFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
+
+/**
+ * Nettoie une valeur d’environnement (guillemets, espaces).
+ * @param {string} s
+ */
+function cleanEnvExecutable(s) {
+    let x = String(s).trim();
+    if ((x.startsWith('"') && x.endsWith('"')) || (x.startsWith("'") && x.endsWith("'")))
+        x = x.slice(1, -1).trim();
+    return x;
+}
+
+/**
+ * Résout un chemin vers ngspice : absolu tel quel, sinon relatif au cwd puis à la racine du projet.
+ * @param {string} p
+ */
+function resolveNgspiceCandidate(p) {
+    const t = cleanEnvExecutable(p);
+    if (!t) return "ngspice";
+    if (path.isAbsolute(t)) return path.normalize(t);
+    const fromCwd = path.resolve(process.cwd(), t);
+    if (fs.existsSync(fromCwd)) return fromCwd;
+    const fromApp = path.resolve(__dirname, t);
+    if (fs.existsSync(fromApp)) return fromApp;
+    return t;
+}
 
 /**
  * Binaire ngspice : défaut "ngspice". Sous Windows sans entrée PATH, définir
  * NGSPICE ou NGSPICE_PATH (ex. C:\Spice64\bin\ngspice.exe).
  */
 function ngspiceExecutablePath() {
-    const fromEnv = process.env.NGSPICE || process.env.NGSPICE_PATH;
-    return typeof fromEnv === "string" && fromEnv.trim().length > 0
-        ? fromEnv.trim()
-        : "ngspice";
+    const raw = process.env.NGSPICE || process.env.NGSPICE_PATH;
+    if (typeof raw === "string" && raw.trim().length > 0) return resolveNgspiceCandidate(raw);
+    return "ngspice";
 }
 
 /**
@@ -172,67 +198,73 @@ app.get('/api/version', (req, res) => {
     });
 });
 
+/* Rechargement dynamique : `import(file://…?t=…)` évite le cache ESM de Node sans passer
+   par une data: URI (certaines versions / politiques peuvent refuser ou limiter ces imports). */
+
+/** @param {string} filePath chemin absolu du module .js à importer à chaud */
+async function importFresh(filePath) {
+    const url = `${pathToFileURL(path.resolve(filePath)).href}?t=${Date.now()}&r=${Math.random()}`;
+    return import(url);
+}
+
+const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js");
+const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js");
+
 async function getBuildNgspiceDeck() {
-    if (buildNgspiceDeckFn) {
-        return buildNgspiceDeckFn;
-    }
-    const module = await import(ngspiceDeckModuleUrl);
-    if (typeof module.buildNgspiceDeck !== "function") {
+    const module = await importFresh(ngspiceDeckModulePath);
+    if (typeof module.buildNgspiceDeck !== "function")
         throw new Error("Module buildNgspiceDeck introuvable.");
-    }
-    buildNgspiceDeckFn = module.buildNgspiceDeck;
-    return buildNgspiceDeckFn;
+    return module.buildNgspiceDeck;
 }
 
 async function getMergeVoltmeterMeasurements() {
-    if (mergeVoltmeterMeasurementsFn) {
-        return mergeVoltmeterMeasurementsFn;
-    }
-    const module = await import(ngspiceResultParserModuleUrl);
-    if (typeof module.mergeVoltmeterMeasurements !== "function") {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeVoltmeterMeasurements !== "function")
         throw new Error("Module mergeVoltmeterMeasurements introuvable.");
-    }
-    mergeVoltmeterMeasurementsFn = module.mergeVoltmeterMeasurements;
-    return mergeVoltmeterMeasurementsFn;
+    return module.mergeVoltmeterMeasurements;
 }
 
 async function getMergeAmmeterMeasurements() {
-    if (mergeAmmeterMeasurementsFn) {
-        return mergeAmmeterMeasurementsFn;
-    }
-    const module = await import(ngspiceResultParserModuleUrl);
-    if (typeof module.mergeAmmeterMeasurements !== "function") {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeAmmeterMeasurements !== "function")
         throw new Error("Module mergeAmmeterMeasurements introuvable.");
-    }
-    mergeAmmeterMeasurementsFn = module.mergeAmmeterMeasurements;
-    return mergeAmmeterMeasurementsFn;
+    return module.mergeAmmeterMeasurements;
 }
 
 async function getMergeOhmmeterMeasurements() {
-    if (mergeOhmmeterMeasurementsFn) {
-        return mergeOhmmeterMeasurementsFn;
-    }
-    const module = await import(ngspiceResultParserModuleUrl);
-    if (typeof module.mergeOhmmeterMeasurements !== "function") {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeOhmmeterMeasurements !== "function")
         throw new Error("Module mergeOhmmeterMeasurements introuvable.");
-    }
-    mergeOhmmeterMeasurementsFn = module.mergeOhmmeterMeasurements;
-    return mergeOhmmeterMeasurementsFn;
+    return module.mergeOhmmeterMeasurements;
+}
+
+async function getMergeScopePlotsFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeScopePlotsFromTranWrdata !== "function")
+        throw new Error("Module mergeScopePlotsFromTranWrdata introuvable.");
+    return module.mergeScopePlotsFromTranWrdata;
 }
 
 function runNgspice(netlistPath, outputPath) {
+    const exe = ngspiceExecutablePath();
     return new Promise((resolve, reject) => {
         execFile(
-            ngspiceExecutablePath(),
+            exe,
             ["-b", "-o", outputPath, netlistPath],
-            { windowsHide: true, timeout: 25000, maxBuffer: 8 * 1024 * 1024 },
+            {
+                windowsHide: true,
+                timeout: 25000,
+                maxBuffer: 8 * 1024 * 1024,
+                env: process.env,
+            },
             (error, stdout, stderr) => {
                 if (error) {
                     reject({
                         message: error.message,
                         code: error.code,
                         stdout: stdout || "",
-                        stderr: stderr || ""
+                        stderr: stderr || "",
+                        ngspiceExe: exe,
                     });
                     return;
                 }
@@ -248,11 +280,13 @@ app.post("/api/simulate", async (req, res) => {
     let mergeVoltmeterMeasurements;
     let mergeAmmeterMeasurements;
     let mergeOhmmeterMeasurements;
+    let mergeScopePlotsFromTranWrdata;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
         mergeAmmeterMeasurements = await getMergeAmmeterMeasurements();
         mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
+        mergeScopePlotsFromTranWrdata = await getMergeScopePlotsFromTranWrdata();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -280,9 +314,15 @@ app.post("/api/simulate", async (req, res) => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "sim-ngspice-"));
     const netlistPath = path.join(tempDir, "circuit.cir");
     const outputPath = path.join(tempDir, "ngspice.log");
+    const wavePathFs = path.join(tempDir, "tran_waves.txt");
+    const wavePathSpice = wavePathFs.replace(/\\/g, "/");
 
     try {
-        await writeFile(netlistPath, built.netlist, "utf8");
+        let deckText = built.netlist;
+        if (built.analysisTran && typeof deckText === "string") {
+            deckText = deckText.split("__TRAN_WAVE_PATH__").join(wavePathSpice);
+        }
+        await writeFile(netlistPath, deckText, "utf8");
         const runResult = await runNgspice(netlistPath, outputPath);
         let log = "";
         try {
@@ -293,35 +333,68 @@ app.post("/api/simulate", async (req, res) => {
         const combinedLog = [log, runResult.stdout || "", runResult.stderr || ""]
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
-        const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
-        const ammeterValues = mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
-        const ohmmeterValues = mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
+        const tran = !!(/** @type {{ analysisTran?: boolean }} */ (built).analysisTran);
+        const voltmeterValues = tran
+            ? {}
+            : mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
+        const ammeterValues = tran ? {} : mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
+        const ohmmeterValues = tran ? {} : mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
+        let scopePlots = {};
+        let waveDiag = "";
+        if (tran) {
+            let waveTxt = "";
+            try {
+                waveTxt = await readFileAsync(wavePathFs, "utf8");
+            } catch (waveErr) {
+                waveTxt = "";
+                waveDiag = `[wrdata] Fichier courbes introuvable : ${waveErr?.message || waveErr}`;
+            }
+            const meta = Array.isArray(built.scopesTranMeta) ? built.scopesTranMeta : [];
+            scopePlots = mergeScopePlotsFromTranWrdata(waveTxt, meta);
+            /* Diagnostic visible dans Vérification → Journal */
+            const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
+            const plotKeys = Object.keys(scopePlots);
+            waveDiag = [
+                `[wrdata] Fichier courbes : ${waveTxt.length} octets, ${linesCnt} lignes`,
+                `[wrdata] Premières données : ${waveTxt.slice(0, 300).replace(/\r/g, "") || "(vide)"}`,
+                `[wrdata] Plots extraits : ${plotKeys.length ? plotKeys.join(", ") : "(aucun)"}`
+            ].join("\n");
+        }
         res.json({
             ok: true,
             warnings: built.warnings,
-            netlist: built.netlist,
-            log: combinedLog || log,
+            netlist: deckText,
+            log: [combinedLog || log, waveDiag].filter(Boolean).join("\n\n--- DIAGNOSTIC COURBES ---\n"),
             voltmeterValues,
             ammeterValues,
-            ohmmeterValues
+            ohmmeterValues,
+            analysisTran: tran,
+            scopePlots
         });
     } catch (error) {
         const missing = isNgspiceMissingError(error);
+        const exeTried = /** @type {{ ngspiceExe?: string }} */ (error)?.ngspiceExe || ngspiceExecutablePath();
+        const tailOut = [error?.stderr, error?.stdout, error?.message]
+            .filter((x) => typeof x === "string" && x.trim())
+            .join("\n")
+            .trim()
+            .slice(0, 2000);
         res.status(500).json({
             ok: false,
             phase: "run",
             errors: [
                 missing
-                    ? "ngspice introuvable. En local : installe ngspice (ngspice.org) ou définit NGSPICE / NGSPICE_PATH vers ngspice.exe, puis npm start. Sur Render, ngspice est fourni dans l’image Docker."
-                    : "Echec d'execution ngspice."
+                    ? `ngspice introuvable ou non exécutable (essayé : ${exeTried}). En local : installe ngspice ou définis NGSPICE / NGSPICE_PATH vers ngspice.exe, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`
+                    : `Echec d'exécution ngspice (${exeTried}).${tailOut ? `\n\n${tailOut}` : ""}`,
             ],
             warnings: built.warnings,
             netlist: built.netlist,
             details: {
                 message: error?.message || "",
                 stdout: error?.stdout || "",
-                stderr: error?.stderr || ""
-            }
+                stderr: error?.stderr || "",
+                ngspiceExe: exeTried,
+            },
         });
     } finally {
         await rm(tempDir, { recursive: true, force: true });
