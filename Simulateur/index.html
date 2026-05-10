@@ -18,6 +18,22 @@
         </ul>
       </details>
       <details class="menu-root">
+        <summary id="menu-source-summary">Source</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-source-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--battery" id="pick-battery" role="menuitem" title="Glisser sur la grille pour placer">Alimentation</button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-appareils-summary">Appareils</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-appareils-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--voltmeter" id="pick-voltmeter" role="menuitem" title="Glisser sur la grille pour placer">Voltmètre</button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
         <summary id="menu-commandes-summary">Commandes</summary>
         <div
           class="submenu submenu--panel"
@@ -27,11 +43,12 @@
           <ul class="commands-list">
             <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
             <li>Molette pour zoom</li>
-            <li><kbd>R</kbd> rotation du composant sélectionné (horizontal ↔ vertical)</li>
+            <li><kbd>R</kbd> rotation (résistance, voltmètre) : horizontal ↔ vertical</li>
             <li><kbd>Suppr</kbd> suppression du composant sélectionné</li>
-            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier l’orientation (pour collage / nouveau glissé)</li>
+            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre : orientation ; alimentation : type)</li>
             <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
             <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
+            <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant</li>
           </ul>
         </div>
       </details>
@@ -41,6 +58,7 @@
   <div id="stage" aria-label="Grille déplaçable à la souris">
     <div id="world">
       <div id="circuit-grid" aria-hidden="true"></div>
+      <svg id="wires-layer" class="wires-layer" aria-hidden="true"></svg>
       <div id="components-layer" aria-hidden="true"></div>
     </div>
   </div>
