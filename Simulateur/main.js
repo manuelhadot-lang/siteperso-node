@@ -658,18 +658,154 @@
     m.setAttribute("aria-hidden", "true");
   }
 
+  function closeSimulateModal() {
+    const m = document.getElementById("simulate-modal");
+    if (!m) return;
+    m.classList.add("is-hidden");
+    m.setAttribute("aria-hidden", "true");
+    const btn = document.getElementById("simulate-run-btn");
+    if (btn) btn.disabled = false;
+  }
+
   function openCommandsModal() {
     const m = document.getElementById("commands-modal");
     if (!m) return;
     closeDropdownMenusOnly();
+    closeSimulateModal();
     m.classList.remove("is-hidden");
     m.setAttribute("aria-hidden", "false");
     document.getElementById("commands-modal-close")?.focus();
   }
 
+  /** @param {boolean} [autoRun=false] */
+  function openSimulateModal(autoRun) {
+    const m = document.getElementById("simulate-modal");
+    if (!m) return;
+    closeDropdownMenusOnly();
+    closeCommandsModal();
+    m.classList.remove("is-hidden");
+    m.setAttribute("aria-hidden", "false");
+    document.getElementById("simulate-run-btn")?.focus();
+    if (autoRun) void runCircuitSimulation();
+  }
+
   function closeAllMenus() {
     closeDropdownMenusOnly();
     closeCommandsModal();
+    closeSimulateModal();
+  }
+
+  async function runCircuitSimulation() {
+    const statusEl = document.getElementById("simulate-status");
+    const errEl = document.getElementById("simulate-errors");
+    const warnEl = document.getElementById("simulate-warnings");
+    const listEl = document.getElementById("simulate-volt-results");
+    const netEl = document.getElementById("simulate-netlist");
+    const logEl = document.getElementById("simulate-log");
+    const btn = document.getElementById("simulate-run-btn");
+    if (!statusEl || !listEl || !btn) return;
+
+    const hideBlk = /** @param {HTMLElement | null} el */ (el) => {
+      if (!el) return;
+      el.classList.add("is-hidden");
+      el.textContent = "";
+    };
+
+    /** @param {HTMLElement | null} el @param {string} txt */
+    const showBlk = (el, txt) => {
+      if (!el) return;
+      el.textContent = txt;
+      el.classList.remove("is-hidden");
+    };
+
+    hideBlk(errEl);
+    hideBlk(warnEl);
+    listEl.innerHTML = "";
+    if (netEl) netEl.textContent = "";
+    if (logEl) logEl.textContent = "";
+
+    statusEl.textContent = "Envoi du circuit au serveur…";
+    btn.disabled = true;
+
+    try {
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: {
+            comps: JSON.parse(JSON.stringify(comps)),
+            wires: JSON.parse(JSON.stringify(wires)),
+            wireNodes: JSON.parse(JSON.stringify(wireNodes)),
+          },
+          gridStep: CELL,
+        }),
+      });
+      /** @type {Record<string, unknown>} */
+      const data = /** @type {Record<string, unknown>} */ (await res.json());
+
+      if (!res.ok || !data.ok) {
+        const errs = Array.isArray(data.errors)
+          ? /** @type {string[]} */ (data.errors).join("\n")
+          : "";
+        const fall = typeof data.details === "object" && data.details && /** @type {{ message?: string }} */ (data.details).message;
+        const detailStr = typeof fall === "string" ? fall : "";
+        statusEl.textContent = "Simulation impossible.";
+        showBlk(
+          errEl,
+          errs ||
+            detailStr ||
+            (typeof data.phase === "string" ? `phase: ${data.phase}` : "") ||
+            `HTTP ${res.status}`
+        );
+        if (Array.isArray(data.warnings) && data.warnings.length && warnEl) {
+          showBlk(warnEl, /** @type {string[]} */ (data.warnings).join("\n"));
+        }
+        if (typeof data.netlist === "string" && netEl) netEl.textContent = data.netlist;
+        return;
+      }
+
+      statusEl.textContent = "Simulation DC terminée. Lectures voltmètre(s) :";
+      /** @type {Record<string, { volts?: unknown; label?: string }>} */
+      const vm = /** @type {object} */ (data.voltmeterValues || {});
+      let any = false;
+      for (const [label, row] of Object.entries(vm)) {
+        any = true;
+        const li = document.createElement("li");
+        const sl = document.createElement("span");
+        sl.className = "vm-label";
+        sl.textContent = label;
+        const sv = document.createElement("span");
+        const v = row.volts;
+        const hasV = typeof v === "number" && Number.isFinite(v);
+        sv.className = hasV ? "vm-val" : "vm-val vm-pending";
+        sv.textContent = hasV ? `${v.toFixed(4)} V` : "—";
+        li.appendChild(sl);
+        li.appendChild(sv);
+        listEl.appendChild(li);
+      }
+      if (!any) {
+        const li = document.createElement("li");
+        const s = document.createElement("span");
+        s.className = "vm-pending";
+        s.textContent = "Aucun voltmètre sur le schéma (ou mesure non disponible).";
+        li.appendChild(s);
+        listEl.appendChild(li);
+      }
+
+      if (Array.isArray(data.warnings) && data.warnings.length && warnEl) {
+        showBlk(warnEl, /** @type {string[]} */ (data.warnings).join("\n"));
+      }
+      if (typeof data.netlist === "string" && netEl) netEl.textContent = data.netlist;
+      if (typeof data.log === "string" && logEl) logEl.textContent = data.log;
+    } catch (e) {
+      statusEl.textContent = "Impossible de joindre le serveur.";
+      showBlk(
+        errEl,
+        `${e && /** @type {{ message?: string }} */ (/** @type {object} */ (e)).message ? /** @type {{ message: string }} */ (/** @type {object} */ (e)).message : String(e)}\n\nAstuce : utilisez le site servi par Node (npm start) ou votre déploiement Render ; le mode fichier local (file://) n’appelle pas /api/simulate. Sur votre PC, sans ngspice installé, compilez un binaire ou lancez sous Docker.`
+      );
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   /** @param {CR | CV} m */
@@ -1870,7 +2006,21 @@
         if (other !== root) other.open = false;
       });
       closeCommandsModal();
+      closeSimulateModal();
     });
+  });
+
+  document.getElementById("menu-simulate-launch")?.addEventListener("click", () => {
+    openSimulateModal(true);
+  });
+  document.getElementById("simulate-modal-backdrop")?.addEventListener("click", () => {
+    closeSimulateModal();
+  });
+  document.getElementById("simulate-modal-close")?.addEventListener("click", () => {
+    closeSimulateModal();
+  });
+  document.getElementById("simulate-run-btn")?.addEventListener("click", () => {
+    void runCircuitSimulation();
   });
 
   document.getElementById("open-commands-modal")?.addEventListener("click", () => {
@@ -1884,13 +2034,7 @@
   });
 
   window.addEventListener("keydown", (e) => {
-    const modal = document.getElementById("commands-modal");
-    if (
-      !modal ||
-      modal.classList.contains("is-hidden") ||
-      e.key !== "Escape"
-    )
-      return;
+    if (e.key !== "Escape") return;
     const t = e.target;
     if (
       t instanceof HTMLInputElement ||
@@ -1898,7 +2042,16 @@
       /** @type {HTMLElement} */ (t).isContentEditable
     )
       return;
-    e.preventDefault();
-    closeCommandsModal();
+    const sim = document.getElementById("simulate-modal");
+    const cmd = document.getElementById("commands-modal");
+    if (sim && !sim.classList.contains("is-hidden")) {
+      e.preventDefault();
+      closeSimulateModal();
+      return;
+    }
+    if (cmd && !cmd.classList.contains("is-hidden")) {
+      e.preventDefault();
+      closeCommandsModal();
+    }
   });
 })();
