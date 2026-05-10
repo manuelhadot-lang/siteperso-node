@@ -36,6 +36,16 @@ function scrapeNumber(line) {
   return m ? Number(m[1]) : null;
 }
 
+/** Courant de branche ngspice (ex. « i(Viam_x) = -1.2e-3 ») — évite de prendre un « 1 » parasite (ex. ligne « DC 1 »). */
+function scrapeSpiceBranchCurrentAmps(line) {
+  if (typeof line !== "string") return null;
+  const m = line
+    .trim()
+    .match(/\bi\s*\(\s*[^)]+\)\s*=\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/i);
+  if (m) return Number(m[1]);
+  return scrapeNumber(line);
+}
+
 /**
  * @param {string[]} lines
  * @returns {Map<string, number>} clés normalisées en majuscules (référence "0")
@@ -216,6 +226,251 @@ export function mergeVoltmeterMeasurements(log, voltmeters, _nodeMeasures) {
     row.minus = vn;
     if (fromOp !== null) row.volts = fromOp;
     out[key] = row;
+  }
+
+  return out;
+}
+
+/**
+ * @param {string} log
+ * @param {Array<{ amIndex?: number; displayLabel?: string; spiceVInstance?: string }>} ammeters
+ */
+export function mergeAmmeterMeasurements(log, ammeters) {
+  /** @type {Record<string, { amps: number | null; label: string; spiceVInstance: string }>} */
+  const out = {};
+
+  if (!ammeters || ammeters.length === 0) return out;
+
+  const lines =
+    typeof log === "string" ? log.replace(/\r\n/g, "\n").split("\n") : [];
+
+  let j = lines.findIndex((l) => l.includes("__AM_BEGIN__"));
+  if (j < 0) j = lines.findIndex((l) => l.includes("__AM_ROW__|"));
+  if (j < 0) {
+    for (const am of ammeters) {
+      const key = String(am.displayLabel || `A${am.amIndex}`);
+      let found = /** @type {number | null} */ (null);
+      const vn = String(am.spiceVInstance || "");
+      const needle = vn.toLowerCase();
+      for (let z = lines.length - 1; z >= 0; z--) {
+        const row = lines[z];
+        if (typeof row !== "string") continue;
+        const rl = row.toLowerCase();
+        if (!needle || !rl.includes(needle)) continue;
+        const n = scrapeSpiceBranchCurrentAmps(row);
+        if (n !== null && Number.isFinite(n)) found = n;
+      }
+      out[key] = {
+        amps: found,
+        label: key,
+        spiceVInstance: vn,
+      };
+    }
+    return out;
+  }
+
+  /** @type {number} */
+  let idx = Math.max(j, 0);
+  const labelsSeen = [];
+  while (idx < lines.length) {
+    const row = lines[idx];
+    if (row.includes("__AM_END__")) break;
+
+    const tag = "__AM_ROW__|";
+    const pos = row.indexOf(tag);
+    if (pos >= 0) {
+      const parts = row.slice(pos + tag.length).split("|");
+      if (parts.length >= 3 && idx + 1 < lines.length) {
+        const displayLabel = parts[1].trim().replace(/["']/g, "").trim();
+        const spiceVInstance = (parts[2] || parts[3] || "").trim().replace(/["']/g, "").trim();
+        labelsSeen.push(displayLabel);
+
+        let k = idx + 1;
+        /** @type {number | null} */
+        let valNum = scrapeSpiceBranchCurrentAmps(lines[k]);
+        const maxK = Math.min(lines.length > 0 ? lines.length - 1 : 0, idx + 28);
+        while (valNum === null && k < maxK) {
+          k++;
+          valNum = scrapeSpiceBranchCurrentAmps(lines[k]);
+        }
+        /** @type {number | null} */
+        let amps =
+          typeof valNum === "number" && Number.isFinite(valNum) ? valNum : null;
+        if (amps === null) {
+          const chunk = lines
+            .slice(idx + 1, Math.min(lines.length, idx + 32))
+            .join(" ");
+          const alt = scrapeSpiceBranchCurrentAmps(chunk);
+          if (alt !== null) amps = alt;
+        }
+
+        const keyLb = displayLabel || `AM_${labelsSeen.length}`;
+        out[keyLb] = {
+          amps,
+          label: keyLb,
+          spiceVInstance: spiceVInstance || "",
+        };
+        idx = k + 1;
+        continue;
+      }
+    }
+    idx++;
+  }
+
+  /** Compléter ou corriger depuis i(V…) dans le journal */
+  for (const am of ammeters) {
+    const key = String(am.displayLabel || `A${am.amIndex}`);
+    const prev = out[key];
+    let fromLog =
+      prev && typeof prev.amps === "number" && Number.isFinite(prev.amps) ? prev.amps : null;
+    let fromScan = /** @type {number | null} */ (null);
+    const vn = String(am.spiceVInstance || "");
+    const needle = vn.toLowerCase();
+    for (let z = lines.length - 1; z >= 0; z--) {
+      const r = lines[z];
+      if (typeof r !== "string" || !needle) continue;
+      if (!r.toLowerCase().includes(needle)) continue;
+      const n = scrapeSpiceBranchCurrentAmps(r);
+      if (n !== null && Number.isFinite(n)) {
+        fromScan = n;
+        break;
+      }
+    }
+    const pick =
+      typeof fromLog === "number" && Number.isFinite(fromLog) ? fromLog : fromScan;
+    out[key] = {
+      amps: typeof pick === "number" && Number.isFinite(pick) ? pick : null,
+      label: key,
+      spiceVInstance: vn,
+    };
+  }
+
+  return out;
+}
+
+/**
+ * Mesure ohmmètre : source interne 1 V série → R = |1 / i(Vohm)| Ω.
+ * @param {string} log
+ * @param {Array<{ omIndex?: number; displayLabel?: string; spiceVInstance?: string }>} ohmeters
+ */
+export function mergeOhmmeterMeasurements(log, ohmeters) {
+  /** @type {Record<string, { ohms: number | null; label: string; spiceVInstance: string }>} */
+  const out = {};
+  if (!ohmeters || ohmeters.length === 0) return out;
+
+  const lines =
+    typeof log === "string" ? log.replace(/\r\n/g, "\n").split("\n") : [];
+
+  /** @param {number | null} amps */
+  function ampsToOhms(amps) {
+    if (typeof amps !== "number" || !Number.isFinite(amps)) return null;
+    const ia = Math.abs(amps);
+    if (ia < 1e-30) return null;
+    const r = 1 / ia;
+    return Number.isFinite(r) ? r : null;
+  }
+
+  let j = lines.findIndex((l) => l.includes("__OH_BEGIN__"));
+  if (j < 0) j = lines.findIndex((l) => l.includes("__OH_ROW__|"));
+  if (j < 0) {
+    for (const om of ohmeters) {
+      const key = String(om.displayLabel || `Ω${om.omIndex}`);
+      let amps = /** @type {number | null} */ (null);
+      const vn = String(om.spiceVInstance || "");
+      const needle = vn.toLowerCase();
+      for (let z = lines.length - 1; z >= 0; z--) {
+        const row = lines[z];
+        if (typeof row !== "string" || !needle) continue;
+        if (!row.toLowerCase().includes(needle)) continue;
+        const n = scrapeSpiceBranchCurrentAmps(row);
+        if (n !== null && Number.isFinite(n)) amps = n;
+      }
+      out[key] = {
+        ohms: ampsToOhms(amps),
+        label: key,
+        spiceVInstance: vn,
+      };
+    }
+    return out;
+  }
+
+  /** @type {number} */
+  let idx = Math.max(j, 0);
+  const labelsSeen = [];
+  while (idx < lines.length) {
+    const row = lines[idx];
+    if (row.includes("__OH_END__")) break;
+
+    const tag = "__OH_ROW__|";
+    const pos = row.indexOf(tag);
+    if (pos >= 0) {
+      const parts = row.slice(pos + tag.length).split("|");
+      if (parts.length >= 3 && idx + 1 < lines.length) {
+        const rawPart1 = parts[1].trim().replace(/["']/g, "").trim();
+        const spiceVInstance = (parts[2] || "").trim().replace(/["']/g, "").trim();
+        const omIdxParsed = /^\d+$/.test(rawPart1) ? Number(rawPart1) : NaN;
+        const keyLb =
+          Number.isFinite(omIdxParsed) && omIdxParsed >= 0
+            ? `\u2126${omIdxParsed}`
+            : rawPart1 || `\u2126${labelsSeen.length + 1}`;
+        labelsSeen.push(keyLb);
+
+        let k = idx + 1;
+        let amps = scrapeSpiceBranchCurrentAmps(lines[k]);
+        const maxK = Math.min(lines.length > 0 ? lines.length - 1 : 0, idx + 28);
+        while (amps === null && k < maxK) {
+          k++;
+          amps = scrapeSpiceBranchCurrentAmps(lines[k]);
+        }
+        if (amps === null) {
+          const chunk = lines
+            .slice(idx + 1, Math.min(lines.length, idx + 32))
+            .join(" ");
+          amps = scrapeSpiceBranchCurrentAmps(chunk);
+        }
+        const a =
+          typeof amps === "number" && Number.isFinite(amps) ? amps : null;
+        out[keyLb] = {
+          ohms: ampsToOhms(a),
+          label: keyLb,
+          spiceVInstance: spiceVInstance || "",
+        };
+        idx = k + 1;
+        continue;
+      }
+    }
+    idx++;
+  }
+
+  for (const om of ohmeters) {
+    const key = String(om.displayLabel || `Ω${om.omIndex}`);
+    const prev = out[key];
+    let fromLog =
+      prev && typeof prev.ohms === "number" && Number.isFinite(prev.ohms) ? prev.ohms : null;
+    let ampsScan = /** @type {number | null} */ (null);
+    const vn = String(om.spiceVInstance || "");
+    const needle = vn.toLowerCase();
+    for (let z = lines.length - 1; z >= 0; z--) {
+      const r = lines[z];
+      if (typeof r !== "string" || !needle) continue;
+      if (!r.toLowerCase().includes(needle)) continue;
+      const n = scrapeSpiceBranchCurrentAmps(r);
+      if (n !== null && Number.isFinite(n)) {
+        ampsScan = n;
+        break;
+      }
+    }
+    const computed = ampsScan !== null ? ampsToOhms(ampsScan) : null;
+    const pick =
+      typeof fromLog === "number" && Number.isFinite(fromLog) ? fromLog : computed;
+    out[key] = {
+      ohms:
+        typeof pick === "number" && Number.isFinite(pick)
+          ? pick
+          : null,
+      label: key,
+      spiceVInstance: vn,
+    };
   }
 
   return out;

@@ -32,6 +32,11 @@
               <span class="menu-ico submenu-ico submenu-ico--saveas" aria-hidden="true">🗂️</span> Enregistrer sous…
             </button>
           </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-sim-verify" role="menuitem">
+              <span class="menu-ico submenu-ico" aria-hidden="true">🔍</span> Vérification simulation…
+            </button>
+          </li>
         </ul>
       </details>
       <details class="menu-root">
@@ -67,14 +72,14 @@
               <span class="menu-ico submenu-ico submenu-ico--vm" aria-hidden="true">🎯</span> Voltmètre
             </button>
           </li>
-        </ul>
-      </details>
-      <details class="menu-root">
-        <summary id="menu-simulation-summary"><span class="menu-ico" aria-hidden="true">🔬</span> Simulation</summary>
-        <ul class="submenu" role="menu" aria-labelledby="menu-simulation-summary">
           <li role="none">
-            <button type="button" class="submenu-item submenu-item--row" id="menu-simulate-launch" role="menuitem">
-              <span class="menu-ico submenu-ico" aria-hidden="true">⚡</span> Lancer ngspice
+            <button type="button" class="submenu-item submenu-item--row submenu-item--ammeter" id="pick-ammeter" role="menuitem" title="Ampèremètre en série (symbole I) — glisser pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--am" aria-hidden="true">⚡</span> Ampèremètre
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--ohmmeter" id="pick-ohmmeter" role="menuitem" title="Mesure de résistance entre deux points (sans pile sur le schéma) — glisser pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--ohm" aria-hidden="true">Ω</span> Ohmmètre
             </button>
           </li>
         </ul>
@@ -90,10 +95,28 @@
   <div id="stage" aria-label="Grille déplaçable à la souris">
     <div id="world">
       <div id="circuit-grid" aria-hidden="true"></div>
+      <div id="selection-marquee" class="selection-marquee is-hidden" aria-hidden="true"></div>
       <svg id="wires-layer" class="wires-layer" aria-hidden="true"></svg>
       <div id="components-layer" aria-hidden="true"></div>
     </div>
   </div>
+
+  <footer id="sim-bottom-bar" class="sim-bottom-bar" aria-label="Simulation">
+    <div class="sim-bottom-bar__left" id="sim-panel-volt-wrap" aria-live="polite" aria-label="Mesures simulation (voltmètres, ampèremètres et ohmmètres)">
+      <span class="sr-only" id="sim-panel-volt-label">Mesures tensions, courants et résistances (V, A, Ω)</span>
+      <span class="sim-bottom-bar__volt-value" id="sim-panel-volt-value">—</span>
+    </div>
+    <div class="sim-bottom-bar__right">
+      <button type="button" class="sim-panel-btn sim-panel-btn--verify" id="sim-panel-verify" title="Détails, netliste, journal et messages">
+        Vérification
+      </button>
+      <button type="button" class="sim-panel-btn sim-panel-btn--primary" id="sim-panel-simulate">Simuler</button>
+      <button type="button" class="sim-panel-btn" id="sim-panel-pause" disabled title="En DC (point de fonctionnement), la simulation est une seule passe — contrôle réservé à d’éventuelles évolutions transitoires.">
+        Pause
+      </button>
+      <button type="button" class="sim-panel-btn" id="sim-panel-stop" disabled title="Interrompre la requête en cours">Stop</button>
+    </div>
+  </footer>
   <input
     type="file"
     id="circuit-file-import"
@@ -119,13 +142,15 @@
         <ul class="commands-list commands-list--modal">
           <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
           <li>Molette pour zoom</li>
-          <li><kbd>R</kbd> rotation (résistance, voltmètre) : horizontal ↔ vertical</li>
-          <li><kbd>Suppr</kbd> suppression du composant sélectionné</li>
-          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre : orientation ; alimentation : type)</li>
+          <li><kbd>R</kbd> rotation (résistance, voltmètre, ampèremètre, ohmmètre) : horizontal ↔ vertical</li>
+          <li><kbd>Suppr</kbd> suppression des composants et fils sélectionnés ; clic sur un tronçon de fil puis <kbd>Suppr</kbd> pour retirer ce fil ; <kbd>Maj</kbd>+cliquer-glisser sur la grille pour encadrer une zone (ajout à la sélection), puis <kbd>Suppr</kbd> pour tout supprimer dans l’encadré</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre / ampèremètre / ohmmètre : orientation ; alimentation : type)</li>
           <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
           <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
           <li>Fichier : projet JSON (composants, fils, nœuds) ; hébergé sur Render ou en fichier statique, l’enregistrement passe par le dossier <strong>Téléchargements</strong> ou la boîte du navigateur (Chrome / Edge : fichier sur disque avec handle).</li>
-          <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant</li>
+          <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant — <strong>suppression</strong> : clic sur un tronçon (surbrillance orange) puis <kbd>Suppr</kbd> ; <kbd>Maj</kbd>+encadrer sur la grille ajoute composants et fils touchés à la sélection</li>
+          <li>Simulation DC (ngspice) : bandeau en bas — <strong>Simuler</strong> lance le calcul ; <strong>Vérification</strong> ou Fichier → Vérification simulation ouvre le détail (alertes, netliste, journal). L’ohmmètre mesure la résistance équivalente entre ses bornes (réseau passif) sans pile sur le schéma.</li>
+          <li>Résistance / alimentation : cliquer sur la valeur affichée sous le symbole (Ω ou tension en V) pour la modifier — le glisser-déplacement part du reste du composant</li>
         </ul>
       </div>
     </div>
@@ -142,20 +167,15 @@
     >
       <header class="commands-modal__header">
         <h2 id="simulate-modal-title" class="commands-modal__title">
-          <span class="menu-ico" aria-hidden="true">🔬</span> Simulation ngspice
+          <span class="menu-ico" aria-hidden="true">🔍</span> Vérification simulation
         </h2>
         <button type="button" class="commands-modal__close" id="simulate-modal-close" aria-label="Fermer">✕</button>
       </header>
       <div class="commands-modal__body simulate-modal__body">
-        <p id="simulate-status" class="simulate-status">Prêt. La simulation s’exécute sur le serveur (Docker Render avec ngspice), pas dans le navigateur.</p>
+        <p id="simulate-status" class="simulate-status">Lancez une simulation avec le bouton « Simuler » du bandeau inférieur, puis ouvrez cette fenêtre pour voir le détail (mesures, alertes, netliste, journal).</p>
         <ul id="simulate-volt-results" class="simulate-volt-list" aria-live="polite"></ul>
         <pre id="simulate-errors" class="simulate-msg simulate-msg--errors is-hidden"></pre>
         <pre id="simulate-warnings" class="simulate-msg simulate-msg--warnings is-hidden"></pre>
-        <div class="simulate-actions">
-          <button type="button" class="simulate-run-btn" id="simulate-run-btn">
-            <span class="menu-ico" aria-hidden="true">▶️</span> Lancer / relancer
-          </button>
-        </div>
         <details class="simulate-details">
           <summary>Netliste SPICE générée</summary>
           <pre id="simulate-netlist" class="simulate-code"></pre>
