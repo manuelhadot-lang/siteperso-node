@@ -58,6 +58,11 @@
             </button>
           </li>
           <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--siggen" id="pick-siggen" role="menuitem" title="Générateur sinusoïdal — glisser pour placer ; touche X pour retourner la sortie">
+              <span class="menu-ico submenu-ico submenu-ico--sig" aria-hidden="true">∿</span> Générateur sinusoïdal
+            </button>
+          </li>
+          <li role="none">
             <button type="button" class="submenu-item submenu-item--row submenu-item--ground" id="pick-ground" role="menuitem" title="Référence de masse (équipotentiel − pile) — glisser sur la grille">
               <span class="menu-ico submenu-ico submenu-ico--gnd" aria-hidden="true">⏚</span> Masse
             </button>
@@ -80,6 +85,11 @@
           <li role="none">
             <button type="button" class="submenu-item submenu-item--row submenu-item--ohmmeter" id="pick-ohmmeter" role="menuitem" title="Mesure de résistance entre deux points (sans pile sur le schéma) — glisser pour placer">
               <span class="menu-ico submenu-ico submenu-ico--ohm" aria-hidden="true">Ω</span> Ohmmètre
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--scope" id="pick-scope" role="menuitem" title="Oscilloscope (CH1, CH2, masse) — visualisation après simulation transitoire">
+              <span class="menu-ico submenu-ico submenu-ico--scope" aria-hidden="true">📟</span> Oscilloscope
             </button>
           </li>
         </ul>
@@ -106,7 +116,14 @@
       <span class="sr-only" id="sim-panel-volt-label">Mesures tensions, courants et résistances (V, A, Ω)</span>
       <span class="sim-bottom-bar__volt-value" id="sim-panel-volt-value">—</span>
     </div>
+    <div class="sim-bottom-bar__center sim-panel-siggen-row is-hidden" id="sim-panel-siggen-row" aria-label="Paramètres du générateur sélectionné">
+      <span class="sim-panel-siggen-t">Générateur</span>
+      <label class="sim-panel-siggen-lab">A <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-amp" title="Amplitude crête (V)" /></label>
+      <label class="sim-panel-siggen-lab">f <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-freq" title="Fréquence (Hz)" /></label>
+      <label class="sim-panel-siggen-lab">Off <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-off" title="Offset (V)" /></label>
+    </div>
     <div class="sim-bottom-bar__right">
+      <button type="button" class="sim-panel-btn sim-panel-btn--scope is-hidden" id="sim-panel-scope" title="Courbes CH1 / CH2 (simulation transitoire)">Oscilloscope</button>
       <button type="button" class="sim-panel-btn sim-panel-btn--verify" id="sim-panel-verify" title="Détails, netliste, journal et messages">
         Vérification
       </button>
@@ -143,13 +160,14 @@
           <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
           <li>Molette pour zoom</li>
           <li><kbd>R</kbd> rotation (résistance, voltmètre, ampèremètre, ohmmètre) : horizontal ↔ vertical</li>
+          <li><kbd>X</kbd> retourne horizontalement le générateur sinusoïdal (sortie à gauche ou à droite)</li>
           <li><kbd>Suppr</kbd> suppression des composants et fils sélectionnés ; clic sur un tronçon de fil puis <kbd>Suppr</kbd> pour retirer ce fil ; <kbd>Maj</kbd>+cliquer-glisser sur la grille pour encadrer une zone (ajout à la sélection), puis <kbd>Suppr</kbd> pour tout supprimer dans l’encadré</li>
-          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre / ampèremètre / ohmmètre : orientation ; alimentation : type)</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre / ampèremètre / ohmmètre : orientation ; alimentation : type ; générateur : amplitude, fréquence, offset, retournement)</li>
           <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
           <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
           <li>Fichier : projet JSON (composants, fils, nœuds) ; hébergé sur Render ou en fichier statique, l’enregistrement passe par le dossier <strong>Téléchargements</strong> ou la boîte du navigateur (Chrome / Edge : fichier sur disque avec handle).</li>
           <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant — <strong>suppression</strong> : clic sur un tronçon (surbrillance orange) puis <kbd>Suppr</kbd> ; <kbd>Maj</kbd>+encadrer sur la grille ajoute composants et fils touchés à la sélection</li>
-          <li>Simulation DC (ngspice) : bandeau en bas — <strong>Simuler</strong> lance le calcul ; <strong>Vérification</strong> ou Fichier → Vérification simulation ouvre le détail (alertes, netliste, journal). L’ohmmètre mesure la résistance équivalente entre ses bornes (réseau passif) sans pile sur le schéma.</li>
+          <li>Simulation (ngspice) : bandeau en bas — <strong>Simuler</strong>. Avec un <strong>oscilloscope</strong> sur le schéma, la passe devient <strong>transitoire</strong> (courbes CH1/CH2 vs masse) ; le bouton <strong>Oscilloscope</strong> ouvre la fenêtre des courbes (valeurs affichées à 2 décimales). Sans oscilloscope, calcul <strong>DC</strong> classique (voltmètres, etc.). L’ohmmètre (mode DC) mesure la résistance équivalente sans pile sur le schéma.</li>
           <li>Résistance / alimentation : cliquer sur la valeur affichée sous le symbole (Ω ou tension en V) pour la modifier — le glisser-déplacement part du reste du composant</li>
         </ul>
       </div>
@@ -184,6 +202,28 @@
           <summary>Journal ngspice (log)</summary>
           <pre id="simulate-log" class="simulate-code simulate-code--log"></pre>
         </details>
+      </div>
+    </div>
+  </div>
+
+  <div id="scope-modal" class="commands-modal scope-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="scope-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="scope-modal-dialog"
+      class="commands-modal__panel scope-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="scope-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="scope-modal-title" class="commands-modal__title">
+          <span class="menu-ico" aria-hidden="true">📟</span> Oscilloscope
+        </h2>
+        <button type="button" class="commands-modal__close" id="scope-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body scope-modal__body">
+        <p class="scope-modal__hint">Tensions CH1 et CH2 par rapport à la borne masse (résultat de la dernière simulation transitoire).</p>
+        <canvas id="scope-modal-canvas" width="560" height="260" aria-label="Tracé CH1 et CH2"></canvas>
       </div>
     </div>
   </div>

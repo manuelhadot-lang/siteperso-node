@@ -8,6 +8,10 @@
   --grid-cell: 28px;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -484,6 +488,91 @@ body.is-dragging-palette #stage {
   flex-shrink: 0;
 }
 
+.sim-bottom-bar__center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: min(52vw, 420px);
+}
+
+.sim-panel-siggen-t {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a9bb8;
+}
+
+.sim-panel-siggen-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: #aab8d0;
+}
+
+.sim-panel-siggen-in {
+  width: 4.2rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #3d4452;
+  background: #1a1e28;
+  color: #e8f0ff;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+.sim-panel-siggen-in:focus {
+  outline: none;
+  border-color: #5a7a9a;
+  box-shadow: 0 0 0 2px rgba(90, 122, 154, 0.25);
+}
+
+.sim-panel-btn--scope {
+  border-color: #4a6e5a;
+  color: #b8f0d8;
+  background: linear-gradient(180deg, #1f3a2e 0%, #182820 100%);
+}
+
+.sim-panel-btn--scope:hover:not(:disabled) {
+  background: linear-gradient(180deg, #284a3a 0%, #1e3228 100%);
+  border-color: #5a8870;
+}
+
+/* Oscilloscope — modale */
+.scope-modal.commands-modal {
+  z-index: 520;
+}
+
+.scope-modal__panel {
+  max-width: 600px;
+}
+
+.scope-modal__body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.scope-modal__hint {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #aab8d0;
+  line-height: 1.35;
+}
+
+#scope-modal-canvas {
+  display: block;
+  border-radius: 8px;
+  border: 1px solid #2e3340;
+  max-width: 100%;
+  height: auto;
+}
+
 .sim-panel-btn {
   padding: 8px 14px;
   border-radius: 8px;
@@ -834,7 +923,7 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   opacity: 0.92;
 }
 
-.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost):not(.ammeter--ghost):not(.ohmmeter--ghost):not(.ground--ghost).circuit-comp--selected {
+.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost):not(.ammeter--ghost):not(.ohmmeter--ghost):not(.ground--ghost):not(.siggen--ghost):not(.scope--ghost).circuit-comp--selected {
   border-radius: 4px;
   box-shadow:
     0 0 0 1px rgba(150, 195, 255, 0.28),
@@ -1113,6 +1202,182 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   margin-right: var(--resistor-v-label-gap, 4px);
   text-align: right;
   padding-right: 2px;
+}
+
+/* Générateur sinus — même grille que résistance horizontale (voir layoutSiggenDOM) */
+.siggen-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #c8dcf5;
+  pointer-events: none;
+}
+
+.siggen-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.siggen-box {
+  fill: #0f1218;
+  stroke: #d8dee8;
+  stroke-width: 2.25;
+  paint-order: stroke fill;
+}
+
+.siggen-sine {
+  fill: none;
+  stroke: #78b4ff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.siggen-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.siggen-out-lbl {
+  fill: #aab8cf;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.siggen--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.siggen--ghost .siggen-id {
+  color: #aec6ff;
+}
+
+.siggen--ghost .siggen-box {
+  stroke: #9dc4ff;
+  fill: #121828;
+}
+
+.siggen--ghost .siggen-sine {
+  stroke: #9dc4ff;
+}
+
+.siggen--ghost .siggen-trace {
+  stroke: #7aabff;
+}
+
+.siggen--ghost .siggen-out-lbl {
+  fill: #cfe0ff;
+}
+
+.siggen--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+/* Oscilloscope */
+.scope-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #b8cce8;
+  pointer-events: none;
+}
+
+.scope-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.scope-body {
+  fill: #161a24;
+  stroke: #cdd6e8;
+  stroke-width: 2.25;
+  paint-order: stroke fill;
+}
+
+.scope-screen {
+  fill: #080a12;
+  stroke: #6a7a94;
+  stroke-width: 1.75;
+  paint-order: stroke fill;
+}
+
+.scope-knob {
+  fill: #222833;
+  stroke: #aab8cf;
+  stroke-width: 1.6;
+}
+
+.scope-trace {
+  fill: none;
+  stroke: #c8d2e8;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.scope-ch-lbl {
+  fill: #aab8cf;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.scope--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.scope--ghost .scope-id {
+  color: #aec6ff;
+}
+
+.scope--ghost .scope-body {
+  stroke: #9dc4ff;
+  fill: #121828;
+}
+
+.scope--ghost .scope-screen {
+  stroke: #6f8cbf;
+}
+
+.scope--ghost .scope-knob {
+  stroke: #9dc4ff;
+  fill: #1a2538;
+}
+
+.scope--ghost .scope-trace {
+  stroke: #7aabff;
+}
+
+.scope--ghost .scope-ch-lbl {
+  fill: #cfe0ff;
+}
+
+.scope--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
 }
 
 

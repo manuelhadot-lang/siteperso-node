@@ -9,6 +9,8 @@
   const pickVoltmeterBtn = document.getElementById("pick-voltmeter");
   const pickAmmeterBtn = document.getElementById("pick-ammeter");
   const pickOhmmeterBtn = document.getElementById("pick-ohmmeter");
+  const pickSiggenBtn = document.getElementById("pick-siggen");
+  const pickScopeBtn = document.getElementById("pick-scope");
   const pickGroundBtn = document.getElementById("pick-ground");
   const circuitFileImportInput = /** @type {HTMLInputElement | null} */ (
     document.getElementById("circuit-file-import")
@@ -24,12 +26,14 @@
   /** @typedef {{ kind: 'ammeter'; id: string; amIndex: number; jx: number; jy: number; orient: Orient }} CA */
   /** @typedef {{ kind: 'ohmmeter'; id: string; omIndex: number; jx: number; jy: number; orient: Orient }} CO */
   /** @typedef {{ kind: 'battery'; id: string; vIndex: number; jx: number; jy: number; vVolts?: number }} CB */
+  /** @typedef {{ kind: 'siggen'; id: string; sIndex: number; jx: number; jy: number; flipX?: boolean; amp?: number; freqHz?: number; offset?: number }} CSG */
+  /** @typedef {{ kind: 'scope'; id: string; scIndex: number; jx: number; jy: number }} CSP */
   /** @typedef {{ kind: 'ground'; id: string; gIndex: number; jx: number; jy: number }} CG */
-  /** @typedef {CR | CB | CV | CA | CO | CG} CircuitComp */
-  /** @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 } | { kind: 'N'; nid: string }} WirePort */
+  /** @typedef {CR | CB | CSG | CSP | CV | CA | CO | CG} CircuitComp */
+  /** @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 | 2 } | { kind: 'N'; nid: string }} WirePort */
   /** @typedef {{ id: string; from: WirePort; to: WirePort; points: { x: number; y: number }[] }} Wire */
-  /** @typedef {{ x: number; y: number; key: string; kind: 'T'; compId: string; ti: 0 | 1 } | { x: number; y: number; key: string; kind: 'N'; nodeId: string } | { x: number; y: number; key: string; kind: 'S' }} JunctionHit */
-  /** @typedef {{ x: number; y: number; key: string; compId: string; ti: 0 | 1 }} Terminal */
+  /** @typedef {{ x: number; y: number; key: string; kind: 'T'; compId: string; ti: 0 | 1 | 2 } | { x: number; y: number; key: string; kind: 'N'; nodeId: string } | { x: number; y: number; key: string; kind: 'S' }} JunctionHit */
+  /** @typedef {{ x: number; y: number; key: string; compId: string; ti: 0 | 1 | 2 }} Terminal */
 
   const CELL = 28;
   const SPAN_CELLS = 4;
@@ -74,6 +78,32 @@
 
   const DEFAULT_R_OHMS = 1000;
   const DEFAULT_BAT_VOLT = 5;
+  const DEFAULT_SG_AMP = 1;
+  const DEFAULT_SG_FREQ = 50;
+  const DEFAULT_SG_OFF = 0;
+
+  /** @param {number} v */
+  function fmtDisp2(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "0.00";
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  /** @param {CSG} s */
+  function getSiggenAmp(s) {
+    const x = s.amp;
+    return typeof x === "number" && Number.isFinite(x) ? x : DEFAULT_SG_AMP;
+  }
+  /** @param {CSG} s */
+  function getSiggenFreqHz(s) {
+    const x = s.freqHz;
+    return typeof x === "number" && Number.isFinite(x) && x > 0 ? x : DEFAULT_SG_FREQ;
+  }
+  /** @param {CSG} s */
+  function getSiggenOff(s) {
+    const x = s.offset;
+    return typeof x === "number" && Number.isFinite(x) ? x : DEFAULT_SG_OFF;
+  }
 
   /** @param {CR} cr */
   function getCompROhms(cr) {
@@ -94,14 +124,13 @@
     if (Number.isInteger(ohms) && ohms >= 1000 && ohms % 1000 === 0 && ohms < 1000000)
       return `${ohms / 1000} k${OHM}`;
     if (ohms >= 1 && ohms === Math.floor(ohms)) return `${ohms}${OHM}`;
-    return `${ohms}${OHM}`;
+    return `${fmtDisp2(ohms)}${OHM}`;
   }
 
   /** @param {number} v */
   function formatBatVoltsForDisplay(v) {
-    const r = Math.round(v * 10000) / 10000;
-    if (r === Math.floor(r)) return `${r}V`;
-    return `${String(r).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}V`;
+    const r = Math.round(Number(v) * 100) / 100;
+    return `${fmtDisp2(r)} V`;
   }
 
   /** @param {CircuitComp} m */
@@ -196,6 +225,12 @@
   let ohmmeterSeq = 0;
   let batterySeq = 0;
   let groundSeq = 0;
+  let siggenSeq = 0;
+  let scopeSeq = 0;
+
+  /** Dernières courbes oscilloscope renvoyées par le serveur (clé = Oscn). */
+  /** @type {Record<string, { t: number[]; ch1: number[]; ch2: number[] }>} */
+  let lastScopePlots = {};
 
   /** Sélection multiple : composants + fils ; copie / rotation = un seul composant sélectionné. */
   /** @type {Set<string>} */
@@ -246,7 +281,7 @@
    * }} */
   let marqueeSession = null;
 
-  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'ammeter'; orient: Orient } | { kind: 'ohmmeter'; orient: Orient } | { kind: 'battery' } | { kind: 'ground' }} */
+  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'ammeter'; orient: Orient } | { kind: 'ohmmeter'; orient: Orient } | { kind: 'battery' } | { kind: 'siggen'; flipX: boolean } | { kind: 'scope' } | { kind: 'ground' }} */
   let clipboardTpl = null;
 
   let lastPointerWorld = { wx: 0, wy: 0 };
@@ -265,7 +300,7 @@
 
   /** @type {HTMLElement | null} */
   let dragGhost = null;
-  /** @type {'resistor' | 'voltmeter' | 'ammeter' | 'ohmmeter' | 'battery' | 'ground' | null} */
+  /** @type {'resistor' | 'voltmeter' | 'ammeter' | 'ohmmeter' | 'battery' | 'siggen' | 'scope' | 'ground' | null} */
   let paletteDragKind = null;
   /** @type {number | null} */
   let palettePickPointerId = null;
@@ -297,7 +332,8 @@
     if (entries.length === 1) {
       const row = entries[0][1];
       const v = row.volts;
-      if (typeof v === "number" && Number.isFinite(v)) return { text: `${v.toFixed(4)} V`, muted: false };
+      if (typeof v === "number" && Number.isFinite(v))
+        return { text: `${fmtDisp2(v)} V`, muted: false };
       return { text: "—", muted: true };
     }
     /** @type {string[]} */
@@ -311,7 +347,7 @@
       const tag = vmNum ? `V${vmNum[1]}` : `V${i + 1}`;
       parts.push(
         typeof v === "number" && Number.isFinite(v)
-          ? `${tag}=${v.toFixed(4)} V`
+          ? `${tag}=${fmtDisp2(v)} V`
           : `${tag}=—`
       );
     }
@@ -328,7 +364,8 @@
     if (entries.length === 1) {
       const row = entries[0][1];
       const a = row.amps;
-      if (typeof a === "number" && Number.isFinite(a)) return { text: `${a.toFixed(4)} A`, muted: false };
+      if (typeof a === "number" && Number.isFinite(a))
+        return { text: `${fmtDisp2(a)} A`, muted: false };
       return { text: "—", muted: true };
     }
     /** @type {string[]} */
@@ -342,7 +379,7 @@
       const tag = amNum ? `A${amNum[1]}` : `A${i + 1}`;
       parts.push(
         typeof ia === "number" && Number.isFinite(ia)
-          ? `${tag}=${ia.toFixed(4)} A`
+          ? `${tag}=${fmtDisp2(ia)} A`
           : `${tag}=—`
       );
     }
@@ -695,6 +732,47 @@
       const g = /** @type {CG} */ (m);
       return [{ x: g.jx, y: g.jy, key: `${id}:0`, compId: id, ti: /** @type {0 | 1} */ (0) }];
     }
+    if (m.kind === "siggen") {
+      const sg = /** @type {CSG} */ (m);
+      /* jx,jy : coin supérieur gauche du bloc (référence grille), comme résistance horizontale */
+      const midY = sg.jy + SPAN_PX / 2;
+      const cx = sg.jx + SPAN_PX / 2;
+      const botY = sg.jy + SPAN_PX;
+      if (!sg.flipX) {
+        return [
+          {
+            x: sg.jx + SPAN_PX,
+            y: midY,
+            key: `${id}:0`,
+            compId: id,
+            ti: /** @type {0 | 1} */ (0),
+          },
+          { x: cx, y: botY, key: `${id}:1`, compId: id, ti: /** @type {0 | 1} */ (1) },
+        ];
+      }
+      return [
+        { x: sg.jx, y: midY, key: `${id}:0`, compId: id, ti: /** @type {0 | 1} */ (0) },
+        { x: cx, y: botY, key: `${id}:1`, compId: id, ti: /** @type {0 | 1} */ (1) },
+      ];
+    }
+    if (m.kind === "scope") {
+      const sp = /** @type {CSP} */ (m);
+      /* jx = colonne des broches CH1/CH2 ; jy = haut du symbole (ligne PAD_L du SVG) */
+      const y1 = sp.jy + CELL;
+      const y2 = sp.jy + SPAN_PX - CELL;
+      const mx = sp.jx + SPAN_PX / 2;
+      return [
+        { x: sp.jx, y: y1, key: `${id}:0`, compId: id, ti: /** @type {0 | 1 | 2} */ (0) },
+        { x: sp.jx, y: y2, key: `${id}:1`, compId: id, ti: /** @type {0 | 1 | 2} */ (1) },
+        {
+          x: mx,
+          y: sp.jy + SPAN_PX,
+          key: `${id}:2`,
+          compId: id,
+          ti: /** @type {0 | 1 | 2} */ (2),
+        },
+      ];
+    }
     const b = /** @type {CB} */ (m);
     /* Centre des jonctions SVG : layout left = jx − (slot+gap+BAT_WIRE_X) + padding-left + BAT_WIRE_X = jx */
     return [
@@ -831,8 +909,8 @@
       const o = /** @type {{ kind?: string; nid?: string; compId?: string; ti?: number }} */ (ep);
       if (o.kind === "T" || o.kind === "N") return /** @type {WirePort} */ (ep);
       if (typeof o.nid === "string") return { kind: "N", nid: o.nid };
-      if (typeof o.compId === "string" && (o.ti === 0 || o.ti === 1))
-        return { kind: "T", compId: o.compId, ti: /** @type {0 | 1} */ (o.ti) };
+      if (typeof o.compId === "string" && (o.ti === 0 || o.ti === 1 || o.ti === 2))
+        return { kind: "T", compId: o.compId, ti: /** @type {0 | 1 | 2} */ (o.ti) };
     }
     return { kind: "T", compId: "_err", ti: 0 };
   }
@@ -1159,6 +1237,12 @@
     ohmmeterSeq = comps
       .filter((c) => c.kind === "ohmmeter")
       .reduce((m, c) => Math.max(m, /** @type {CO} */ (c).omIndex), 0);
+    siggenSeq = comps
+      .filter((c) => c.kind === "siggen")
+      .reduce((m, c) => Math.max(m, /** @type {CSG} */ (c).sIndex), 0);
+    scopeSeq = comps
+      .filter((c) => c.kind === "scope")
+      .reduce((m, c) => Math.max(m, /** @type {CSP} */ (c).scIndex), 0);
   }
 
   function applyTransform() {
@@ -1211,7 +1295,7 @@
     return p.kind === "T" && p.compId === compId;
   }
 
-  /** @param {string | null | undefined} compId @param {0 | 1} ti */
+  /** @param {string | null | undefined} compId @param {number} ti */
   function jointDotVisible(compId, ti) {
     if (!compId) return true;
     return !wiredTerminalKeys.has(`${compId}:${ti}`);
@@ -1253,6 +1337,7 @@
     const m = document.getElementById("commands-modal");
     if (!m) return;
     closeDropdownMenusOnly();
+    closeScopeModal();
     closeSimulateModal();
     m.classList.remove("is-hidden");
     m.setAttribute("aria-hidden", "false");
@@ -1263,6 +1348,7 @@
     const m = document.getElementById("simulate-modal");
     if (!m) return;
     closeDropdownMenusOnly();
+    closeScopeModal();
     closeCommandsModal();
     m.classList.remove("is-hidden");
     m.setAttribute("aria-hidden", "false");
@@ -1271,6 +1357,7 @@
 
   function closeAllMenus() {
     closeDropdownMenusOnly();
+    closeScopeModal();
     closeCommandsModal();
     closeSimulateModal();
   }
@@ -1366,14 +1453,14 @@
           const li = document.createElement("li");
           const v = row.volts;
           const hasV = typeof v === "number" && Number.isFinite(v);
-          appendMeasureRow(li, label, hasV, hasV ? `${v.toFixed(4)} V` : "—");
+          appendMeasureRow(li, label, hasV, hasV ? `${fmtDisp2(v)} V` : "—");
         }
         for (const [label, row] of Object.entries(ampsMap)) {
           any = true;
           const li = document.createElement("li");
           const a = row.amps;
           const hasA = typeof a === "number" && Number.isFinite(a);
-          appendMeasureRow(li, label, hasA, hasA ? `${a.toFixed(4)} A` : "—");
+          appendMeasureRow(li, label, hasA, hasA ? `${fmtDisp2(a)} A` : "—");
         }
         for (const [label, row] of Object.entries(ohmsMap)) {
           any = true;
@@ -1419,14 +1506,41 @@
             : "—",
           true
         );
+        lastScopePlots = {};
+        updateSimGenStrip();
         return;
       }
 
-      statusEl.textContent = "Simulation DC terminée. Détail des mesures (V, A, Ω) :";
-      fillModalInstrumentList(vm, amm, ohm);
+      const isTran = !!(/** @type {{ analysisTran?: boolean }} */ (data).analysisTran);
+      lastScopePlots = /** @type {Record<string, { t: number[]; ch1: number[]; ch2: number[] }>} */ (
+        /** @type {object} */ (data.scopePlots || {})
+      );
+      updateSimGenStrip();
 
-      const strip = instrumentsBottomStrip(vm, amm, ohm);
-      setBottomVoltmeterText(strip.text, strip.muted);
+      if (isTran) {
+        statusEl.textContent =
+          "Simulation transitoire terminée. Fenêtre oscilloscope ouverte (CH1 vert, CH2 bleu, tensions en V, 2 déc.).";
+        fillModalInstrumentList(vm, amm, ohm);
+        if (!Object.keys(vm).length && !Object.keys(amm).length && !Object.keys(ohm).length) {
+          listEl.innerHTML = "";
+          const li = document.createElement("li");
+          const s = document.createElement("span");
+          s.className = "vm-pending";
+          s.textContent =
+            "Mode transitoire : les mesures DC (V/A/Ω) ne sont pas extraites dans cette passe. Utilisez la fenêtre oscilloscope pour les tensions.";
+          li.appendChild(s);
+          listEl.appendChild(li);
+        }
+        setBottomVoltmeterText("Tran (oscilloscope)", false);
+        openScopeModal();
+      } else {
+        lastScopePlots = {};
+        updateSimGenStrip();
+        statusEl.textContent = "Simulation DC terminée. Détail des mesures (V, A, Ω) :";
+        fillModalInstrumentList(vm, amm, ohm);
+        const strip = instrumentsBottomStrip(vm, amm, ohm);
+        setBottomVoltmeterText(strip.text, strip.muted);
+      }
 
       if (Array.isArray(data.warnings) && data.warnings.length && warnEl) {
         showBlk(warnEl, /** @type {string[]} */ (data.warnings).join("\n"));
@@ -1439,6 +1553,8 @@
         setBottomVoltmeterText("—", true);
         return;
       }
+      lastScopePlots = {};
+      updateSimGenStrip();
       statusEl.textContent = "Impossible de joindre le serveur.";
       hideBlk(errEl);
       hideBlk(warnEl);
@@ -1742,6 +1858,147 @@
     }
   }
 
+  /** Offset vertical monde : pastille (PAD_L) du SVG alignée sur `model.jy` (haut du symbole sur la grille). */
+  const COMP_TOP_PAD_ALIGN = 18 + PAD_L;
+
+  /** @param {SVGElement} svg @param {string | null} compId @param {boolean} flipX */
+  function drawSiggenSymbol(svg, compId, flipX) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+    svg.setAttribute("overflow", "visible");
+    const W = PACK_W;
+    const H = PACK_W;
+    svg.setAttribute("viewBox", `-2 0 ${W} ${H}`);
+    svg.setAttribute("width", String(W));
+    svg.setAttribute("height", String(H));
+    const midY = PAD_L + SPAN_PX / 2;
+    const botY = PAD_L + SPAN_PX;
+    const cxBox = PAD_L + SPAN_PX / 2;
+    const inset = 12;
+    const boxW = SPAN_PX - inset * 2;
+    const boxH = SPAN_PX - inset * 2;
+    const rx = PAD_L + inset;
+    const ry = PAD_L + inset;
+    const rectEl = document.createElementNS(NS, "rect");
+    rectEl.setAttribute("class", "siggen-box");
+    rectEl.setAttribute("x", String(rx));
+    rectEl.setAttribute("y", String(ry));
+    rectEl.setAttribute("width", String(boxW));
+    rectEl.setAttribute("height", String(boxH));
+    rectEl.setAttribute("rx", "3");
+    svg.appendChild(rectEl);
+    const sx0 = rx + 6;
+    const sw = boxW - 12;
+    const syC = ry + boxH / 2;
+    const samp = 48;
+    const ampW = Math.max(4, (boxH - 14) / 2);
+    let sineD = "";
+    for (let i = 0; i <= samp; i++) {
+      const u = i / samp;
+      const x = sx0 + u * sw;
+      const y = syC + Math.sin(u * Math.PI * 2) * ampW;
+      sineD += `${i === 0 ? "M" : " L"}${x} ${y}`;
+    }
+    const sine = document.createElementNS(NS, "path");
+    sine.setAttribute("class", "siggen-sine");
+    sine.setAttribute("d", sineD);
+    svg.appendChild(sine);
+    const outWorldX = flipX ? PAD_L : PAD_L + SPAN_PX;
+    const inX = flipX ? rx + boxW - 5 : rx + 5;
+    const oxL = flipX ? outWorldX + JOINT_R : outWorldX - JOINT_R;
+    const oxW = flipX ? inX + 2 : inX - 2;
+    const xOut0 = jointInnerOrCenter(compId, 0, oxL, outWorldX);
+    const xOut1 = jointInnerOrCenter(compId, 0, oxW, inX);
+    svg.appendChild(lineSeg(NS, xOut0, midY, xOut1, midY, "siggen-trace"));
+    const gTop = ry + boxH;
+    /* Fil jusqu’au centre jonction monde (botY) — évite l’intervalle vide avec la pastille rouge */
+    svg.appendChild(lineSeg(NS, cxBox, gTop, cxBox, botY, "siggen-trace"));
+    const outLab = document.createElementNS(NS, "text");
+    outLab.setAttribute("class", "siggen-out-lbl");
+    outLab.setAttribute("x", String(flipX ? rx + 6 : rx + boxW - 6));
+    outLab.setAttribute("y", String(midY - 9));
+    outLab.setAttribute("text-anchor", flipX ? "start" : "end");
+    outLab.textContent = "Out";
+    svg.appendChild(outLab);
+    if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, outWorldX, midY));
+    if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, cxBox, botY));
+  }
+
+  /** @param {SVGElement} svg @param {string | null} compId */
+  function drawScopeSymbol(svg, compId) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+    const W = PACK_W;
+    const H = PACK_W;
+    svg.setAttribute("viewBox", `-2 0 ${W} ${H}`);
+    svg.setAttribute("width", String(W));
+    svg.setAttribute("height", String(H));
+    svg.setAttribute("overflow", "visible");
+
+    const ch1y = PAD_L + CELL;
+    const ch2y = PAD_L + SPAN_PX - CELL;
+    const bx = PAD_L + 34;
+    const by = PAD_L + 10;
+    const bw = PACK_W - bx - PAD_L - 8;
+    const bh = PAD_L + SPAN_PX - by - 8;
+    const gCx = PAD_L + SPAN_PX / 2;
+    const gBot = PAD_L + SPAN_PX;
+
+    const body = document.createElementNS(NS, "rect");
+    body.setAttribute("class", "scope-body");
+    body.setAttribute("x", String(bx));
+    body.setAttribute("y", String(by));
+    body.setAttribute("width", String(bw));
+    body.setAttribute("height", String(bh));
+    body.setAttribute("rx", "3");
+    svg.appendChild(body);
+    const scrTop = by + 7;
+    const scrH = bh * 0.36;
+    const scr = document.createElementNS(NS, "rect");
+    scr.setAttribute("class", "scope-screen");
+    scr.setAttribute("x", String(bx + 7));
+    scr.setAttribute("y", String(scrTop));
+    scr.setAttribute("width", String(bw - 14));
+    scr.setAttribute("height", String(scrH));
+    svg.appendChild(scr);
+    const ky = scrTop + scrH + Math.max(10, (bh - scrH - 14) / 2 + 4);
+    for (let i = 0; i < 2; i++) {
+      const kx = bx + 16 + i * 22;
+      const kn = document.createElementNS(NS, "circle");
+      kn.setAttribute("class", "scope-knob");
+      kn.setAttribute("cx", String(kx));
+      kn.setAttribute("cy", String(ky));
+      kn.setAttribute("r", "5.5");
+      svg.appendChild(kn);
+    }
+
+    const lx0 = PAD_L + JOINT_R;
+    const lx1 = bx - 1;
+    const x01 = jointInnerOrCenter(compId, 0, lx0, PAD_L);
+    const x02 = jointInnerOrCenter(compId, 0, lx1 - 2, lx1);
+    svg.appendChild(lineSeg(NS, x01, ch1y, x02, ch1y, "scope-trace"));
+    const x11 = jointInnerOrCenter(compId, 1, lx0, PAD_L);
+    const x12 = jointInnerOrCenter(compId, 1, lx1 - 2, lx1);
+    svg.appendChild(lineSeg(NS, x11, ch2y, x12, ch2y, "scope-trace"));
+    svg.appendChild(lineSeg(NS, gCx, by + bh, gCx, gBot, "scope-trace"));
+
+    const t1 = document.createElementNS(NS, "text");
+    t1.setAttribute("class", "scope-ch-lbl");
+    t1.setAttribute("x", String(PAD_L));
+    t1.setAttribute("y", String(ch1y - 5));
+    t1.textContent = "CH1";
+    svg.appendChild(t1);
+    const t2 = document.createElementNS(NS, "text");
+    t2.setAttribute("class", "scope-ch-lbl");
+    t2.setAttribute("x", String(PAD_L));
+    t2.setAttribute("y", String(ch2y - 5));
+    t2.textContent = "CH2";
+    svg.appendChild(t2);
+    if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, PAD_L, ch1y));
+    if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, PAD_L, ch2y));
+    if (jointDotVisible(compId, 2)) svg.appendChild(circ(NS, gCx, gBot));
+  }
+
   /** Pile (schéma classique) : 4 cases entre jonctions, trait long 2 cases, court 1 case, +/− à gauche du fil
    * @param {string | null} compId */
   function drawBatterySymbol(svg, compId) {
@@ -1901,6 +2158,31 @@
     layoutOrientedSpanDOM(el, model);
   }
 
+  /** @param {HTMLElement} el @param {CSG} model */
+  function layoutSiggenDOM(el, model) {
+    el.classList.remove("circuit-comp--v");
+    el.style.minWidth = `${PACK_W}px`;
+    el.style.minHeight = "";
+    el.style.left = `${model.jx - PAD_L - SVG_VB_X}px`;
+    el.style.top = `${model.jy - COMP_TOP_PAD_ALIGN}px`;
+  }
+
+  /** @param {HTMLElement} el @param {CSP} model */
+  function layoutScopeDOM(el, model) {
+    el.classList.remove("circuit-comp--v");
+    el.style.minWidth = `${PACK_W}px`;
+    el.style.minHeight = "";
+    el.style.left = `${model.jx - PAD_L - SVG_VB_X}px`;
+    el.style.top = `${model.jy - COMP_TOP_PAD_ALIGN}px`;
+  }
+
+  /** @param {number} wx @param {number} wy @param {CSG} m */
+  function placeSiggenAtWorldPoint(wx, wy, m) {
+    const pm = snapToIntersection(wx, wy);
+    m.jx = pm.x - SPAN_PX / 2;
+    m.jy = pm.y - SPAN_PX / 2;
+  }
+
   /** @param {HTMLElement} el @param {CircuitComp} m */
   function layoutCompDOM(el, m) {
     if (m.kind === "resistor") layoutResistorDOM(el, /** @type {CR} */ (m));
@@ -1908,6 +2190,8 @@
     else if (m.kind === "ammeter") layoutAmmeterDOM(el, /** @type {CA} */ (m));
     else if (m.kind === "ohmmeter") layoutOhmmeterDOM(el, /** @type {CO} */ (m));
     else if (m.kind === "ground") layoutGroundDOM(el, /** @type {CG} */ (m));
+    else if (m.kind === "siggen") layoutSiggenDOM(el, /** @type {CSG} */ (m));
+    else if (m.kind === "scope") layoutScopeDOM(el, /** @type {CSP} */ (m));
     else layoutBatteryDOM(el, /** @type {CB} */ (m));
   }
 
@@ -2119,6 +2403,79 @@
     return root;
   }
 
+  /** @param {CSG | { sIndex: number; flipX?: boolean }} data @param {boolean} ghost */
+  function buildSiggenElement(data, ghost) {
+    const sIndex =
+      /** @type {number} */ ("sIndex" in data ? data.sIndex : siggenSeq + 1);
+    const flipX = !!(/** @type {{ flipX?: boolean }} */ (data).flipX);
+    const id = ghost ? "" : /** @type {CSG} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost
+      ? "circuit-comp siggen siggen--ghost"
+      : "circuit-comp siggen";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.compKind = "siggen";
+
+    const idEl = document.createElement("div");
+    idEl.className = "siggen-id";
+    idEl.textContent = `S${sIndex}`;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "siggen-symbol");
+    drawSiggenSymbol(svg, ghost ? null : id, flipX);
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+
+    if (!ghost && "jx" in data) {
+      layoutSiggenDOM(root, /** @type {CSG} */ (data));
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
+      root.addEventListener("pointerdown", onPlacedCompPointerDown);
+    } else if (ghost) {
+      root.style.minWidth = `${PACK_W}px`;
+      root.style.minHeight = `${PACK_W}px`;
+    }
+
+    return root;
+  }
+
+  /** @param {CSP | { scIndex: number }} data @param {boolean} ghost */
+  function buildScopeElement(data, ghost) {
+    const scIndex =
+      /** @type {number} */ ("scIndex" in data ? data.scIndex : scopeSeq + 1);
+    const id = ghost ? "" : /** @type {CSP} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost
+      ? "circuit-comp scope scope--ghost"
+      : "circuit-comp scope";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.compKind = "scope";
+
+    const idEl = document.createElement("div");
+    idEl.className = "scope-id";
+    idEl.textContent = `Osc${scIndex}`;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "scope-symbol");
+    drawScopeSymbol(svg, ghost ? null : id);
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+
+    if (!ghost && "jx" in data) {
+      layoutScopeDOM(root, /** @type {CSP} */ (data));
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
+      root.addEventListener("pointerdown", onPlacedCompPointerDown);
+    } else if (ghost) {
+      root.style.minWidth = `${PACK_W}px`;
+      root.style.minHeight = `${PACK_W}px`;
+    }
+
+    return root;
+  }
+
   /** @param {CB | { vIndex: number }} data @param {boolean} ghost */
   function buildBatteryElement(data, ghost) {
     const vIndex =
@@ -2169,6 +2526,8 @@
     if (m.kind === "voltmeter") return buildVoltmeterElement(m, ghost);
     if (m.kind === "ammeter") return buildAmmeterElement(m, ghost);
     if (m.kind === "ohmmeter") return buildOhmmeterElement(m, ghost);
+    if (m.kind === "siggen") return buildSiggenElement(m, ghost);
+    if (m.kind === "scope") return buildScopeElement(m, ghost);
     if (m.kind === "ground") return buildGroundElement(m, ghost);
     return buildBatteryElement(m, ghost);
   }
@@ -2230,6 +2589,163 @@
     wiredTerminalKeys = getWiredTerminalKeySet();
     componentsLayer.replaceChildren(...comps.map((m) => buildCompElement(m, false)));
     renderWires();
+    updateSimGenStrip();
+    bindSiggenPanelOnce();
+  }
+
+  function updateSimGenStrip() {
+    const row = document.getElementById("sim-panel-siggen-row");
+    const oscBtn = document.getElementById("sim-panel-scope");
+    if (oscBtn)
+      oscBtn.classList.toggle("is-hidden", Object.keys(lastScopePlots).length === 0);
+
+    const ampEl = /** @type {HTMLInputElement | null} */ (document.getElementById("siggen-in-amp"));
+    const frEl = /** @type {HTMLInputElement | null} */ (document.getElementById("siggen-in-freq"));
+    const offEl = /** @type {HTMLInputElement | null} */ (document.getElementById("siggen-in-off"));
+    if (!row || !ampEl || !frEl || !offEl) return;
+    const id = soleSelectedCompId();
+    const m = id ? getModel(id) : null;
+    if (m && m.kind === "siggen") {
+      row.classList.remove("is-hidden");
+      const s = /** @type {CSG} */ (m);
+      ampEl.value = fmtDisp2(getSiggenAmp(s));
+      frEl.value = fmtDisp2(getSiggenFreqHz(s));
+      offEl.value = fmtDisp2(getSiggenOff(s));
+    } else row.classList.add("is-hidden");
+  }
+
+  function bindSiggenPanelOnce() {
+    const row = document.getElementById("sim-panel-siggen-row");
+    if (!row || row.dataset.bound) return;
+    row.dataset.bound = "1";
+
+    /** @param {string} fid @param {(s: CSG, n: number) => void} setter */
+    const wireNum = (fid, setter) => {
+      const el = /** @type {HTMLInputElement | null} */ (document.getElementById(fid));
+      if (!el) return;
+      el.addEventListener("change", () => {
+        const id = soleSelectedCompId();
+        const m = id ? getModel(id) : null;
+        if (!m || m.kind !== "siggen") return;
+        const raw = el.value.trim().replace(",", ".");
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return;
+        commit(() => {
+          setter(/** @type {CSG} */ (m), n);
+        });
+        renderAll();
+      });
+    };
+    wireNum("siggen-in-amp", (s, n) => {
+      s.amp = Math.max(1e-9, n);
+    });
+    wireNum("siggen-in-freq", (s, n) => {
+      s.freqHz = Math.max(0.001, n);
+    });
+    wireNum("siggen-in-off", (s, n) => {
+      s.offset = n;
+    });
+  }
+
+  /** @param {Record<string, { t: number[]; ch1: number[]; ch2: number[] }>} plots */
+  function drawScopeCanvas(plots) {
+    const c = /** @type {HTMLCanvasElement | null} */ (document.getElementById("scope-modal-canvas"));
+    if (!c) return;
+    const keys = Object.keys(plots || {});
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const cssW = 560;
+    const cssH = 260;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = Math.round(cssW * dpr);
+    c.height = Math.round(cssH * dpr);
+    c.style.width = `${cssW}px`;
+    c.style.height = `${cssH}px`;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = "#0a0a10";
+    ctx.fillRect(0, 0, cssW, cssH);
+    ctx.strokeStyle = "#2e3340";
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 8; g++) {
+      const y = 20 + g * ((cssH - 40) / 8);
+      ctx.beginPath();
+      ctx.moveTo(40, y);
+      ctx.lineTo(cssW - 14, y);
+      ctx.stroke();
+    }
+    if (!keys.length) {
+      ctx.fillStyle = "#8899aa";
+      ctx.font = "14px system-ui,sans-serif";
+      ctx.fillText("Aucune courbe (branchez CH1 ou simulez avec oscilloscope placé).", 48, cssH / 2);
+      return;
+    }
+    const { t, ch1, ch2 } = plots[keys[0]];
+    if (!Array.isArray(t) || !t.length) return;
+    /** @param {number[]} arr */
+    const minMax = (arr) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const v of arr) {
+        if (typeof v !== "number" || !Number.isFinite(v)) continue;
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { lo: -1, hi: 1 };
+      if (lo === hi) return { lo: lo - 0.5, hi: hi + 0.5 };
+      const pad = (hi - lo) * 0.08;
+      return { lo: lo - pad, hi: hi + pad };
+    };
+    const u1 = minMax(ch1);
+    const u2 = minMax(ch2);
+    const lo = Math.min(u1.lo, u2.lo);
+    const hi = Math.max(u1.hi, u2.hi);
+    const t0 = t[0];
+    const t1 = t[t.length - 1];
+    const plotW = cssW - 54;
+    const plotH = cssH - 40;
+    const tx = (ti) => 40 + ((ti - t0) / (t1 - t0 || 1)) * plotW;
+    const vy = (v) => 20 + (1 - (v - lo) / (hi - lo || 1)) * plotH;
+
+    ctx.strokeStyle = "#7dffb3";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < t.length; i++) {
+      const x = tx(t[i]);
+      const y = vy(ch1[i] || 0);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "#7aabff";
+    ctx.beginPath();
+    for (let i = 0; i < t.length; i++) {
+      const x = tx(t[i]);
+      const y = vy(ch2[i] || 0);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = "#c4d0e8";
+    ctx.font = "11px ui-monospace,monospace";
+    ctx.fillText(`CH1 (vert) / CH2 (bleu) — ${keys[0]}`, 44, 14);
+    ctx.fillText(`${fmtDisp2(lo)} … ${fmtDisp2(hi)} V`, cssW - 120, 14);
+  }
+
+  function openScopeModal() {
+    const m = document.getElementById("scope-modal");
+    if (!m) return;
+    m.classList.remove("is-hidden");
+    m.setAttribute("aria-hidden", "false");
+    drawScopeCanvas(lastScopePlots);
+  }
+
+  function closeScopeModal() {
+    const m = document.getElementById("scope-modal");
+    if (!m) return;
+    m.classList.add("is-hidden");
+    m.setAttribute("aria-hidden", "true");
   }
 
   /** @param {JunctionHit} hit @param {number} ptrId */
@@ -2301,7 +2817,7 @@
     /** @type {WirePort | null} */
     let toPort = null;
     if (endHit?.kind === "T") {
-      toPort = { kind: "T", compId: endHit.compId, ti: /** @type {0 | 1} */ (endHit.ti) };
+      toPort = { kind: "T", compId: endHit.compId, ti: /** @type {0 | 1 | 2} */ (endHit.ti) };
     } else if (endHit?.kind === "N") {
       toPort = { kind: "N", nid: endHit.nodeId };
     }
@@ -2321,7 +2837,7 @@
         fromPort = {
           kind: "T",
           compId: fromRK.compId,
-          ti: /** @type {0 | 1} */ (fromRK.ti),
+          ti: /** @type {0 | 1 | 2} */ (fromRK.ti),
         };
       } else {
         fromPort = { kind: "N", nid: /** @type {{ nid: string }} */ (fromRK).nid };
@@ -2592,6 +3108,13 @@
         clipboardTpl = { kind: "ammeter", orient: /** @type {CA} */ (m).orient };
       } else if (m.kind === "ohmmeter") {
         clipboardTpl = { kind: "ohmmeter", orient: /** @type {CO} */ (m).orient };
+      } else if (m.kind === "siggen") {
+        clipboardTpl = {
+          kind: "siggen",
+          flipX: !!(/** @type {CSG} */ (m).flipX),
+        };
+      } else if (m.kind === "scope") {
+        clipboardTpl = { kind: "scope" };
       } else if (m.kind === "ground") {
         clipboardTpl = { kind: "ground" };
       } else {
@@ -2674,6 +3197,36 @@
           placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
           selectSingleCompOnly(nw.id);
+        } else if (clipboardTpl.kind === "siggen") {
+          siggenSeq += 1;
+          /** @type {CSG} */
+          const nw = {
+            kind: "siggen",
+            id: uid(),
+            sIndex: siggenSeq,
+            flipX: clipboardTpl.flipX,
+            amp: DEFAULT_SG_AMP,
+            freqHz: DEFAULT_SG_FREQ,
+            offset: DEFAULT_SG_OFF,
+            jx: 0,
+            jy: 0,
+          };
+          placeSiggenAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
+        } else if (clipboardTpl.kind === "scope") {
+          scopeSeq += 1;
+          /** @type {CSP} */
+          const nw = {
+            kind: "scope",
+            id: uid(),
+            scIndex: scopeSeq,
+            jx: 0,
+            jy: 0,
+          };
+          placeScopeAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
         } else {
           batterySeq += 1;
           /** @type {CB} */
@@ -2689,6 +3242,18 @@
           selectSingleCompOnly(nw.id);
         }
       });
+      return;
+    }
+
+    if (e.code === "KeyX" && !mod && !e.altKey) {
+      const mx = getModel(soleSelectedCompId());
+      if (!mx || mx.kind !== "siggen") return;
+      commit(() => {
+        const s = /** @type {CSG} */ (mx);
+        s.flipX = !s.flipX;
+      });
+      renderAll();
+      e.preventDefault();
       return;
     }
 
@@ -2740,6 +3305,13 @@
     const p = snapToIntersection(wx, wy);
     m.jx = p.x;
     m.jy = p.y;
+  }
+
+  /** @param {CSP} m */
+  function placeScopeAtWorldPoint(wx, wy, m) {
+    const pm = snapToIntersection(wx, wy);
+    m.jx = pm.x;
+    m.jy = pm.y - CELL;
   }
 
   function removePaletteGhost() {
@@ -2830,6 +3402,26 @@
       );
       dragGhost.style.minWidth = o === "h" ? `${PACK_W}px` : "";
       dragGhost.style.minHeight = o === "v" ? `${PACK_W}px` : "";
+    } else if (kind === "siggen") {
+      dragGhost = buildSiggenElement(
+        {
+          id: "_g",
+          sIndex: siggenSeq + 1,
+          flipX: false,
+          amp: DEFAULT_SG_AMP,
+          freqHz: DEFAULT_SG_FREQ,
+          offset: DEFAULT_SG_OFF,
+          jx: 0,
+          jy: 0,
+        },
+        true
+      );
+      dragGhost.style.minHeight = `${PACK_W}px`;
+    } else if (kind === "scope") {
+      dragGhost = buildScopeElement(
+        { id: "_g", scIndex: scopeSeq + 1, jx: 0, jy: 0 },
+        true
+      );
     } else if (kind === "ground") {
       dragGhost = buildGroundElement({ id: "_g", gIndex: groundSeq + 1, jx: 0, jy: 0 }, true);
       dragGhost.style.minWidth = `${PACK_W}px`;
@@ -2894,6 +3486,20 @@
   }
 
   /** @param {PointerEvent} e */
+  function onPickSiggenDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (!pickSiggenBtn) return;
+    startPaletteDrag("siggen", e, pickSiggenBtn);
+  }
+
+  /** @param {PointerEvent} e */
+  function onPickScopeDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (!pickScopeBtn) return;
+    startPaletteDrag("scope", e, pickScopeBtn);
+  }
+
+  /** @param {PointerEvent} e */
   function onPaletteDragMove(e) {
     if (palettePickPointerId !== e.pointerId) return;
     if (!dragGhost) return;
@@ -2919,9 +3525,13 @@
               ? pickAmmeterBtn
               : paletteDragKind === "ohmmeter"
                 ? pickOhmmeterBtn
-                : paletteDragKind === "ground"
-                  ? pickGroundBtn
-                  : pickBatteryBtn;
+                : paletteDragKind === "siggen"
+                  ? pickSiggenBtn
+                  : paletteDragKind === "scope"
+                    ? pickScopeBtn
+                    : paletteDragKind === "ground"
+                      ? pickGroundBtn
+                      : pickBatteryBtn;
       pickBtn?.releasePointerCapture(e.pointerId);
     } catch (_) {}
 
@@ -3022,6 +3632,40 @@
             nw.jx = pMid.x;
             nw.jy = pMid.y - SPAN_PX / 2;
           }
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
+        });
+      } else if (paletteDragKind === "siggen") {
+        commit(() => {
+          siggenSeq += 1;
+          /** @type {CSG} */
+          const nw = {
+            kind: "siggen",
+            id: uid(),
+            sIndex: siggenSeq,
+            flipX: false,
+            amp: DEFAULT_SG_AMP,
+            freqHz: DEFAULT_SG_FREQ,
+            offset: DEFAULT_SG_OFF,
+            jx: 0,
+            jy: 0,
+          };
+          placeSiggenAtWorldPoint(wx, wy, nw);
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
+        });
+      } else if (paletteDragKind === "scope") {
+        commit(() => {
+          scopeSeq += 1;
+          /** @type {CSP} */
+          const nw = {
+            kind: "scope",
+            id: uid(),
+            scIndex: scopeSeq,
+            jx: 0,
+            jy: 0,
+          };
+          placeScopeAtWorldPoint(wx, wy, nw);
           comps.push(nw);
           selectSingleCompOnly(nw.id);
         });
@@ -3171,6 +3815,12 @@
   if (pickVoltmeterBtn) pickVoltmeterBtn.addEventListener("pointerdown", onPickVoltmeterDown);
   if (pickAmmeterBtn) pickAmmeterBtn.addEventListener("pointerdown", onPickAmmeterDown);
   if (pickOhmmeterBtn) pickOhmmeterBtn.addEventListener("pointerdown", onPickOhmmeterDown);
+  if (pickSiggenBtn) pickSiggenBtn.addEventListener("pointerdown", onPickSiggenDown);
+  if (pickScopeBtn) pickScopeBtn.addEventListener("pointerdown", onPickScopeDown);
+
+  document.getElementById("sim-panel-scope")?.addEventListener("click", () => openScopeModal());
+  document.getElementById("scope-modal-close")?.addEventListener("click", () => closeScopeModal());
+  document.getElementById("scope-modal-backdrop")?.addEventListener("click", () => closeScopeModal());
 
   menuFileNewBtn?.addEventListener("click", () => newCircuitPrompt());
   menuFileOpenBtn?.addEventListener("click", () => {
@@ -3220,6 +3870,8 @@
 
   layoutCircuitGridExtents();
   applyTransform();
+  bindSiggenPanelOnce();
+  updateSimGenStrip();
 
   window.addEventListener("resize", () => {
     layoutCircuitGridExtents();
@@ -3286,6 +3938,12 @@
         stage.releasePointerCapture(pid);
       } catch (_) {}
       e.preventDefault();
+      return;
+    }
+    const sc = document.getElementById("scope-modal");
+    if (sc && !sc.classList.contains("is-hidden")) {
+      e.preventDefault();
+      closeScopeModal();
       return;
     }
     const sim = document.getElementById("simulate-modal");

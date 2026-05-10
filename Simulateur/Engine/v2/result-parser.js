@@ -23,7 +23,7 @@ function trimSpiceEchoLine(raw) {
 }
 
 /**
- * Dernière portion numérique d’une ligne de print ngspice.
+ * Dernière portion numérique d'une ligne de print ngspice.
  * @param {string} line
  */
 function scrapeNumber(line) {
@@ -349,7 +349,7 @@ export function mergeAmmeterMeasurements(log, ammeters) {
 }
 
 /**
- * Mesure ohmmètre : source interne 1 V série → R = |1 / i(Vohm)| Ω.
+ * Mesure ohmmètre : source interne 1 V série → R = |1 / i(Vohm)| Ω.
  * @param {string} log
  * @param {Array<{ omIndex?: number; displayLabel?: string; spiceVInstance?: string }>} ohmeters
  */
@@ -473,5 +473,112 @@ export function mergeOhmmeterMeasurements(log, ohmeters) {
     };
   }
 
+  return out;
+}
+
+/** Arrondi affichage 2 décimales (nombre fini uniquement). */
+export function fmt2(num) {
+  const n = Number(num);
+  if (!Number.isFinite(n)) return "";
+  return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+/**
+ * Parse un export wrdata ascii ngspice. Gère tous les formats connus :
+ *
+ *   Format A – wr_singlescale : N+1 colonnes par ligne  → [time, v1, v2, …, vN]
+ *   Format B – entrelacé      : 2N colonnes              → [time,v1, time,v2, …]
+ *   Format C – avec index     : N+2 colonnes             → [idx, time, v1, …, vN]
+ *   Format D – wr_vecnames    : 1ère ligne = noms (texte) ignorée, reste = format A
+ *
+ * @param {string} text contenu du fichier wrdata
+ * @param {Array<{ displayLabel: string; colCh1: number; colCh2: number; colGnd: number }>} scopesTranMeta
+ * @returns {Record<string, { t: number[]; ch1: number[]; ch2: number[] }>}
+ */
+export function mergeScopePlotsFromTranWrdata(text, scopesTranMeta) {
+  /** @type {Record<string, { t: number[]; ch1: number[]; ch2: number[] }>} */
+  const out = {};
+  if (!scopesTranMeta?.length || typeof text !== "string" || !text.trim()) return out;
+
+  /* nVolt = nombre total de colonnes tension attendues (3 par oscilloscope) */
+  const nVolt = scopesTranMeta.length * 3;
+
+  const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+
+  /** @type {number[][]} */
+  const rows = [];
+
+  for (const ln of rawLines) {
+    const tln = ln.trim();
+    if (!tln) continue;
+
+    /* Ignorer toute ligne qui ne commence pas par un chiffre ou signe numérique */
+    if (!/^[-+]?[0-9]/.test(tln)) continue;
+
+    const tok = tln.split(/\s+/).filter(Boolean);
+    /** @type {number[]} */
+    const nums = [];
+    let ok = true;
+    for (const t of tok) {
+      const v = Number(t.replace(",", "."));
+      if (!Number.isFinite(v)) { ok = false; break; }
+      nums.push(v);
+    }
+    if (!ok || nums.length < 2) continue;
+
+    const n = nums.length;
+    /* Cibles pour chaque format */
+    const fA = 1 + nVolt;   /* format A/D exact */
+    const fB = 2 * nVolt;   /* format B entrelacé */
+    const fC = 2 + nVolt;   /* format C avec index */
+
+    /** @type {number[] | null} */
+    let norm = null;
+
+    if (n === fA) {
+      /* Format A : exact – le cas le plus fréquent avec wr_singlescale */
+      norm = nums;
+    } else if (n === fB && nVolt >= 2) {
+      /* Format B entrelacé : time,v1, time,v2, … – les temps pairs doivent être identiques */
+      const t0 = nums[0];
+      const t1 = nums[2];
+      const tol = 1e-9 * (1 + Math.abs(t0));
+      if (Number.isFinite(t0) && Number.isFinite(t1) && Math.abs(t0 - t1) <= tol) {
+        const r = [t0];
+        for (let i = 0; i < nVolt; i++) r.push(nums[1 + i * 2]);
+        norm = r;
+      }
+    } else if (n === fC) {
+      /* Format C : première colonne = index entier → on la supprime */
+      norm = nums.slice(1);
+    } else if (n > fA) {
+      /* Plus de colonnes qu'attendu : on prend time + les nVolt premiers data */
+      norm = [nums[0], ...nums.slice(1, 1 + nVolt)];
+    } else if (n === 2 && nVolt === 1) {
+      /* 1 seul vecteur en format entrelacé dégénéré : time, v */
+      norm = nums;
+    }
+
+    if (norm && norm.length >= 1 + nVolt) rows.push(norm);
+  }
+
+  for (const sm of scopesTranMeta) {
+    const key = String(sm.displayLabel || "");
+    if (!key) continue;
+    const c1 = sm.colCh1;
+    const c2 = sm.colCh2;
+    const cg = sm.colGnd;
+    const maxNeeded = Math.max(c1, c2, cg);
+    const tArr = /** @type {number[]} */ ([]);
+    const u1   = /** @type {number[]} */ ([]);
+    const u2   = /** @type {number[]} */ ([]);
+    for (const row of rows) {
+      if (row.length <= maxNeeded) continue;
+      tArr.push(row[0]);
+      u1.push(row[c1] - row[cg]);
+      u2.push(row[c2] - row[cg]);
+    }
+    if (tArr.length) out[key] = { t: tArr, ch1: u1, ch2: u2 };
+  }
   return out;
 }
