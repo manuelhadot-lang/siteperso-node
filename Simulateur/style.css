@@ -626,9 +626,10 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   color: #b8c8e0;
 }
 
-/* Alimentation : Vn et 5V alignés sur la barre longue (schéma type manuel) */
+/* Alimentation : Vn et 5V alignés sur la barre longue (schéma type manuel).
+   IMPORTANT : position absolute (pas relative) pour rester dans le repère monde
+   piloté par el.style.left/top, comme les autres composants. */
 .battery.battery--schematic {
-  position: relative;
   box-sizing: content-box;
   width: 52px;
   min-height: 130px;
@@ -702,12 +703,41 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   stroke: #965200;
 }
 
+/* Masse : même calage grille que R horizontal (jx, jy) = centre pastille (PAD_L, CY) dans le SVG.
+   Garde position: absolute (héritée de .circuit-comp) pour que el.style.left/top placent
+   l’élément dans le repère monde, sinon le flux DOM décale en cascade. */
+.circuit-comp.ground {
+  color: #9ec0e8;
+}
+
+.circuit-comp.ground .ground-gnd-label {
+  color: #b4cef5;
+}
+
+.circuit-comp.ground--ghost .ground-gnd-label {
+  color: #aec6ff;
+}
+
+.ground-trace {
+  stroke: #9ec0e8;
+  fill: none;
+}
+
+.circuit-comp.ground--ghost .ground-trace {
+  stroke: #7aabff;
+}
+
+.circuit-comp.ground--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
 .circuit-comp--dragging {
   cursor: grabbing;
   opacity: 0.92;
 }
 
-.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost).circuit-comp--selected {
+.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost):not(.ground--ghost).circuit-comp--selected {
   border-radius: 4px;
   box-shadow:
     0 0 0 1px rgba(150, 195, 255, 0.28),

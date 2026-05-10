@@ -7,6 +7,7 @@
   const pickResistorBtn = document.getElementById("pick-resistor");
   const pickBatteryBtn = document.getElementById("pick-battery");
   const pickVoltmeterBtn = document.getElementById("pick-voltmeter");
+  const pickGroundBtn = document.getElementById("pick-ground");
   const circuitFileImportInput = /** @type {HTMLInputElement | null} */ (
     document.getElementById("circuit-file-import")
   );
@@ -19,10 +20,11 @@
   /** @typedef {{ kind: 'resistor'; id: string; rIndex: number; jx: number; jy: number; orient: Orient }} CR */
   /** @typedef {{ kind: 'voltmeter'; id: string; vmIndex: number; jx: number; jy: number; orient: Orient }} CV */
   /** @typedef {{ kind: 'battery'; id: string; vIndex: number; jx: number; jy: number }} CB */
-  /** @typedef {CR | CB | CV} CircuitComp */
+  /** @typedef {{ kind: 'ground'; id: string; gIndex: number; jx: number; jy: number }} CG */
+  /** @typedef {CR | CB | CV | CG} CircuitComp */
   /** @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 } | { kind: 'N'; nid: string }} WirePort */
   /** @typedef {{ id: string; from: WirePort; to: WirePort; points: { x: number; y: number }[] }} Wire */
-  /** @typedef {{ x: number; y: number; key: string; kind: 'T'; compId: string; ti: 0 | 1 } | { x: number; y: number; key: string; kind: 'N'; nodeId: string }} JunctionHit */
+  /** @typedef {{ x: number; y: number; key: string; kind: 'T'; compId: string; ti: 0 | 1 } | { x: number; y: number; key: string; kind: 'N'; nodeId: string } | { x: number; y: number; key: string; kind: 'S' }} JunctionHit */
   /** @typedef {{ x: number; y: number; key: string; compId: string; ti: 0 | 1 }} Terminal */
 
   const CELL = 28;
@@ -92,11 +94,12 @@
   let resistorSeq = 0;
   let voltmeterSeq = 0;
   let batterySeq = 0;
+  let groundSeq = 0;
 
   /** @type {string | null} */
   let selectedId = null;
 
-  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'battery' }} */
+  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'battery' } | { kind: 'ground' }} */
   let clipboardTpl = null;
 
   let lastPointerWorld = { wx: 0, wy: 0 };
@@ -115,7 +118,7 @@
 
   /** @type {HTMLElement | null} */
   let dragGhost = null;
-  /** @type {'resistor' | 'voltmeter' | 'battery' | null} */
+  /** @type {'resistor' | 'voltmeter' | 'battery' | 'ground' | null} */
   let paletteDragKind = null;
   /** @type {number | null} */
   let palettePickPointerId = null;
@@ -143,6 +146,53 @@
 
   function samePt(a, b) {
     return a.x === b.x && a.y === b.y;
+  }
+
+  function distSq2(wx, wy, x, y) {
+    const dx = x - wx;
+    const dy = y - wy;
+    return dx * dx + dy * dy;
+  }
+
+  /** Segment orthogonal (fil Manhattan), extrémités incluses. */
+  function pointOnClosedOrthoSeg(px, py, ax, ay, bx, by, tol = 0.5) {
+    if (Math.abs(ax - bx) <= tol) {
+      if (Math.abs(px - ax) > tol) return false;
+      const ymin = Math.min(ay, by) - tol;
+      const ymax = Math.max(ay, by) + tol;
+      return py >= ymin && py <= ymax;
+    }
+    if (Math.abs(ay - by) <= tol) {
+      if (Math.abs(py - ay) > tol) return false;
+      const xmin = Math.min(ax, bx) - tol;
+      const xmax = Math.max(ax, bx) + tol;
+      return px >= xmin && px <= xmax;
+    }
+    return false;
+  }
+
+  /** Point strictement sur l’arête, pas aux deux sommets (jonction en T au milieu d’un segment). */
+  function pointOnClosedOrthoSegInterior(px, py, ax, ay, bx, by, tol = 0.5) {
+    if (!pointOnClosedOrthoSeg(px, py, ax, ay, bx, by, tol)) return false;
+    const atA = Math.abs(px - ax) <= tol && Math.abs(py - ay) <= tol;
+    const atB = Math.abs(px - bx) <= tol && Math.abs(py - by) <= tol;
+    return !atA && !atB;
+  }
+
+  /** Le point grille (sx,sy) est-il au milieu d’un segment d’un fil existant ? */
+  function gridPointOnAnyWireSegmentInterior(sx, sy) {
+    for (const w of wires) {
+      const pts = w.points;
+      if (!Array.isArray(pts) || pts.length < 2) continue;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        if (!a || !b || !Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(b.x) || !Number.isFinite(b.y))
+          continue;
+        if (pointOnClosedOrthoSegInterior(sx, sy, a.x, a.y, b.x, b.y)) return true;
+      }
+    }
+    return false;
   }
 
   /** Coude Manhattan : d’abord l’axe où le curseur est le plus loin, sauf si Espace a inversé */
@@ -200,6 +250,10 @@
           ti: /** @type {0 | 1} */ (1),
         },
       ];
+    }
+    if (m.kind === "ground") {
+      const g = /** @type {CG} */ (m);
+      return [{ x: g.jx, y: g.jy, key: `${id}:0`, compId: id, ti: /** @type {0 | 1} */ (0) }];
     }
     const b = /** @type {CB} */ (m);
     /* Centre des jonctions SVG : layout left = jx − (slot+gap+BAT_WIRE_X) + padding-left + BAT_WIRE_X = jx */
@@ -264,6 +318,27 @@
         };
       }
     }
+
+    /* Milieu d’un segment de fil (jonction en T) : snap grille sur l’arête, sans doubler T/N plus prioritaires */
+    const snap = snapToIntersection(wx, wy);
+    const dSnap = distSq2(wx, wy, snap.x, snap.y);
+    if (dSnap <= max2 && gridPointOnAnyWireSegmentInterior(snap.x, snap.y)) {
+      let blocked = false;
+      if (best && dSnap > bestD) blocked = true;
+      if (!blocked && best && dSnap === bestD && (best.kind === "T" || best.kind === "N")) blocked = true;
+      if (!blocked) {
+        if (!best || dSnap < bestD || (dSnap === bestD && best.kind === "S")) {
+          bestD = dSnap;
+          best = {
+            kind: "S",
+            x: snap.x,
+            y: snap.y,
+            key: `s:${snap.x}|${snap.y}`,
+          };
+        }
+      }
+    }
+
     return best;
   }
 
@@ -295,10 +370,13 @@
           : {};
     } else throw new Error("invalid circuit payload");
     normalizeLoadedWires();
+    dedupeWireNodesByCoordinates();
     pruneWireNodes();
   }
 
   function snapshot() {
+    dedupeWireNodesByCoordinates();
+    pruneWireNodes();
     return JSON.stringify({
       version: CIRCUIT_FILE_VERSION,
       comps,
@@ -337,9 +415,69 @@
     }
   }
 
+  /**
+   * Réutiliser un jonctionnaire fil aux mêmes coordonnées grille (évite deux nœuds N distincts
+   * qui coupent électriquement un T — typique pont diviseur).
+   */
+  function findWireNodeIdAt(wx, wy) {
+    for (const [nid, p] of Object.entries(wireNodes)) {
+      if (p && p.x === wx && p.y === wy) return nid;
+    }
+    return null;
+  }
+
+  /**
+   * Fusionne plusieurs entrées wireNodes au même point (rechargement JSON ou anciennes versions).
+   * @returns {boolean} si un remapping a été appliqué
+   */
+  function dedupeWireNodesByCoordinates() {
+    /** @type {Map<string, string[]>} */
+    const buckets = new Map();
+    for (const [nid, p] of Object.entries(wireNodes)) {
+      if (!p || typeof p.x !== "number" || typeof p.y !== "number") continue;
+      const cellKey = `${p.x}|${p.y}`;
+      if (!buckets.has(cellKey)) buckets.set(cellKey, []);
+      /** @type {string[]} */ (buckets.get(cellKey)).push(nid);
+    }
+    /** @type {Map<string, string>} */
+    const remap = new Map();
+    for (const group of buckets.values()) {
+      if (group.length < 2) continue;
+      group.sort();
+      const keep = /** @type {string} */ (group[0]);
+      for (let i = 1; i < group.length; i++) remap.set(group[i], keep);
+    }
+    if (remap.size === 0) return false;
+
+    /** @param {WirePort} pp */
+    const rewritePort = (pp) => {
+      if (pp.kind !== "N") return;
+      const canon = remap.get(pp.nid);
+      if (canon !== undefined) pp.nid = canon;
+    };
+
+    for (const w of wires) {
+      rewritePort(w.from);
+      rewritePort(w.to);
+    }
+
+    for (const stale of remap.keys()) {
+      delete wireNodes[/** @type {string} */ (stale)];
+    }
+    return true;
+  }
+
   /** @param {string} key */
   function parseRoutingKey(key) {
     if (key.startsWith("n:")) return { kind: /** @type {'N'} */ ("N"), nid: key.slice(2) };
+    if (key.startsWith("s:")) {
+      const parts = key.slice(2).split("|");
+      return {
+        kind: /** @type {'Seg'} */ ("Seg"),
+        sx: Number(parts[0]),
+        sy: Number(parts[1]),
+      };
+    }
     const rest = key.startsWith("t:") ? key.slice(2) : key;
     const i = rest.lastIndexOf(":");
     return {
@@ -572,6 +710,9 @@
     batterySeq = comps
       .filter((c) => c.kind === "battery")
       .reduce((m, c) => Math.max(m, /** @type {CB} */ (c).vIndex), 0);
+    groundSeq = comps
+      .filter((c) => c.kind === "ground")
+      .reduce((m, c) => Math.max(m, /** @type {CG} */ (c).gIndex), 0);
     voltmeterSeq = comps
       .filter((c) => c.kind === "voltmeter")
       .reduce((m, c) => Math.max(m, /** @type {CV} */ (c).vmIndex), 0);
@@ -732,11 +873,15 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          state: {
-            comps: JSON.parse(JSON.stringify(comps)),
-            wires: JSON.parse(JSON.stringify(wires)),
-            wireNodes: JSON.parse(JSON.stringify(wireNodes)),
-          },
+          state: (() => {
+            dedupeWireNodesByCoordinates();
+            pruneWireNodes();
+            return {
+              comps: JSON.parse(JSON.stringify(comps)),
+              wires: JSON.parse(JSON.stringify(wires)),
+              wireNodes: JSON.parse(JSON.stringify(wireNodes)),
+            };
+          })(),
           gridStep: CELL,
         }),
       });
@@ -1041,6 +1186,28 @@
     return c;
   }
 
+  /** Repère grille identique au bornier gauche d’une résistance horizontale : (PAD_L, CY). */
+  const GROUND_SVG_BELOW_CY = 40;
+
+  /** @param {SVGElement} svg @param {string | null} compId */
+  function drawGroundSymbol(svg, compId) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+    const jxL = PAD_L;
+    const gH = CY + GROUND_SVG_BELOW_CY;
+    svg.setAttribute("class", "resistor-symbol ground-symbol");
+    svg.setAttribute("overflow", "visible");
+    svg.setAttribute("viewBox", `-2 0 ${PACK_W} ${gH}`);
+    svg.setAttribute("width", String(PACK_W));
+    svg.setAttribute("height", String(gH));
+
+    svg.appendChild(lineSeg(NS, jxL, CY, jxL, 26, "ground-trace"));
+    svg.appendChild(lineSeg(NS, jxL - 14, 26, jxL + 14, 26, "ground-trace"));
+    svg.appendChild(lineSeg(NS, jxL - 10, 32, jxL + 10, 32, "ground-trace"));
+    svg.appendChild(lineSeg(NS, jxL - 6, 38, jxL + 6, 38, "ground-trace"));
+    if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, jxL, CY));
+  }
+
   /** @param {HTMLElement} el @param {{ orient: Orient; jx: number; jy: number }} model */
   function layoutOrientedSpanDOM(el, model) {
     if (model.orient === "h") {
@@ -1085,7 +1252,17 @@
   function layoutCompDOM(el, m) {
     if (m.kind === "resistor") layoutResistorDOM(el, /** @type {CR} */ (m));
     else if (m.kind === "voltmeter") layoutVoltmeterDOM(el, /** @type {CV} */ (m));
+    else if (m.kind === "ground") layoutGroundDOM(el, /** @type {CG} */ (m));
     else layoutBatteryDOM(el, /** @type {CB} */ (m));
+  }
+
+  /** @param {HTMLElement} el @param {CG} model */
+  function layoutGroundDOM(el, model) {
+    layoutOrientedSpanDOM(el, {
+      orient: /** @type {Orient} */ ("h"),
+      jx: model.jx,
+      jy: model.jy,
+    });
   }
 
   /** @param {CR | { rIndex: number; orient?: Orient }} data @param {boolean} ghost */
@@ -1128,6 +1305,36 @@
       root.style.minWidth = `${PACK_W}px`;
     } else if (ghost && orient === "v") {
       root.style.minHeight = `${PACK_W}px`;
+    }
+
+    return root;
+  }
+
+  /** @param {CG | { gIndex?: number }} data @param {boolean} ghost */
+  function buildGroundElement(data, ghost) {
+    const gIndex =
+      /** @type {number} */ ("gIndex" in data && typeof data.gIndex === "number" ? data.gIndex : groundSeq + 1);
+    const id = ghost ? "" : /** @type {CG} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost ? "circuit-comp ground ground--ghost" : "circuit-comp ground";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.compKind = "ground";
+
+    const idEl = document.createElement("div");
+    idEl.className = "resistor-id ground-gnd-label";
+    idEl.textContent = "GND";
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    drawGroundSymbol(svg, ghost ? null : id);
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+
+    if (!ghost && "jx" in data) {
+      layoutGroundDOM(root, /** @type {CG} */ (data));
+      if (selectedId === id) root.classList.add("circuit-comp--selected");
+      root.addEventListener("pointerdown", onPlacedCompPointerDown);
     }
 
     return root;
@@ -1219,6 +1426,7 @@
   function buildCompElement(m, ghost) {
     if (m.kind === "resistor") return buildResistorElement(m, ghost);
     if (m.kind === "voltmeter") return buildVoltmeterElement(m, ghost);
+    if (m.kind === "ground") return buildGroundElement(m, ghost);
     return buildBatteryElement(m, ghost);
   }
 
@@ -1344,13 +1552,6 @@
       return;
     }
 
-    const fromRK = parseRoutingKey(ws.startKey);
-    /** @type {WirePort} */
-    const fromPort =
-      fromRK.kind === "T"
-        ? { kind: "T", compId: fromRK.compId, ti: /** @type {0 | 1} */ (fromRK.ti) }
-        : { kind: "N", nid: fromRK.nid };
-
     /** @type {WirePort | null} */
     let toPort = null;
     if (endHit?.kind === "T") {
@@ -1359,18 +1560,42 @@
       toPort = { kind: "N", nid: endHit.nodeId };
     }
 
-    if (toPort !== null && routingKeyFromPort(fromPort) === routingKeyFromPort(toPort)) {
-      renderAll();
-      return;
-    }
-
     commit(() => {
+      const fromRK = parseRoutingKey(ws.startKey);
+      /** @type {WirePort} */
+      let fromPort;
+      if (fromRK.kind === "Seg") {
+        let nid = findWireNodeIdAt(fromRK.sx, fromRK.sy);
+        if (nid === null) {
+          nid = uid();
+          wireNodes[nid] = { x: fromRK.sx, y: fromRK.sy };
+        }
+        fromPort = { kind: "N", nid };
+      } else if (fromRK.kind === "T") {
+        fromPort = {
+          kind: "T",
+          compId: fromRK.compId,
+          ti: /** @type {0 | 1} */ (fromRK.ti),
+        };
+      } else {
+        fromPort = { kind: "N", nid: /** @type {{ nid: string }} */ (fromRK).nid };
+      }
+
       let finalTo = toPort;
       if (!finalTo) {
-        const nid = uid();
-        wireNodes[nid] = { x: dest.x, y: dest.y };
+        let nid = findWireNodeIdAt(dest.x, dest.y);
+        if (nid === null) {
+          nid = uid();
+          wireNodes[nid] = { x: dest.x, y: dest.y };
+        }
         finalTo = { kind: "N", nid };
       }
+
+      if (routingKeyFromPort(fromPort) === routingKeyFromPort(finalTo)) {
+        pruneWireNodes();
+        return;
+      }
+
       wires.push({
         id: uid(),
         from: fromPort,
@@ -1586,6 +1811,8 @@
         clipboardTpl = { kind: "resistor", orient: /** @type {CR} */ (m).orient };
       } else if (m.kind === "voltmeter") {
         clipboardTpl = { kind: "voltmeter", orient: /** @type {CV} */ (m).orient };
+      } else if (m.kind === "ground") {
+        clipboardTpl = { kind: "ground" };
       } else {
         clipboardTpl = { kind: "battery" };
       }
@@ -1609,6 +1836,19 @@
             jy: 0,
           };
           placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
+          comps.push(nw);
+          selectedId = nw.id;
+        } else if (clipboardTpl.kind === "ground") {
+          groundSeq += 1;
+          /** @type {CG} */
+          const nw = {
+            kind: "ground",
+            id: uid(),
+            gIndex: groundSeq,
+            jx: 0,
+            jy: 0,
+          };
+          placeGroundAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
           selectedId = nw.id;
         } else if (clipboardTpl.kind === "voltmeter") {
@@ -1679,6 +1919,13 @@
     m.jy = pMid.y - SPAN_PX / 2;
   }
 
+  /** @param {CG} m */
+  function placeGroundAtWorldPoint(wx, wy, m) {
+    const p = snapToIntersection(wx, wy);
+    m.jx = p.x;
+    m.jy = p.y;
+  }
+
   function removePaletteGhost() {
     dragGhost?.remove();
     dragGhost = null;
@@ -1731,6 +1978,9 @@
       );
       dragGhost.style.minWidth = o === "h" ? `${PACK_W}px` : "";
       dragGhost.style.minHeight = o === "v" ? `${PACK_W}px` : "";
+    } else if (kind === "ground") {
+      dragGhost = buildGroundElement({ id: "_g", gIndex: groundSeq + 1, jx: 0, jy: 0 }, true);
+      dragGhost.style.minWidth = `${PACK_W}px`;
     } else {
       dragGhost = buildBatteryElement({ id: "_g", vIndex: batterySeq + 1, jx: 0, jy: 0 }, true);
       dragGhost.style.minHeight = `${PACK_W}px`;
@@ -1771,6 +2021,13 @@
   }
 
   /** @param {PointerEvent} e */
+  function onPickGroundDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (!pickGroundBtn) return;
+    startPaletteDrag("ground", e, pickGroundBtn);
+  }
+
+  /** @param {PointerEvent} e */
   function onPaletteDragMove(e) {
     if (palettePickPointerId !== e.pointerId) return;
     if (!dragGhost) return;
@@ -1792,7 +2049,9 @@
           ? pickResistorBtn
           : paletteDragKind === "voltmeter"
             ? pickVoltmeterBtn
-            : pickBatteryBtn;
+            : paletteDragKind === "ground"
+              ? pickGroundBtn
+              : pickBatteryBtn;
       pickBtn?.releasePointerCapture(e.pointerId);
     } catch (_) {}
 
@@ -1850,6 +2109,21 @@
           comps.push(nw);
           selectedId = nw.id;
         });
+      } else if (paletteDragKind === "ground") {
+        commit(() => {
+          groundSeq += 1;
+          /** @type {CG} */
+          const nw = {
+            kind: "ground",
+            id: uid(),
+            gIndex: groundSeq,
+            jx: 0,
+            jy: 0,
+          };
+          placeGroundAtWorldPoint(wx, wy, nw);
+          comps.push(nw);
+          selectedId = nw.id;
+        });
       } else {
         commit(() => {
           batterySeq += 1;
@@ -1877,7 +2151,7 @@
 
     const { wx, wy } = clientToWorld(e.clientX, e.clientY);
     const j = findNearestJunction(wx, wy, JOINT_HIT_R);
-    if (j && j.kind === "N") {
+    if (j && (j.kind === "N" || j.kind === "S")) {
       e.preventDefault();
       e.stopPropagation();
       startWireRouting(j, e.pointerId);
@@ -1947,6 +2221,7 @@
 
   pickResistorBtn.addEventListener("pointerdown", onPickResistorDown);
   pickBatteryBtn.addEventListener("pointerdown", onPickBatteryDown);
+  pickGroundBtn?.addEventListener("pointerdown", onPickGroundDown);
   if (pickVoltmeterBtn) pickVoltmeterBtn.addEventListener("pointerdown", onPickVoltmeterDown);
 
   menuFileNewBtn?.addEventListener("click", () => newCircuitPrompt());

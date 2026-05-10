@@ -7,6 +7,14 @@
 
 const DEFAULT_BAT_V = 5;
 const DEFAULT_R_OHM = 1000;
+/** Stabilisation numérique globale: fuite très faible de chaque nœud vers 0. */
+const DEFAULT_RSHUNT_OHM = 1e12;
+
+/** Nœud référence SPICE : évite clé `0` nombre vs chaîne dans le graphe DC. */
+function normSpiceNodeLabel(n) {
+  if (n === 0 || n === "0") return "0";
+  return String(n);
+}
 
 /** @param {WirePort} p */
 function portWireKey(p) {
@@ -64,11 +72,193 @@ class UF {
   }
 }
 
+/**
+ * Nœuds apparaissant sur piles / résistances mais sans chaîne conductrice jusqu’à la réf « 0 ».
+ * Voltmètre idéal : hors graphe DC (aucun courant de fuite modelisé).
+ * @param {Array<[string, string]>} edges couples de nœuds SPICE distincts du marqueur « FLOAT ».
+ * @returns {string[]}
+ */
+function spiceNodesWithoutDcReturnToGround(edges, refRaw = "0") {
+  const ref = normSpiceNodeLabel(refRaw);
+  /** @type {Map<string, Set<string>>} */
+  const adj = new Map();
+  for (const [ar, br] of edges) {
+    const a = normSpiceNodeLabel(ar);
+    const b = normSpiceNodeLabel(br);
+    if (!adj.has(a)) adj.set(a, new Set());
+    if (!adj.has(b)) adj.set(b, new Set());
+    /** @type {Set<string>} */ (adj.get(a)).add(b);
+    /** @type {Set<string>} */ (adj.get(b)).add(a);
+  }
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @type {string[]} */
+  const stack = [ref];
+  seen.add(ref);
+  while (stack.length) {
+    const u = /** @type {string} */ (stack.pop());
+    const nbors = adj.get(u);
+    if (!nbors) continue;
+    for (const v of nbors) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        stack.push(v);
+      }
+    }
+  }
+  /** @type {Set<string>} */
+  const all = new Set();
+  for (const [a, b] of edges) {
+    all.add(a);
+    all.add(b);
+  }
+  return [...all].filter((n) => !seen.has(n)).sort(ndCompareAlnum);
+}
+
+/** e.g. N2 avant N10 */
+function ndCompareAlnum(a, b) {
+  const ma = /^N(\d+)$/i.exec(a);
+  const mb = /^N(\d+)$/i.exec(b);
+  if (ma && mb) return Number(ma[1]) - Number(mb[1]);
+  return a.localeCompare(b);
+}
+
 /** @param {number} gs */
 function spanPx(gs) {
   const g = Number(gs);
   const cell = Number.isFinite(g) && g > 0 ? g : 28;
   return 4 * cell;
+}
+
+/**
+ * Coordonnées des bornes d'un composant (mêmes conventions que terminalsOfComp côté éditeur).
+ * @param {object} comp
+ * @param {number} span pixels grille (4 cases)
+ * @returns {{ ti: 0 | 1; x: number; y: number }[]}
+ */
+function terminalCoords(comp, span) {
+  const c = /** @type {{ kind?: string; jx?: number; jy?: number; orient?: string }} */ (comp);
+  const jx = Number(c.jx);
+  const jy = Number(c.jy);
+  if (!Number.isFinite(jx) || !Number.isFinite(jy)) return [];
+  const k = c.kind;
+  if (k === "resistor" || k === "voltmeter") {
+    if (c.orient === "v") {
+      return [
+        { ti: /** @type {0|1} */ (0), x: jx, y: jy },
+        { ti: /** @type {0|1} */ (1), x: jx, y: jy + span },
+      ];
+    }
+    return [
+      { ti: /** @type {0|1} */ (0), x: jx, y: jy },
+      { ti: /** @type {0|1} */ (1), x: jx + span, y: jy },
+    ];
+  }
+  if (k === "battery") {
+    return [
+      { ti: /** @type {0|1} */ (0), x: jx, y: jy },
+      { ti: /** @type {0|1} */ (1), x: jx, y: jy + span },
+    ];
+  }
+  if (k === "ground") {
+    return [{ ti: /** @type {0|1} */ (0), x: jx, y: jy }];
+  }
+  return [];
+}
+
+/** Point sur segment Manhattan (axe-aligné). Tolérance pour erreur d'arrondi grille. */
+function pointOnSegment(px, py, ax, ay, bx, by, tol = 0.5) {
+  if (Math.abs(ax - bx) <= tol) {
+    if (Math.abs(px - ax) > tol) return false;
+    const ymin = Math.min(ay, by) - tol;
+    const ymax = Math.max(ay, by) + tol;
+    return py >= ymin && py <= ymax;
+  }
+  if (Math.abs(ay - by) <= tol) {
+    if (Math.abs(py - ay) > tol) return false;
+    const xmin = Math.min(ax, bx) - tol;
+    const xmax = Math.max(ax, bx) + tol;
+    return px >= xmin && px <= xmax;
+  }
+  /* Segment quelconque (sécurité) : produit vectoriel + projection bornée. */
+  const dx = bx - ax;
+  const dy = by - ay;
+  const cx = px - ax;
+  const cy = py - ay;
+  if (Math.abs(dx * cy - dy * cx) > tol) return false;
+  const dot = cx * dx + cy * dy;
+  const lenSq = dx * dx + dy * dy;
+  return dot >= -tol && dot <= lenSq + tol;
+}
+
+/**
+ * Réconcilie la connectivité électrique à partir de la géométrie :
+ *   - borne composant tombant sur un segment de fil   → union
+ *   - extrémité d'un fil tombant sur le segment d'un autre → union (jonction en T)
+ *
+ * @param {UF} uf
+ * @param {unknown[]} comps
+ * @param {Wire[]} wires
+ * @param {number} span
+ */
+function reconcileGeometry(uf, comps, wires, span) {
+  /** @type {{ x: number; y: number; key: string }[]} */
+  const featurePoints = [];
+
+  for (const c of comps) {
+    if (!c || typeof c !== "object") continue;
+    const id = /** @type {{ id?: string }} */ (c).id;
+    if (typeof id !== "string") continue;
+    for (const t of terminalCoords(/** @type {object} */ (c), span)) {
+      featurePoints.push({
+        x: t.x,
+        y: t.y,
+        key: portWireKey({ kind: "T", compId: id, ti: t.ti }),
+      });
+    }
+  }
+
+  for (const w of wires) {
+    const pts = w.points;
+    if (!Array.isArray(pts) || pts.length < 1) continue;
+    const a = pts[0];
+    const b = pts[pts.length - 1];
+    if (a && Number.isFinite(a.x) && Number.isFinite(a.y))
+      featurePoints.push({ x: a.x, y: a.y, key: portWireKey(w.from) });
+    if (b && Number.isFinite(b.x) && Number.isFinite(b.y))
+      featurePoints.push({ x: b.x, y: b.y, key: portWireKey(w.to) });
+  }
+
+  /** @type {{ ax:number; ay:number; bx:number; by:number; key:string }[]} */
+  const segments = [];
+  for (const w of wires) {
+    const pts = w.points;
+    if (!Array.isArray(pts) || pts.length < 2) continue;
+    const wireKey = portWireKey(w.from);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      if (
+        !a ||
+        !b ||
+        !Number.isFinite(a.x) ||
+        !Number.isFinite(a.y) ||
+        !Number.isFinite(b.x) ||
+        !Number.isFinite(b.y)
+      )
+        continue;
+      segments.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, key: wireKey });
+    }
+  }
+
+  for (const p of featurePoints) {
+    for (const s of segments) {
+      if (uf.find(p.key) === uf.find(s.key)) continue;
+      if (pointOnSegment(p.x, p.y, s.ax, s.ay, s.bx, s.by)) {
+        uf.union(p.key, s.key);
+      }
+    }
+  }
 }
 
 /**
@@ -117,6 +307,9 @@ function logicalTerminals(comp) {
       { ti: /** @type {0|1} */ (1), label: `${id}:V${vn}:−` },
     ];
   }
+  if (kind === "ground") {
+    return [{ ti: /** @type {0|1} */ (0), label: `${id}:GND` }];
+  }
   return [];
 }
 
@@ -158,7 +351,6 @@ export function buildNgspiceDeck(state, _opts) {
       : _opts?.gridStep;
 
   const span = spanPx(/** @type {number} */ (gridStep || 28));
-  void span;
 
   const batteries = comps.filter((c) => c && typeof c === "object" && c.kind === "battery");
   if (batteries.length === 0) {
@@ -201,6 +393,9 @@ export function buildNgspiceDeck(state, _opts) {
     uf.union(portWireKey(w.from), portWireKey(w.to));
   }
 
+  /* Jonctions en T : borne ou extrémité de fil tombant sur un segment d'un autre fil. */
+  reconcileGeometry(uf, comps, wires, span);
+
   /** Batterie − (broche ti=1) → référence nœud 0 */
   let gndRoot = null;
   for (const b of batteries) {
@@ -211,6 +406,18 @@ export function buildNgspiceDeck(state, _opts) {
     if (gndRoot === null) gndRoot = r;
     else uf.union(gndRoot, r);
     gndRoot = uf.find(kMinus);
+  }
+
+  /** Masse schématique : même équipotentiel que la borne − pile (nœud SPICE 0 après assignation). */
+  const grounds = comps.filter((c) => c && typeof c === "object" && c.kind === "ground");
+  if (batteries.length > 0 && grounds.length > 0) {
+    const b0id = /** @type {{ id: string }} */ (batteries[0]).id;
+    const kBatMinus = portWireKey({ kind: "T", compId: b0id, ti: 1 });
+    for (const g of grounds) {
+      const gid = /** @type {{ id?: string }} */ (g).id;
+      if (typeof gid !== "string") continue;
+      uf.union(portWireKey({ kind: "T", compId: gid, ti: 0 }), kBatMinus);
+    }
   }
 
   /** @type {Set<string>} */
@@ -272,8 +479,14 @@ export function buildNgspiceDeck(state, _opts) {
   lines.push("* Circuit Simulateur grille — ngspice batch (auto-generated)");
   lines.push(".TITLE Circuit_grille_DC");
   lines.push("");
+  lines.push("* Robustesse solveur: rend les nœuds flottants calculables en mode pédagogique");
+  lines.push(`.options rshunt=${DEFAULT_RSHUNT_OHM}`);
+  lines.push("");
 
   if (errors.length === 0) {
+    /** @type {Array<[string, string]>} */
+    const dcConductiveEdges = [];
+
     lines.push("* --- Sources DC (piles)");
     for (const b of batteries) {
       const bid = sanitizeId(
@@ -291,6 +504,7 @@ export function buildNgspiceDeck(state, _opts) {
       const nm = nodeSpice(kM);
       if (np === "FLOAT" || nm === "FLOAT")
         warnings.push(`Pile ${id} : borne flottante (mal connectée).`);
+      else dcConductiveEdges.push([normSpiceNodeLabel(np), normSpiceNodeLabel(nm)]);
       lines.push(`V_${bid}_bat ${np} ${nm} DC ${v}`);
     }
 
@@ -312,7 +526,30 @@ export function buildNgspiceDeck(state, _opts) {
       const n0 = nodeSpice(k0);
       const n1 = nodeSpice(k1);
       if (n0 === "FLOAT" || n1 === "FLOAT") warnings.push(`Résistance ${cid} : nœud flottant ?`);
+      else dcConductiveEdges.push([normSpiceNodeLabel(n0), normSpiceNodeLabel(n1)]);
       lines.push(`R_${id}_ohm ${n0} ${n1} ${ohms}`);
+    }
+
+    const floatingDc = spiceNodesWithoutDcReturnToGround(dcConductiveEdges);
+    if (floatingDc.length) {
+      warnings.push(
+        `Nœuds ${floatingDc.join(
+          ", "
+        )} : pas de liaison continue (pile / résistances uniquement) vers la masse « 0 » — sous-réseau isolé. ngspice signale alors « singular matrix » sur ces nœuds. Reliez la chaîne en série jusqu’à la référence (borne − de la pile et/ou composant Masse du menu Source).`
+      );
+      lines.push("");
+      lines.push("* --- Diagnostic topologie simulateur ---");
+      lines.push(
+        `* ATTENTION nœuds sans retour au 0 de référence : ${floatingDc.join(", ")} (schéma ou fil incomplet)`
+      );
+    }
+
+    /** Nœuds du graphe pile + résistances uniquement (voltmètre idéal hors conducteur DC). */
+    /** @type {Set<string>} */
+    const dcNodeSet = new Set(["0"]);
+    for (const [a, b] of dcConductiveEdges) {
+      dcNodeSet.add(normSpiceNodeLabel(a));
+      dcNodeSet.add(normSpiceNodeLabel(b));
     }
 
     for (const comp of comps) {
@@ -327,6 +564,16 @@ export function buildNgspiceDeck(state, _opts) {
       const sn = nodeSpice(k1);
       if (sp === "FLOAT" || sn === "FLOAT")
         warnings.push(`Voltmètre V${vmIdx} (${cid}) : une borne semble isolée.`);
+      const spN = normSpiceNodeLabel(sp);
+      const snN = normSpiceNodeLabel(sn);
+      if (sp !== "FLOAT" && !dcNodeSet.has(spN))
+        warnings.push(
+          `Voltmètre V${vmIdx} (${cid}) : borne + sur « ${sp} » — aucun composant pile/résistance sur ce point (probable absence de fil jusqu’à la jonction réelle du circuit). Branchez la borne + sur le même nœud que sur le schéma.`
+        );
+      if (sn !== "FLOAT" && !dcNodeSet.has(snN))
+        warnings.push(
+          `Voltmètre V${vmIdx} (${cid}) : borne − sur « ${sn} » — aucun pile/résistance sur ce point (voir câblage).`
+        );
 
       lines.push("");
       lines.push(
