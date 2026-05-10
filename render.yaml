@@ -1,3 +1,11 @@
+# Web service Docker ( Render build : docker build + CMD npm start ).
+#
+# Obligatoire pour /espace-correction — à renseigner dans le dashboard Render
+# Dashboard → ton service → Environment → Add Environment Variable :
+#   ADMIN_USER = ton identifiant (HTTP Basic)
+#   ADMIN_PASS = ton mot de passe
+# Ces variables ne passent pas par le Dockerfile ni par npm ; le conteneur les lit au runtime.
+
 services:
   - type: web
     name: siteperso-docker

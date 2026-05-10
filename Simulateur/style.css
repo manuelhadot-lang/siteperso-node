@@ -4,7 +4,20 @@
 
 :root {
   --topbar-height: 44px;
+  --sim-panel-height: 52px;
   --grid-cell: 28px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 html,
@@ -363,34 +376,6 @@ body {
   color: #ffe4a8;
 }
 
-.simulate-actions {
-  margin-bottom: 0.85rem;
-}
-
-.simulate-run-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.95rem;
-  border: 1px solid #4d6a94;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #2a3b55 0%, #233147 100%);
-  color: #e8f0ff;
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.88rem;
-  cursor: pointer;
-}
-
-.simulate-run-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #334b6b 0%, #2a3950 100%);
-}
-
-.simulate-run-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .simulate-details {
   margin-top: 0.55rem;
 }
@@ -423,13 +408,17 @@ body {
 
 #pick-resistor,
 #pick-battery,
-#pick-voltmeter {
+#pick-voltmeter,
+#pick-ammeter,
+#pick-ohmmeter {
   cursor: grab;
 }
 
 body.is-dragging-palette #pick-resistor,
 body.is-dragging-palette #pick-battery,
-body.is-dragging-palette #pick-voltmeter {
+body.is-dragging-palette #pick-voltmeter,
+body.is-dragging-palette #pick-ammeter,
+body.is-dragging-palette #pick-ohmmeter {
   cursor: grabbing;
 }
 
@@ -442,10 +431,95 @@ body.is-dragging-palette #stage {
   top: var(--topbar-height);
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--sim-panel-height);
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+/* Bandeau simulation : volts à gauche, contrôles à droite */
+.sim-bottom-bar {
+  position: fixed;
+  z-index: 190;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--sim-panel-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #141418 0%, #0e0e12 100%);
+  border-top: 1px solid #2a3040;
+  box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.45);
+}
+
+.sim-bottom-bar__left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sim-bottom-bar__volt-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.06rem;
+  font-weight: 600;
+  color: #7dffb3;
+  letter-spacing: 0.02em;
+}
+
+.sim-bottom-bar__volt-value.sim-bottom-bar__volt-value--muted {
+  color: #8899aa;
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+
+.sim-bottom-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sim-panel-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #3d4452;
+  background: #242830;
+  color: #d8e4f8;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sim-panel-btn:hover:not(:disabled) {
+  background: #2e3440;
+  border-color: #556070;
+}
+
+.sim-panel-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.sim-panel-btn--primary {
+  background: linear-gradient(180deg, #2a5078 0%, #223a52 100%);
+  border-color: #4d6a94;
+  color: #f0f6ff;
+}
+
+.sim-panel-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #335888 0%, #294560 100%);
+}
+
+.sim-panel-btn--verify {
+  border-color: #4a5668;
+  color: #b8c8e0;
 }
 
 #stage.dragging {
@@ -472,6 +546,24 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
 }
 
 /* Position / taille fixées en JS (pixels entiers, multiples de la maille) pour coller au snap et aux composants */
+.selection-marquee {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px dashed rgba(120, 200, 255, 0.9);
+  background: rgba(70, 130, 255, 0.09);
+  pointer-events: none;
+}
+
+.selection-marquee.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
 #circuit-grid {
   position: absolute;
   z-index: 0;
@@ -500,6 +592,11 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+.wires-layer .wire-seg--selected {
+  stroke: #ffb84d;
+  stroke-width: 3;
 }
 
 .wires-layer .wire-seg--preview {
@@ -589,7 +686,7 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   text-align: center;
   letter-spacing: 0.03em;
   color: #9a9a9a;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .resistor--ghost {
@@ -672,7 +769,7 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   text-align: left;
   letter-spacing: 0.03em;
   color: #8aafdf;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .battery-sign {
@@ -737,7 +834,7 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
   opacity: 0.92;
 }
 
-.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost):not(.ground--ghost).circuit-comp--selected {
+.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost):not(.ammeter--ghost):not(.ohmmeter--ghost):not(.ground--ghost).circuit-comp--selected {
   border-radius: 4px;
   box-shadow:
     0 0 0 1px rgba(150, 195, 255, 0.28),
@@ -844,6 +941,172 @@ body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circui
 }
 
 .circuit-comp.voltmeter.circuit-comp--v .voltmeter-id {
+  flex: 0 0 var(--resistor-v-label-slot, 32px);
+  max-width: 32px;
+  margin-bottom: 0;
+  margin-right: var(--resistor-v-label-gap, 4px);
+  text-align: right;
+  padding-right: 2px;
+}
+
+.ammeter-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #d0d0d0;
+  pointer-events: none;
+}
+
+.ammeter-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.ammeter-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ammeter-circle {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+}
+
+.ammeter-glyph {
+  fill: #c6c6c6;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.ammeter--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.ammeter--ghost .ammeter-id {
+  color: #aec6ff;
+}
+
+.ammeter--ghost .ammeter-trace {
+  stroke: #7aabff;
+}
+
+.ammeter--ghost .ammeter-circle {
+  stroke: #9dc4ff;
+}
+
+.ammeter--ghost .ammeter-glyph {
+  fill: #9dc4ff;
+}
+
+.ammeter--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+.circuit-comp.ammeter.circuit-comp--v {
+  flex-direction: row;
+  align-items: flex-start;
+  width: fit-content;
+}
+
+.circuit-comp.ammeter.circuit-comp--v .ammeter-id {
+  flex: 0 0 var(--resistor-v-label-slot, 32px);
+  max-width: 32px;
+  margin-bottom: 0;
+  margin-right: var(--resistor-v-label-gap, 4px);
+  text-align: right;
+  padding-right: 2px;
+}
+
+.ohmmeter-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #d0d0d0;
+  pointer-events: none;
+}
+
+.ohmmeter-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.ohmmeter-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ohmmeter-circle {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+}
+
+.ohmmeter-glyph {
+  fill: #c6c6c6;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.ohmmeter--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.ohmmeter--ghost .ohmmeter-id {
+  color: #aec6ff;
+}
+
+.ohmmeter--ghost .ohmmeter-trace {
+  stroke: #7aabff;
+}
+
+.ohmmeter--ghost .ohmmeter-circle {
+  stroke: #9dc4ff;
+}
+
+.ohmmeter--ghost .ohmmeter-glyph {
+  fill: #9dc4ff;
+}
+
+.ohmmeter--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+.circuit-comp.ohmmeter.circuit-comp--v {
+  flex-direction: row;
+  align-items: flex-start;
+  width: fit-content;
+}
+
+.circuit-comp.ohmmeter.circuit-comp--v .ohmmeter-id {
   flex: 0 0 var(--resistor-v-label-slot, 32px);
   max-width: 32px;
   margin-bottom: 0;

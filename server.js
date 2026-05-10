@@ -28,6 +28,8 @@ const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "E
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js")).href;
 let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
+let mergeAmmeterMeasurementsFn = null;
+let mergeOhmmeterMeasurementsFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
 /**
@@ -194,6 +196,30 @@ async function getMergeVoltmeterMeasurements() {
     return mergeVoltmeterMeasurementsFn;
 }
 
+async function getMergeAmmeterMeasurements() {
+    if (mergeAmmeterMeasurementsFn) {
+        return mergeAmmeterMeasurementsFn;
+    }
+    const module = await import(ngspiceResultParserModuleUrl);
+    if (typeof module.mergeAmmeterMeasurements !== "function") {
+        throw new Error("Module mergeAmmeterMeasurements introuvable.");
+    }
+    mergeAmmeterMeasurementsFn = module.mergeAmmeterMeasurements;
+    return mergeAmmeterMeasurementsFn;
+}
+
+async function getMergeOhmmeterMeasurements() {
+    if (mergeOhmmeterMeasurementsFn) {
+        return mergeOhmmeterMeasurementsFn;
+    }
+    const module = await import(ngspiceResultParserModuleUrl);
+    if (typeof module.mergeOhmmeterMeasurements !== "function") {
+        throw new Error("Module mergeOhmmeterMeasurements introuvable.");
+    }
+    mergeOhmmeterMeasurementsFn = module.mergeOhmmeterMeasurements;
+    return mergeOhmmeterMeasurementsFn;
+}
+
 function runNgspice(netlistPath, outputPath) {
     return new Promise((resolve, reject) => {
         execFile(
@@ -220,9 +246,13 @@ app.post("/api/simulate", async (req, res) => {
     const state = req.body?.state;
     let buildNgspiceDeck;
     let mergeVoltmeterMeasurements;
+    let mergeAmmeterMeasurements;
+    let mergeOhmmeterMeasurements;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
+        mergeAmmeterMeasurements = await getMergeAmmeterMeasurements();
+        mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -264,12 +294,16 @@ app.post("/api/simulate", async (req, res) => {
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
         const voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
+        const ammeterValues = mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
+        const ohmmeterValues = mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
         res.json({
             ok: true,
             warnings: built.warnings,
             netlist: built.netlist,
             log: combinedLog || log,
-            voltmeterValues
+            voltmeterValues,
+            ammeterValues,
+            ohmmeterValues
         });
     } catch (error) {
         const missing = isNgspiceMissingError(error);
@@ -306,7 +340,9 @@ app.get('/api/counter', (req, res) => {
 // --- 6. AUTHENTIFICATION PROF ---
 const authentificationProf = (req, res, next) => {
     if (!ADMIN_USER || !ADMIN_PASS) {
-        return res.status(500).send("Configuration admin manquante sur le serveur.");
+        return res.status(500).send(
+            "Configuration admin manquante : définir ADMIN_USER et ADMIN_PASS dans les variables d'environnement du service (sur Render : Environment du Web Service, pas dans le Dockerfile)."
+        );
     }
 
     const auth = req.headers.authorization;

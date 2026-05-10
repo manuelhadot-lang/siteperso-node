@@ -142,7 +142,7 @@ function terminalCoords(comp, span) {
   const jy = Number(c.jy);
   if (!Number.isFinite(jx) || !Number.isFinite(jy)) return [];
   const k = c.kind;
-  if (k === "resistor" || k === "voltmeter") {
+  if (k === "resistor" || k === "voltmeter" || k === "ammeter" || k === "ohmmeter") {
     if (c.orient === "v") {
       return [
         { ti: /** @type {0|1} */ (0), x: jx, y: jy },
@@ -299,12 +299,42 @@ function logicalTerminals(comp) {
       { ti: /** @type {0|1} */ (1), label: `${id}:Vm${vm}:B` },
     ];
   }
+  if (kind === "ammeter") {
+    const o = /** @type {{ amIndex?: number; orient?: string }} */ (comp);
+    const ai = typeof o.amIndex === "number" ? o.amIndex : 0;
+    const hv = o.orient === "h" ? "h" : "v";
+    if (hv === "h") {
+      return [
+        { ti: /** @type {0|1} */ (0), label: `${id}:Am${ai}:L` },
+        { ti: /** @type {0|1} */ (1), label: `${id}:Am${ai}:R` },
+      ];
+    }
+    return [
+      { ti: /** @type {0|1} */ (0), label: `${id}:Am${ai}:T` },
+      { ti: /** @type {0|1} */ (1), label: `${id}:Am${ai}:B` },
+    ];
+  }
+  if (kind === "ohmmeter") {
+    const o = /** @type {{ omIndex?: number; orient?: string }} */ (comp);
+    const oi = typeof o.omIndex === "number" ? o.omIndex : 0;
+    const hv = o.orient === "h" ? "h" : "v";
+    if (hv === "h") {
+      return [
+        { ti: /** @type {0|1} */ (0), label: `${id}:Om${oi}:L` },
+        { ti: /** @type {0|1} */ (1), label: `${id}:Om${oi}:R` },
+      ];
+    }
+    return [
+      { ti: /** @type {0|1} */ (0), label: `${id}:Om${oi}:T` },
+      { ti: /** @type {0|1} */ (1), label: `${id}:Om${oi}:B` },
+    ];
+  }
   if (kind === "battery") {
     const o = /** @type {{ vIndex?: number }} */ (comp);
     const vn = typeof o.vIndex === "number" ? o.vIndex : 0;
     return [
-      { ti: /** @type {0|1} */ (0), label: `${id}:V${vn}:+` },
-      { ti: /** @type {0|1} */ (1), label: `${id}:V${vn}:−` },
+      { ti: /** @type {0|1} */ (0), label: `${id}:E${vn}:+` },
+      { ti: /** @type {0|1} */ (1), label: `${id}:E${vn}:−` },
     ];
   }
   if (kind === "ground") {
@@ -337,6 +367,8 @@ export function buildNgspiceDeck(state, _opts) {
       warnings,
       netlist: "",
       voltmeters: [],
+      ammeters: [],
+      ohmeters: [],
       nodeMeasures: [],
     };
   }
@@ -353,8 +385,12 @@ export function buildNgspiceDeck(state, _opts) {
   const span = spanPx(/** @type {number} */ (gridStep || 28));
 
   const batteries = comps.filter((c) => c && typeof c === "object" && c.kind === "battery");
-  if (batteries.length === 0) {
-    errors.push("Ajoutez au moins une alimentation (pile) pour la simulation DC.");
+  /** @type {unknown[]} */
+  const ohmmeterComps = comps.filter((c) => c && typeof c === "object" && c.kind === "ohmmeter");
+  if (batteries.length === 0 && ohmmeterComps.length === 0) {
+    errors.push(
+      "Ajoutez au moins une alimentation (pile) ou un ohmètre pour la simulation DC."
+    );
   }
 
   /** @type {Wire[]} */
@@ -418,6 +454,24 @@ export function buildNgspiceDeck(state, _opts) {
       if (typeof gid !== "string") continue;
       uf.union(portWireKey({ kind: "T", compId: gid, ti: 0 }), kBatMinus);
     }
+  } else if (batteries.length === 0 && grounds.length > 0) {
+    /** Schéma sans pile : équipotential commun des masses → nœud SPICE 0 après assignation. */
+    /** @type {{ kind: 'T'; compId: string; ti: 0 | 1 } | null} */
+    let firstGroundPk = null;
+    for (const g of grounds) {
+      const gid = /** @type {{ id?: string }} */ (g).id;
+      if (typeof gid !== "string") continue;
+      const kg = {
+        kind: /** @type {'T'} */ ("T"),
+        compId: gid,
+        ti: /** @type {0|1} */ (0),
+      };
+      const kKey = portWireKey(kg);
+      uf.add(kKey);
+      if (firstGroundPk === null) firstGroundPk = kg;
+      else uf.union(portWireKey(firstGroundPk), kKey);
+    }
+    if (firstGroundPk !== null) gndRoot = uf.find(portWireKey(firstGroundPk));
   }
 
   /** @type {Set<string>} */
@@ -432,6 +486,20 @@ export function buildNgspiceDeck(state, _opts) {
   for (const w of wires) {
     roots.add(uf.find(portWireKey(w.from)));
     roots.add(uf.find(portWireKey(w.to)));
+  }
+
+  if (
+    errors.length === 0 &&
+    gndRoot === null &&
+    roots.size > 0 &&
+    ohmmeterComps.length > 0 &&
+    batteries.length === 0
+  ) {
+    const [anyRoot] = roots;
+    gndRoot = anyRoot;
+    warnings.push(
+      "Schéma sans pile ni masse : référence SPICE arbitraire pour la polarisation DC (ohmètre + résistances). Préférez placer une masse sur un point fixe pour un repère clair."
+    );
   }
 
   if (errors.length === 0 && gndRoot === null && roots.size === 0) {
@@ -472,6 +540,12 @@ export function buildNgspiceDeck(state, _opts) {
   /** @typedef {{ vmIndex: number; displayLabel: string; spicePlus: string; spiceMinus: string; spiceId: string }} VmInfo */
   /** @type {VmInfo[]} */
   const voltmeters = [];
+  /** @typedef {{ amIndex: number; displayLabel: string; spiceVInstance: string; spicePlus: string; spiceMinus: string }} AmInfo */
+  /** @type {AmInfo[]} */
+  const ammeters = [];
+  /** @typedef {{ omIndex: number; displayLabel: string; spiceVInstance: string; spicePlus: string; spiceMinus: string }} OmInfo */
+  /** @type {OmInfo[]} */
+  const ohmeters = [];
 
   /** @type {string[]} lines */
   const lines = [];
@@ -530,12 +604,69 @@ export function buildNgspiceDeck(state, _opts) {
       lines.push(`R_${id}_ohm ${n0} ${n1} ${ohms}`);
     }
 
+    lines.push("");
+    lines.push("* --- Ohmmètres (source V DC 1 interne sans pile sur schéma → R équivalent = |1 / i(V)| en Ω)");
+    for (const comp of comps) {
+      if (!comp || typeof comp !== "object" || comp.kind !== "ohmmeter") continue;
+      const o = /** @type {{ id: string; omIndex?: number }} */ (/** @type {object} */ (comp));
+      const cid = o.id;
+      const omIdx = typeof o.omIndex === "number" ? o.omIndex : 0;
+      const sid = sanitizeId(cid, "o");
+      const spiceVInstance = `Vioh_${sid}`;
+      const k0 = portWireKey({ kind: "T", compId: cid, ti: 0 });
+      const k1 = portWireKey({ kind: "T", compId: cid, ti: 1 });
+      const np = nodeSpice(k0);
+      const nm = nodeSpice(k1);
+      if (np === "FLOAT" || nm === "FLOAT")
+        warnings.push(`Ohmmètre Ω${omIdx} (${cid}) : une borne semble isolée.`);
+      else dcConductiveEdges.push([normSpiceNodeLabel(np), normSpiceNodeLabel(nm)]);
+      lines.push(`* Ohmmètre Ω${omIdx} (${cid}) : polarisation série 1 V (${spiceVInstance})`);
+      lines.push(`${spiceVInstance} ${np} ${nm} DC 1`);
+      ohmeters.push({
+        omIndex: omIdx,
+        displayLabel: `Ω${omIdx}`,
+        spiceVInstance,
+        spicePlus: String(np),
+        spiceMinus: String(nm),
+      });
+    }
+
+    lines.push("");
+    lines.push("* --- Ampèremètres (source V DC 0 en série → courant = i(instance))");
+    for (const comp of comps) {
+      if (!comp || typeof comp !== "object" || comp.kind !== "ammeter") continue;
+      const o = /** @type {{ id: string; amIndex?: number }} */ (/** @type {object} */ (comp));
+      const cid = o.id;
+      const amIdx = typeof o.amIndex === "number" ? o.amIndex : 0;
+      const sid = sanitizeId(cid, "m");
+      /** Unique instance name pour print i(...) */
+      const spiceVInstance = `Viam_${sid}`;
+      const k0 = portWireKey({ kind: "T", compId: cid, ti: 0 });
+      const k1 = portWireKey({ kind: "T", compId: cid, ti: 1 });
+      const np = nodeSpice(k0);
+      const nm = nodeSpice(k1);
+      if (np === "FLOAT" || nm === "FLOAT")
+        warnings.push(`Ampèremètre A${amIdx} (${cid}) : une borne semble isolée.`);
+      else dcConductiveEdges.push([normSpiceNodeLabel(np), normSpiceNodeLabel(nm)]);
+      lines.push(
+        `* Ampèremètre A${amIdx} (${cid}) : série, ${spiceVInstance} ${np} ${nm} DC 0`
+      );
+      lines.push(`${spiceVInstance} ${np} ${nm} DC 0`);
+      ammeters.push({
+        amIndex: amIdx,
+        displayLabel: `A${amIdx}`,
+        spiceVInstance,
+        spicePlus: String(np),
+        spiceMinus: String(nm),
+      });
+    }
+
     const floatingDc = spiceNodesWithoutDcReturnToGround(dcConductiveEdges);
     if (floatingDc.length) {
       warnings.push(
         `Nœuds ${floatingDc.join(
           ", "
-        )} : pas de liaison continue (pile / résistances uniquement) vers la masse « 0 » — sous-réseau isolé. ngspice signale alors « singular matrix » sur ces nœuds. Reliez la chaîne en série jusqu’à la référence (borne − de la pile et/ou composant Masse du menu Source).`
+        )} : pas de liaison continue (pile / résistances / ohmmètre ampèremètres) vers la masse « 0 » — sous-réseau isolé. ngspice peut signaler une matrice singulière sur ces nœuds. Ajoutez la masse, une pile, ou un ohmètre entre vos points si besoin.`
       );
       lines.push("");
       lines.push("* --- Diagnostic topologie simulateur ---");
@@ -544,7 +675,7 @@ export function buildNgspiceDeck(state, _opts) {
       );
     }
 
-    /** Nœuds du graphe pile + résistances uniquement (voltmètre idéal hors conducteur DC). */
+    /** Nœuds du graphe pile + résistances + ohmmètres (V=1 série) + ampèremètres (V=0 série) ; voltmètres hors conducteurs. */
     /** @type {Set<string>} */
     const dcNodeSet = new Set(["0"]);
     for (const [a, b] of dcConductiveEdges) {
@@ -617,6 +748,26 @@ export function buildNgspiceDeck(state, _opts) {
     }
 
     lines.push(`  echo __VM_END__`);
+
+    lines.push(`  echo __AM_BEGIN__`);
+    let ai = 0;
+    for (const am of ammeters) {
+      const ak = `${am.displayLabel}_${ai++}`;
+      lines.push(`  echo "__AM_ROW__|${ak}|${am.displayLabel}|${am.spiceVInstance}"`);
+      lines.push(`  print i(${am.spiceVInstance})`);
+    }
+    lines.push(`  echo __AM_END__`);
+
+    lines.push(`  echo __OH_BEGIN__`);
+    let oi = 0;
+    for (const om of ohmeters) {
+      const ok = `ohm_${om.omIndex}_${oi++}`;
+      /* Marqueur 100 % ASCII : certains ngspice / encodages Windows plantent sur « Ω » dans .CONTROL */
+      lines.push(`  echo "__OH_ROW__|${ok}|${om.omIndex}|${om.spiceVInstance}"`);
+      lines.push(`  print i(${om.spiceVInstance})`);
+    }
+    lines.push(`  echo __OH_END__`);
+
     lines.push("  quit");
     lines.push(".ENDC");
 
@@ -629,8 +780,26 @@ export function buildNgspiceDeck(state, _opts) {
   const netlist = errors.length ? `* erreurs dans build — deck vide.\n${errors.join("\n* ")}\n` : lines.join("\n");
 
   if (errors.length) {
-    return { ok: false, errors, warnings, netlist, voltmeters, nodeMeasures: [] };
+    return {
+      ok: false,
+      errors,
+      warnings,
+      netlist,
+      voltmeters,
+      ammeters,
+      ohmeters: [],
+      nodeMeasures: [],
+    };
   }
 
-  return { ok: true, errors: [], warnings, netlist, voltmeters, nodeMeasures: [] };
+  return {
+    ok: true,
+    errors: [],
+    warnings,
+    netlist,
+    voltmeters,
+    ammeters,
+    ohmeters,
+    nodeMeasures: [],
+  };
 }

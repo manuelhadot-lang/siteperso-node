@@ -7,6 +7,8 @@
   const pickResistorBtn = document.getElementById("pick-resistor");
   const pickBatteryBtn = document.getElementById("pick-battery");
   const pickVoltmeterBtn = document.getElementById("pick-voltmeter");
+  const pickAmmeterBtn = document.getElementById("pick-ammeter");
+  const pickOhmmeterBtn = document.getElementById("pick-ohmmeter");
   const pickGroundBtn = document.getElementById("pick-ground");
   const circuitFileImportInput = /** @type {HTMLInputElement | null} */ (
     document.getElementById("circuit-file-import")
@@ -17,11 +19,13 @@
   const menuFileSaveAsBtn = document.getElementById("menu-file-save-as");
 
   /** @typedef {'h' | 'v'} Orient */
-  /** @typedef {{ kind: 'resistor'; id: string; rIndex: number; jx: number; jy: number; orient: Orient }} CR */
+  /** @typedef {{ kind: 'resistor'; id: string; rIndex: number; jx: number; jy: number; orient: Orient; rOhms?: number }} CR */
   /** @typedef {{ kind: 'voltmeter'; id: string; vmIndex: number; jx: number; jy: number; orient: Orient }} CV */
-  /** @typedef {{ kind: 'battery'; id: string; vIndex: number; jx: number; jy: number }} CB */
+  /** @typedef {{ kind: 'ammeter'; id: string; amIndex: number; jx: number; jy: number; orient: Orient }} CA */
+  /** @typedef {{ kind: 'ohmmeter'; id: string; omIndex: number; jx: number; jy: number; orient: Orient }} CO */
+  /** @typedef {{ kind: 'battery'; id: string; vIndex: number; jx: number; jy: number; vVolts?: number }} CB */
   /** @typedef {{ kind: 'ground'; id: string; gIndex: number; jx: number; jy: number }} CG */
-  /** @typedef {CR | CB | CV | CG} CircuitComp */
+  /** @typedef {CR | CB | CV | CA | CO | CG} CircuitComp */
   /** @typedef {{ kind: 'T'; compId: string; ti: 0 | 1 } | { kind: 'N'; nid: string }} WirePort */
   /** @typedef {{ id: string; from: WirePort; to: WirePort; points: { x: number; y: number }[] }} Wire */
   /** @typedef {{ x: number; y: number; key: string; kind: 'T'; compId: string; ti: 0 | 1 } | { x: number; y: number; key: string; kind: 'N'; nodeId: string } | { x: number; y: number; key: string; kind: 'S' }} JunctionHit */
@@ -68,6 +72,101 @@
 
   const OHM = "\u2126";
 
+  const DEFAULT_R_OHMS = 1000;
+  const DEFAULT_BAT_VOLT = 5;
+
+  /** @param {CR} cr */
+  function getCompROhms(cr) {
+    const n =
+      typeof cr.rOhms === "number" && Number.isFinite(cr.rOhms) && cr.rOhms > 0 ? cr.rOhms : DEFAULT_R_OHMS;
+    return n;
+  }
+
+  /** @param {CB} b */
+  function getCompVBat(b) {
+    const n =
+      typeof b.vVolts === "number" && Number.isFinite(b.vVolts) && b.vVolts > 0 ? b.vVolts : DEFAULT_BAT_VOLT;
+    return n;
+  }
+
+  /** @param {number} ohms */
+  function formatOhmsForDisplay(ohms) {
+    if (Number.isInteger(ohms) && ohms >= 1000 && ohms % 1000 === 0 && ohms < 1000000)
+      return `${ohms / 1000} k${OHM}`;
+    if (ohms >= 1 && ohms === Math.floor(ohms)) return `${ohms}${OHM}`;
+    return `${ohms}${OHM}`;
+  }
+
+  /** @param {number} v */
+  function formatBatVoltsForDisplay(v) {
+    const r = Math.round(v * 10000) / 10000;
+    if (r === Math.floor(r)) return `${r}V`;
+    return `${String(r).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}V`;
+  }
+
+  /** @param {CircuitComp} m */
+  function tryEditCompValueInteractive(m) {
+    if (dragGhost || wireSession) return;
+    if (m.kind === "resistor") {
+      const r = /** @type {CR} */ (m);
+      const cur = getCompROhms(r);
+      const raw = typeof window.prompt === "function" ? window.prompt("Résistance (Ω, > 0)", String(cur)) : null;
+      if (raw === null) return;
+      const parsed = Number(String(raw).replace(/\s/g, "").replace(",", "."));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        if (typeof window.alert === "function") window.alert("Valeur invalide : entrez un nombre strictement positif (ohms).");
+        return;
+      }
+      commit(() => {
+        r.rOhms = parsed;
+      });
+      return;
+    }
+    if (m.kind === "battery") {
+      const b = /** @type {CB} */ (m);
+      const cur = getCompVBat(b);
+      const raw = typeof window.prompt === "function" ? window.prompt("Tension de la pile (V, > 0)", String(cur)) : null;
+      if (raw === null) return;
+      const parsed = Number(String(raw).replace(/\s/g, "").replace(",", "."));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        if (typeof window.alert === "function") window.alert("Valeur invalide : entrez une tension strictement positive (volts).");
+        return;
+      }
+      commit(() => {
+        b.vVolts = parsed;
+      });
+    }
+  }
+
+  /**
+   * Édition valeur R / pile : clic sur l’étiquette de valeur (ne déclenche pas le déplacement).
+   * @param {HTMLElement} root
+   * @param {"resistor" | "battery"} kind
+   * @param {string} sid
+   */
+  function wireCompValueEditing(root, kind, sid) {
+    const valSel = kind === "resistor" ? ".resistor-value" : ".battery-value";
+    const valEl = root.querySelector(valSel);
+    if (!(valEl instanceof HTMLElement)) return;
+    valEl.style.cursor = "pointer";
+    valEl.setAttribute(
+      "title",
+      kind === "resistor" ? "Cliquer pour modifier la résistance (Ω)" : "Cliquer pour modifier la tension (V)"
+    );
+    valEl.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      ev.stopPropagation();
+    });
+    valEl.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const m = getModel(sid);
+      if (!m) return;
+      if (kind === "resistor" && m.kind !== "resistor") return;
+      if (kind === "battery" && m.kind !== "battery") return;
+      tryEditCompValueInteractive(m);
+    });
+  }
+
   /** Proximité des jonctions rouges (px monde) et accrochage à la fin du tracé */
   const JOINT_HIT_R = 15;
   const WIRE_END_SNAP_R = 18;
@@ -93,13 +192,61 @@
   let wiredTerminalKeys = new Set();
   let resistorSeq = 0;
   let voltmeterSeq = 0;
+  let ammeterSeq = 0;
+  let ohmmeterSeq = 0;
   let batterySeq = 0;
   let groundSeq = 0;
 
-  /** @type {string | null} */
-  let selectedId = null;
+  /** Sélection multiple : composants + fils ; copie / rotation = un seul composant sélectionné. */
+  /** @type {Set<string>} */
+  let selectedCompIds = new Set();
+  /** @type {Set<string>} */
+  let selectedWireIds = new Set();
 
-  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'battery' } | { kind: 'ground' }} */
+  /** @returns {string | null} id si exactement un composant sélectionné */
+  function soleSelectedCompId() {
+    if (selectedCompIds.size !== 1) return null;
+    const [only] = /** @type {string[]} */ ([...selectedCompIds]);
+    return typeof only === "string" ? only : null;
+  }
+
+  function clearInteractionSelection() {
+    selectedCompIds.clear();
+    selectedWireIds.clear();
+  }
+
+  function pruneStaleSelection() {
+    selectedCompIds = new Set([...selectedCompIds].filter((id) => comps.some((c) => c.id === id)));
+    selectedWireIds = new Set([...selectedWireIds].filter((id) => wires.some((w) => w.id === id)));
+  }
+
+  /** @param {string} cid */
+  function selectSingleCompOnly(cid) {
+    selectedCompIds = new Set([cid]);
+    selectedWireIds.clear();
+  }
+
+  /** @param {string} wid */
+  function selectSingleWireOnly(wid) {
+    selectedWireIds = new Set([wid]);
+    selectedCompIds.clear();
+  }
+
+  /** Hit fil (px monde). */
+  const WIRE_PICK_R_PX = 9;
+  /** Encadré trop petit → ignoré. */
+  const MARQUEE_MIN_DRAG_PX = 2;
+
+  /** @type {null | {
+   *   pointerId: number;
+   *   x0: number;
+   *   y0: number;
+   *   x1: number;
+   *   y1: number;
+   * }} */
+  let marqueeSession = null;
+
+  /** @type {null | { kind: 'resistor'; orient: Orient } | { kind: 'voltmeter'; orient: Orient } | { kind: 'ammeter'; orient: Orient } | { kind: 'ohmmeter'; orient: Orient } | { kind: 'battery' } | { kind: 'ground' }} */
   let clipboardTpl = null;
 
   let lastPointerWorld = { wx: 0, wy: 0 };
@@ -118,10 +265,150 @@
 
   /** @type {HTMLElement | null} */
   let dragGhost = null;
-  /** @type {'resistor' | 'voltmeter' | 'battery' | 'ground' | null} */
+  /** @type {'resistor' | 'voltmeter' | 'ammeter' | 'ohmmeter' | 'battery' | 'ground' | null} */
   let paletteDragKind = null;
   /** @type {number | null} */
   let palettePickPointerId = null;
+
+  /** Contrôle interruption requête /api/simulate */
+  /** @type {AbortController | null} */
+  let simAbortController = null;
+
+  /** @param {HTMLElement | null} el @param {boolean} running */
+  function setSimPanelRunning(running) {
+    const simBtn = document.getElementById("sim-panel-simulate");
+    const stopBtn = document.getElementById("sim-panel-stop");
+    if (simBtn) simBtn.disabled = running;
+    if (stopBtn) stopBtn.disabled = !running;
+  }
+
+  /** @param {string} text @param {boolean} muted */
+  function setBottomVoltmeterText(text, muted) {
+    const el = document.getElementById("sim-panel-volt-value");
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("sim-bottom-bar__volt-value--muted", !!muted);
+  }
+
+  /** @param {Record<string, { volts?: unknown; label?: string }>} vm */
+  function voltsToBottomStrip(vm) {
+    const entries = Object.entries(vm || {});
+    if (entries.length === 0) return { text: "—", muted: true };
+    if (entries.length === 1) {
+      const row = entries[0][1];
+      const v = row.volts;
+      if (typeof v === "number" && Number.isFinite(v)) return { text: `${v.toFixed(4)} V`, muted: false };
+      return { text: "—", muted: true };
+    }
+    /** @type {string[]} */
+    const parts = [];
+    for (let i = 0; i < entries.length; i++) {
+      const [k, row] = entries[i];
+      const v = row.volts;
+      const labRaw = typeof row.label === "string" && row.label ? row.label : k;
+      const trimmed = String(labRaw).trim();
+      const vmNum = trimmed.match(/^V(\d+)/i);
+      const tag = vmNum ? `V${vmNum[1]}` : `V${i + 1}`;
+      parts.push(
+        typeof v === "number" && Number.isFinite(v)
+          ? `${tag}=${v.toFixed(4)} V`
+          : `${tag}=—`
+      );
+    }
+    return {
+      text: parts.join("  ·  "),
+      muted: parts.length > 0 && parts.every((p) => /\=—\s*$/.test(p)),
+    };
+  }
+
+  /** @param {Record<string, { amps?: unknown; label?: string }>} am */
+  function ampsToBottomStrip(am) {
+    const entries = Object.entries(am || {});
+    if (entries.length === 0) return { text: "—", muted: true };
+    if (entries.length === 1) {
+      const row = entries[0][1];
+      const a = row.amps;
+      if (typeof a === "number" && Number.isFinite(a)) return { text: `${a.toFixed(4)} A`, muted: false };
+      return { text: "—", muted: true };
+    }
+    /** @type {string[]} */
+    const parts = [];
+    for (let i = 0; i < entries.length; i++) {
+      const [k, row] = entries[i];
+      const ia = row.amps;
+      const labRaw = typeof row.label === "string" && row.label ? row.label : k;
+      const trimmed = String(labRaw).trim();
+      const amNum = trimmed.match(/^A(\d+)/i);
+      const tag = amNum ? `A${amNum[1]}` : `A${i + 1}`;
+      parts.push(
+        typeof ia === "number" && Number.isFinite(ia)
+          ? `${tag}=${ia.toFixed(4)} A`
+          : `${tag}=—`
+      );
+    }
+    return {
+      text: parts.join("  ·  "),
+      muted: parts.length > 0 && parts.every((p) => /\=—\s*$/.test(p)),
+    };
+  }
+
+  /** @param {Record<string, { ohms?: unknown; label?: string }>} om */
+  function ohmsToBottomStrip(om) {
+    const entries = Object.entries(om || {});
+    if (entries.length === 0) return { text: "—", muted: true };
+    if (entries.length === 1) {
+      const row = entries[0][1];
+      const r = row.ohms;
+      if (typeof r === "number" && Number.isFinite(r)) return { text: formatOhmsForDisplay(r), muted: false };
+      return { text: "—", muted: true };
+    }
+    /** @type {string[]} */
+    const parts = [];
+    for (let i = 0; i < entries.length; i++) {
+      const [k, row] = entries[i];
+      const ri = row.ohms;
+      const lab = typeof row.label === "string" && row.label ? row.label : k;
+      parts.push(
+        typeof ri === "number" && Number.isFinite(ri)
+          ? `${lab}=${formatOhmsForDisplay(ri)}`
+          : `${lab}=—`
+      );
+    }
+    return {
+      text: parts.join("  ·  "),
+      muted: parts.length > 0 && parts.every((p) => /\=—\s*$/.test(p)),
+    };
+  }
+
+  /**
+   * @param {Record<string, { volts?: unknown; label?: string }>} vm
+   * @param {Record<string, { amps?: unknown; label?: string }>} amm
+   * @param {Record<string, { ohms?: unknown; label?: string }>} ohm
+   */
+  function instrumentsBottomStrip(vm, amm, ohm) {
+    const vKeys = Object.keys(vm || {});
+    const aKeys = Object.keys(amm || {});
+    const oKeys = Object.keys(ohm || {});
+    if (vKeys.length === 0 && aKeys.length === 0 && oKeys.length === 0) return { text: "—", muted: true };
+    const vb = vKeys.length ? voltsToBottomStrip(vm) : { text: "", muted: true };
+    const ab = aKeys.length ? ampsToBottomStrip(amm) : { text: "", muted: true };
+    const ob = oKeys.length ? ohmsToBottomStrip(ohm) : { text: "", muted: true };
+    /** @type {string[]} */
+    const chunks = [];
+    if (vKeys.length) chunks.push(vb.text);
+    if (aKeys.length) chunks.push(ab.text);
+    if (oKeys.length) chunks.push(ob.text);
+    const text = chunks.join("  ·  ");
+    const muted =
+      (vKeys.length ? vb.muted : true) &&
+      (aKeys.length ? ab.muted : true) &&
+      (oKeys.length ? ob.muted : true);
+    return { text, muted };
+  }
+
+  function stopSimulationRequest() {
+    simAbortController?.abort();
+  }
 
   /** @type {null | {
    * sid: string;
@@ -152,6 +439,159 @@
     const dx = x - wx;
     const dy = y - wy;
     return dx * dx + dy * dy;
+  }
+
+  /** @param {number} v @param {number} lo @param {number} hi */
+  function clampNum(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  /** Distance² au segment orthogonal Manhattan (sommet le plus proche si non aligné). */
+  function distSqPointOrthoSeg(px, py, ax, ay, bx, by) {
+    if (Math.abs(ax - bx) < 0.25) {
+      const ymin = Math.min(ay, by);
+      const ymax = Math.max(ay, by);
+      const yCl = clampNum(py, ymin, ymax);
+      const dx = ax - px;
+      const dy = yCl - py;
+      return dx * dx + dy * dy;
+    }
+    if (Math.abs(ay - by) < 0.25) {
+      const xmin = Math.min(ax, bx);
+      const xmax = Math.max(ax, bx);
+      const xCl = clampNum(px, xmin, xmax);
+      const dx = xCl - px;
+      const dy = ay - py;
+      return dx * dx + dy * dy;
+    }
+    return Math.min(distSq2(px, py, ax, ay), distSq2(px, py, bx, by));
+  }
+
+  /** @param {number} wx @param {number} wy @param {number} radiusPx */
+  function findNearestWireId(wx, wy, radiusPx) {
+    const r2 = radiusPx * radiusPx;
+    /** @type {string | null} */
+    let bestId = null;
+    let bestD = Infinity;
+    for (const w of wires) {
+      const pts = w.points;
+      if (!Array.isArray(pts) || pts.length < 2) continue;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        if (!a || !b) continue;
+        const d = distSqPointOrthoSeg(wx, wy, a.x, a.y, b.x, b.y);
+        if (d <= r2 && d < bestD) {
+          bestD = d;
+          bestId = w.id;
+        }
+      }
+    }
+    return bestId;
+  }
+
+  const COMP_MARQUEE_PAD = 22;
+
+  /** @param {CircuitComp} m */
+  function approxCompWorldRect(m) {
+    const tt = terminalsOfComp(m);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const u of tt) {
+      minX = Math.min(minX, u.x);
+      maxX = Math.max(maxX, u.x);
+      minY = Math.min(minY, u.y);
+      maxY = Math.max(maxY, u.y);
+    }
+    const p = COMP_MARQUEE_PAD;
+    return { x0: minX - p, y0: minY - p, x1: maxX + p, y1: maxY + p };
+  }
+
+  function rectsOverlap2D(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1) {
+    const al = Math.min(ax0, ax1);
+    const ar = Math.max(ax0, ax1);
+    const at = Math.min(ay0, ay1);
+    const ab = Math.max(ay0, ay1);
+    const bl = Math.min(bx0, bx1);
+    const br = Math.max(bx0, bx1);
+    const bt = Math.min(by0, by1);
+    const bb = Math.max(by0, by1);
+    return !(ar < bl || br < al || ab < bt || bb < at);
+  }
+
+  /** @param {number} mx0 @param {number} my0 @param {number} mx1 @param {number} my1 */
+  function marqueeIntersectingCompIds(mx0, my0, mx1, my1) {
+    const ids = /** @type {Set<string>} */ (new Set());
+    for (const m of comps) {
+      const b = approxCompWorldRect(m);
+      if (rectsOverlap2D(b.x0, b.y0, b.x1, b.y1, mx0, my0, mx1, my1)) ids.add(m.id);
+    }
+    return ids;
+  }
+
+  /** @param {number} mx0 @param {number} my0 @param {number} mx1 @param {number} my1 */
+  function marqueeIntersectingWireIds(mx0, my0, mx1, my1) {
+    const ids = /** @type {Set<string>} */ (new Set());
+    for (const w of wires) {
+      const pts = w.points;
+      if (!Array.isArray(pts) || pts.length < 2) continue;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        if (!a || !b) continue;
+        const segL = Math.min(a.x, b.x);
+        const segR = Math.max(a.x, b.x);
+        const segT = Math.min(a.y, b.y);
+        const segB = Math.max(a.y, b.y);
+        if (rectsOverlap2D(segL, segT, segR, segB, mx0, my0, mx1, my1)) {
+          ids.add(w.id);
+          break;
+        }
+      }
+    }
+    return ids;
+  }
+
+  function updateMarqueeDivFromSession() {
+    const el = document.getElementById("selection-marquee");
+    if (!el || !marqueeSession) return;
+    const x0 = Math.min(marqueeSession.x0, marqueeSession.x1);
+    const y0 = Math.min(marqueeSession.y0, marqueeSession.y1);
+    const ww = Math.abs(marqueeSession.x1 - marqueeSession.x0);
+    const hh = Math.abs(marqueeSession.y1 - marqueeSession.y0);
+    el.style.left = `${x0}px`;
+    el.style.top = `${y0}px`;
+    el.style.width = `${ww}px`;
+    el.style.height = `${hh}px`;
+    el.classList.remove("is-hidden");
+    el.setAttribute("aria-hidden", "false");
+  }
+
+  function hideSelectionMarquee() {
+    const el = document.getElementById("selection-marquee");
+    if (!el) return;
+    el.classList.add("is-hidden");
+    el.setAttribute("aria-hidden", "true");
+    el.style.width = "0";
+    el.style.height = "0";
+  }
+
+  /** @param {number} pointerIdEvt */
+  function teardownMarqueeForPointer(pointerIdEvt) {
+    if (!marqueeSession || marqueeSession.pointerId !== pointerIdEvt) return false;
+    const { x0, y0, x1, y1 } = marqueeSession;
+    marqueeSession = null;
+    hideSelectionMarquee();
+    if (Math.abs(x1 - x0) < MARQUEE_MIN_DRAG_PX || Math.abs(y1 - y0) < MARQUEE_MIN_DRAG_PX) {
+      renderAll();
+      return true;
+    }
+    for (const cid of marqueeIntersectingCompIds(x0, y0, x1, y1)) selectedCompIds.add(cid);
+    for (const wid of marqueeIntersectingWireIds(x0, y0, x1, y1)) selectedWireIds.add(wid);
+    renderAll();
+    return true;
   }
 
   /** Segment orthogonal (fil Manhattan), extrémités incluses. */
@@ -226,8 +666,8 @@
   /** @param {CircuitComp} m */
   function terminalsOfComp(m) {
     const id = m.id;
-    if (m.kind === "resistor" || m.kind === "voltmeter") {
-      const r = /** @type {CR | CV} */ (m);
+    if (m.kind === "resistor" || m.kind === "voltmeter" || m.kind === "ammeter" || m.kind === "ohmmeter") {
+      const r = /** @type {CR | CV | CA | CO} */ (m);
       if (r.orient === "h") {
         return [
           { x: r.jx, y: r.jy, key: `${id}:0`, compId: id, ti: /** @type {0 | 1} */ (0) },
@@ -623,7 +1063,7 @@
     wireNodes = {};
     undoStack.length = 0;
     redoStack.length = 0;
-    selectedId = null;
+    clearInteractionSelection();
     circuitSaveHandle = null;
     circuitFileName = "circuit.json";
     syncSeqFromModels();
@@ -644,8 +1084,7 @@
     circuitSaveHandle = writeHandle || null;
     undoStack.length = 0;
     redoStack.length = 0;
-    selectedId =
-      selectedId && comps.some((c) => c.id === selectedId) ? selectedId : null;
+    pruneStaleSelection();
     syncSeqFromModels();
     renderAll();
     closeAllMenus();
@@ -689,8 +1128,7 @@
     if (undoStack.length === 0) return;
     redoStack.push(snapshot());
     applySnapshot(/** @type {string} */ (undoStack.pop()));
-    selectedId =
-      selectedId && comps.some((c) => c.id === selectedId) ? selectedId : null;
+    pruneStaleSelection();
     renderAll();
   }
 
@@ -698,8 +1136,7 @@
     if (redoStack.length === 0) return;
     undoStack.push(snapshot());
     applySnapshot(/** @type {string} */ (redoStack.pop()));
-    selectedId =
-      selectedId && comps.some((c) => c.id === selectedId) ? selectedId : null;
+    pruneStaleSelection();
     renderAll();
   }
 
@@ -716,6 +1153,12 @@
     voltmeterSeq = comps
       .filter((c) => c.kind === "voltmeter")
       .reduce((m, c) => Math.max(m, /** @type {CV} */ (c).vmIndex), 0);
+    ammeterSeq = comps
+      .filter((c) => c.kind === "ammeter")
+      .reduce((m, c) => Math.max(m, /** @type {CA} */ (c).amIndex), 0);
+    ohmmeterSeq = comps
+      .filter((c) => c.kind === "ohmmeter")
+      .reduce((m, c) => Math.max(m, /** @type {CO} */ (c).omIndex), 0);
   }
 
   function applyTransform() {
@@ -804,8 +1247,6 @@
     if (!m) return;
     m.classList.add("is-hidden");
     m.setAttribute("aria-hidden", "true");
-    const btn = document.getElementById("simulate-run-btn");
-    if (btn) btn.disabled = false;
   }
 
   function openCommandsModal() {
@@ -818,16 +1259,14 @@
     document.getElementById("commands-modal-close")?.focus();
   }
 
-  /** @param {boolean} [autoRun=false] */
-  function openSimulateModal(autoRun) {
+  function openSimulateModal() {
     const m = document.getElementById("simulate-modal");
     if (!m) return;
     closeDropdownMenusOnly();
     closeCommandsModal();
     m.classList.remove("is-hidden");
     m.setAttribute("aria-hidden", "false");
-    document.getElementById("simulate-run-btn")?.focus();
-    if (autoRun) void runCircuitSimulation();
+    document.getElementById("simulate-modal-close")?.focus();
   }
 
   function closeAllMenus() {
@@ -843,8 +1282,7 @@
     const listEl = document.getElementById("simulate-volt-results");
     const netEl = document.getElementById("simulate-netlist");
     const logEl = document.getElementById("simulate-log");
-    const btn = document.getElementById("simulate-run-btn");
-    if (!statusEl || !listEl || !btn) return;
+    if (!statusEl || !listEl) return;
 
     const hideBlk = /** @param {HTMLElement | null} el */ (el) => {
       if (!el) return;
@@ -865,13 +1303,20 @@
     if (netEl) netEl.textContent = "";
     if (logEl) logEl.textContent = "";
 
-    statusEl.textContent = "Envoi du circuit au serveur…";
-    btn.disabled = true;
+    simAbortController?.abort();
+
+    const controller = new AbortController();
+    simAbortController = controller;
+
+    setBottomVoltmeterText("…", true);
+    statusEl.textContent = "Calcul en cours… envoi au serveur ngspice.";
+    setSimPanelRunning(true);
 
     try {
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           state: (() => {
             dedupeWireNodesByCoordinates();
@@ -888,13 +1333,73 @@
       /** @type {Record<string, unknown>} */
       const data = /** @type {Record<string, unknown>} */ (await res.json());
 
+      /** @type {Record<string, { volts?: unknown; label?: string }>} */
+      const vm = /** @type {object} */ (data.voltmeterValues || {});
+      /** @type {Record<string, { amps?: unknown; label?: string }>} */
+      const amm = /** @type {object} */ (data.ammeterValues || {});
+      /** @type {Record<string, { ohms?: unknown; label?: string }>} */
+      const ohm = /** @type {object} */ (data.ohmmeterValues || {});
+
+      /** @param {HTMLElement} li @param {string} label @param {boolean} hasVal @param {string} valStr */
+      const appendMeasureRow = (li, label, hasVal, valStr) => {
+        const sl = document.createElement("span");
+        sl.className = "vm-label";
+        sl.textContent = label;
+        const sv = document.createElement("span");
+        sv.className = hasVal ? "vm-val" : "vm-val vm-pending";
+        sv.textContent = valStr;
+        li.appendChild(sl);
+        li.appendChild(sv);
+        listEl.appendChild(li);
+      };
+
+      /**
+       * @param {Record<string, { volts?: unknown; label?: string }>} voltsMap
+       * @param {Record<string, { amps?: unknown; label?: string }>} ampsMap
+       * @param {Record<string, { ohms?: unknown; label?: string }>} ohmsMap
+       */
+      const fillModalInstrumentList = (voltsMap, ampsMap, ohmsMap) => {
+        listEl.innerHTML = "";
+        let any = false;
+        for (const [label, row] of Object.entries(voltsMap)) {
+          any = true;
+          const li = document.createElement("li");
+          const v = row.volts;
+          const hasV = typeof v === "number" && Number.isFinite(v);
+          appendMeasureRow(li, label, hasV, hasV ? `${v.toFixed(4)} V` : "—");
+        }
+        for (const [label, row] of Object.entries(ampsMap)) {
+          any = true;
+          const li = document.createElement("li");
+          const a = row.amps;
+          const hasA = typeof a === "number" && Number.isFinite(a);
+          appendMeasureRow(li, label, hasA, hasA ? `${a.toFixed(4)} A` : "—");
+        }
+        for (const [label, row] of Object.entries(ohmsMap)) {
+          any = true;
+          const li = document.createElement("li");
+          const r = row.ohms;
+          const hasR = typeof r === "number" && Number.isFinite(r);
+          appendMeasureRow(li, label, hasR, hasR ? formatOhmsForDisplay(r) : "—");
+        }
+        if (!any) {
+          const li = document.createElement("li");
+          const s = document.createElement("span");
+          s.className = "vm-pending";
+          s.textContent =
+            "Aucun appareil de mesure sur le schéma (ou mesures non disponibles).";
+          li.appendChild(s);
+          listEl.appendChild(li);
+        }
+      };
+
       if (!res.ok || !data.ok) {
         const errs = Array.isArray(data.errors)
           ? /** @type {string[]} */ (data.errors).join("\n")
           : "";
         const fall = typeof data.details === "object" && data.details && /** @type {{ message?: string }} */ (data.details).message;
         const detailStr = typeof fall === "string" ? fall : "";
-        statusEl.textContent = "Simulation impossible.";
+        statusEl.textContent = "Simulation impossible — voir le détail ci-dessous.";
         showBlk(
           errEl,
           errs ||
@@ -906,36 +1411,22 @@
           showBlk(warnEl, /** @type {string[]} */ (data.warnings).join("\n"));
         }
         if (typeof data.netlist === "string" && netEl) netEl.textContent = data.netlist;
+        fillModalInstrumentList(vm, amm, ohm);
+        const strip = instrumentsBottomStrip(vm, amm, ohm);
+        setBottomVoltmeterText(
+          Object.keys(vm).length || Object.keys(amm).length || Object.keys(ohm).length
+            ? strip.text
+            : "—",
+          true
+        );
         return;
       }
 
-      statusEl.textContent = "Simulation DC terminée. Lectures voltmètre(s) :";
-      /** @type {Record<string, { volts?: unknown; label?: string }>} */
-      const vm = /** @type {object} */ (data.voltmeterValues || {});
-      let any = false;
-      for (const [label, row] of Object.entries(vm)) {
-        any = true;
-        const li = document.createElement("li");
-        const sl = document.createElement("span");
-        sl.className = "vm-label";
-        sl.textContent = label;
-        const sv = document.createElement("span");
-        const v = row.volts;
-        const hasV = typeof v === "number" && Number.isFinite(v);
-        sv.className = hasV ? "vm-val" : "vm-val vm-pending";
-        sv.textContent = hasV ? `${v.toFixed(4)} V` : "—";
-        li.appendChild(sl);
-        li.appendChild(sv);
-        listEl.appendChild(li);
-      }
-      if (!any) {
-        const li = document.createElement("li");
-        const s = document.createElement("span");
-        s.className = "vm-pending";
-        s.textContent = "Aucun voltmètre sur le schéma (ou mesure non disponible).";
-        li.appendChild(s);
-        listEl.appendChild(li);
-      }
+      statusEl.textContent = "Simulation DC terminée. Détail des mesures (V, A, Ω) :";
+      fillModalInstrumentList(vm, amm, ohm);
+
+      const strip = instrumentsBottomStrip(vm, amm, ohm);
+      setBottomVoltmeterText(strip.text, strip.muted);
 
       if (Array.isArray(data.warnings) && data.warnings.length && warnEl) {
         showBlk(warnEl, /** @type {string[]} */ (data.warnings).join("\n"));
@@ -943,17 +1434,29 @@
       if (typeof data.netlist === "string" && netEl) netEl.textContent = data.netlist;
       if (typeof data.log === "string" && logEl) logEl.textContent = data.log;
     } catch (e) {
+      if (/** @type {{ name?: string }} */ (e).name === "AbortError") {
+        statusEl.textContent = "Simulation interrompue (stop).";
+        setBottomVoltmeterText("—", true);
+        return;
+      }
       statusEl.textContent = "Impossible de joindre le serveur.";
+      hideBlk(errEl);
+      hideBlk(warnEl);
+      listEl.innerHTML = "";
       showBlk(
         errEl,
         `${e && /** @type {{ message?: string }} */ (/** @type {object} */ (e)).message ? /** @type {{ message: string }} */ (/** @type {object} */ (e)).message : String(e)}\n\nAstuce : utilisez le site servi par Node (npm start) ou votre déploiement Render ; le mode fichier local (file://) n’appelle pas /api/simulate. Sur votre PC, sans ngspice installé, compilez un binaire ou lancez sous Docker.`
       );
+      setBottomVoltmeterText("—", true);
     } finally {
-      btn.disabled = false;
+      if (simAbortController === controller) {
+        simAbortController = null;
+        setSimPanelRunning(false);
+      }
     }
   }
 
-  /** @param {CR | CV} m */
+  /** @param {CR | CV | CA | CO} m */
   function setResistorAnchorFromMidpoint(mpx, mpy, orient, m) {
     const { x: sx, y: sy } = snapToIntersection(mpx, mpy);
     if (orient === "h") {
@@ -965,7 +1468,7 @@
     }
   }
 
-  /** @param {CR | CV} m */
+  /** @param {CR | CV | CA | CO} m */
   function midPointOrientedSpan(m) {
     if (m.orient === "h") return { x: m.jx + SPAN_PX / 2, y: m.jy };
     return { x: m.jx, y: m.jy + SPAN_PX / 2 };
@@ -1094,6 +1597,146 @@
       tv.textContent = "V";
       svg.appendChild(tv);
       svg.appendChild(lineSeg(NS, cjx, cyy + VM_R, cjx, yB, "voltmeter-trace"));
+      if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, cjx, jyT));
+      if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, cjx, jyB));
+    }
+  }
+
+  /** Ampèremètre (même géométrie que le voltmètre, glyphe « I » dans le cercle). */
+  /** @param {SVGElement} svg
+   * @param {Orient} orient
+   * @param {string | null} compId */
+  function drawAmmeterSymbol(svg, orient, compId) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+    svg.setAttribute("overflow", "visible");
+
+    if (orient === "h") {
+      const jxL = PAD_L;
+      const jxR = PAD_L + SPAN_PX;
+      const cx = (jxL + jxR) / 2;
+      const cy = CY;
+
+      svg.setAttribute("viewBox", `-2 0 ${PACK_W} ${BODY_ROW_H}`);
+      svg.setAttribute("width", String(PACK_W));
+      svg.setAttribute("height", String(BODY_ROW_H));
+
+      const xL = jointInnerOrCenter(compId, 0, jxL + JOINT_R, jxL);
+      const xR = jointInnerOrCenter(compId, 1, jxR - JOINT_R, jxR);
+      svg.appendChild(lineSeg(NS, xL, cy, cx - VM_R, cy, "ammeter-trace"));
+      const circEl = document.createElementNS(NS, "circle");
+      circEl.setAttribute("class", "ammeter-circle");
+      circEl.setAttribute("cx", String(cx));
+      circEl.setAttribute("cy", String(cy));
+      circEl.setAttribute("r", String(VM_R));
+      svg.appendChild(circEl);
+      const tv = document.createElementNS(NS, "text");
+      tv.setAttribute("class", "ammeter-glyph");
+      tv.setAttribute("x", String(cx));
+      tv.setAttribute("y", String(cy + 4));
+      tv.setAttribute("text-anchor", "middle");
+      tv.textContent = "I";
+      svg.appendChild(tv);
+      svg.appendChild(lineSeg(NS, cx + VM_R, cy, xR, cy, "ammeter-trace"));
+      if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, jxL, cy));
+      if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, jxR, cy));
+    } else {
+      const jyT = PAD_L;
+      const jyB = PAD_L + SPAN_PX;
+      const cyy = (jyT + jyB) / 2;
+      const cjx = CELL / 2;
+
+      svg.setAttribute("viewBox", `-2 0 ${BODY_ROW_H} ${PACK_W}`);
+      svg.setAttribute("width", String(BODY_ROW_H));
+      svg.setAttribute("height", String(PACK_W));
+
+      const yT = jointInnerOrCenter(compId, 0, jyT + JOINT_R, jyT);
+      const yB = jointInnerOrCenter(compId, 1, jyB - JOINT_R, jyB);
+      svg.appendChild(lineSeg(NS, cjx, yT, cjx, cyy - VM_R, "ammeter-trace"));
+      const circEl = document.createElementNS(NS, "circle");
+      circEl.setAttribute("class", "ammeter-circle");
+      circEl.setAttribute("cx", String(cjx));
+      circEl.setAttribute("cy", String(cyy));
+      circEl.setAttribute("r", String(VM_R));
+      svg.appendChild(circEl);
+      const tv = document.createElementNS(NS, "text");
+      tv.setAttribute("class", "ammeter-glyph");
+      tv.setAttribute("x", String(cjx));
+      tv.setAttribute("y", String(cyy + 4));
+      tv.setAttribute("text-anchor", "middle");
+      tv.textContent = "I";
+      svg.appendChild(tv);
+      svg.appendChild(lineSeg(NS, cjx, cyy + VM_R, cjx, yB, "ammeter-trace"));
+      if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, cjx, jyT));
+      if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, cjx, jyB));
+    }
+  }
+
+  /** Ohmmètre (même boîte ; glyphe Ω : mesure R sans pile sur schéma via source 1 V interne). */
+  /** @param {SVGElement} svg
+   * @param {Orient} orient
+   * @param {string | null} compId */
+  function drawOhmmeterSymbol(svg, orient, compId) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = "http://www.w3.org/2000/svg";
+    svg.setAttribute("overflow", "visible");
+
+    if (orient === "h") {
+      const jxL = PAD_L;
+      const jxR = PAD_L + SPAN_PX;
+      const cx = (jxL + jxR) / 2;
+      const cy = CY;
+
+      svg.setAttribute("viewBox", `-2 0 ${PACK_W} ${BODY_ROW_H}`);
+      svg.setAttribute("width", String(PACK_W));
+      svg.setAttribute("height", String(BODY_ROW_H));
+
+      const xL = jointInnerOrCenter(compId, 0, jxL + JOINT_R, jxL);
+      const xR = jointInnerOrCenter(compId, 1, jxR - JOINT_R, jxR);
+      svg.appendChild(lineSeg(NS, xL, cy, cx - VM_R, cy, "ohmmeter-trace"));
+      const circEl = document.createElementNS(NS, "circle");
+      circEl.setAttribute("class", "ohmmeter-circle");
+      circEl.setAttribute("cx", String(cx));
+      circEl.setAttribute("cy", String(cy));
+      circEl.setAttribute("r", String(VM_R));
+      svg.appendChild(circEl);
+      const tv = document.createElementNS(NS, "text");
+      tv.setAttribute("class", "ohmmeter-glyph");
+      tv.setAttribute("x", String(cx));
+      tv.setAttribute("y", String(cy + 5));
+      tv.setAttribute("text-anchor", "middle");
+      tv.textContent = OHM;
+      svg.appendChild(tv);
+      svg.appendChild(lineSeg(NS, cx + VM_R, cy, xR, cy, "ohmmeter-trace"));
+      if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, jxL, cy));
+      if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, jxR, cy));
+    } else {
+      const jyT = PAD_L;
+      const jyB = PAD_L + SPAN_PX;
+      const cyy = (jyT + jyB) / 2;
+      const cjx = CELL / 2;
+
+      svg.setAttribute("viewBox", `-2 0 ${BODY_ROW_H} ${PACK_W}`);
+      svg.setAttribute("width", String(BODY_ROW_H));
+      svg.setAttribute("height", String(PACK_W));
+
+      const yT = jointInnerOrCenter(compId, 0, jyT + JOINT_R, jyT);
+      const yB = jointInnerOrCenter(compId, 1, jyB - JOINT_R, jyB);
+      svg.appendChild(lineSeg(NS, cjx, yT, cjx, cyy - VM_R, "ohmmeter-trace"));
+      const circEl = document.createElementNS(NS, "circle");
+      circEl.setAttribute("class", "ohmmeter-circle");
+      circEl.setAttribute("cx", String(cjx));
+      circEl.setAttribute("cy", String(cyy));
+      circEl.setAttribute("r", String(VM_R));
+      svg.appendChild(circEl);
+      const tv = document.createElementNS(NS, "text");
+      tv.setAttribute("class", "ohmmeter-glyph");
+      tv.setAttribute("x", String(cjx));
+      tv.setAttribute("y", String(cyy + 5));
+      tv.setAttribute("text-anchor", "middle");
+      tv.textContent = OHM;
+      svg.appendChild(tv);
+      svg.appendChild(lineSeg(NS, cjx, cyy + VM_R, cjx, yB, "ohmmeter-trace"));
       if (jointDotVisible(compId, 0)) svg.appendChild(circ(NS, cjx, jyT));
       if (jointDotVisible(compId, 1)) svg.appendChild(circ(NS, cjx, jyB));
     }
@@ -1248,10 +1891,22 @@
     layoutOrientedSpanDOM(el, model);
   }
 
+  /** @param {HTMLElement} el @param {CA} model */
+  function layoutAmmeterDOM(el, model) {
+    layoutOrientedSpanDOM(el, model);
+  }
+
+  /** @param {HTMLElement} el @param {CO} model */
+  function layoutOhmmeterDOM(el, model) {
+    layoutOrientedSpanDOM(el, model);
+  }
+
   /** @param {HTMLElement} el @param {CircuitComp} m */
   function layoutCompDOM(el, m) {
     if (m.kind === "resistor") layoutResistorDOM(el, /** @type {CR} */ (m));
     else if (m.kind === "voltmeter") layoutVoltmeterDOM(el, /** @type {CV} */ (m));
+    else if (m.kind === "ammeter") layoutAmmeterDOM(el, /** @type {CA} */ (m));
+    else if (m.kind === "ohmmeter") layoutOhmmeterDOM(el, /** @type {CO} */ (m));
     else if (m.kind === "ground") layoutGroundDOM(el, /** @type {CG} */ (m));
     else layoutBatteryDOM(el, /** @type {CB} */ (m));
   }
@@ -1291,7 +1946,9 @@
 
     const valEl = document.createElement("div");
     valEl.className = "resistor-value";
-    valEl.textContent = `1000${OHM}`;
+    valEl.textContent = ghost
+      ? formatOhmsForDisplay(DEFAULT_R_OHMS)
+      : formatOhmsForDisplay(getCompROhms(/** @type {CR} */ (data)));
 
     root.appendChild(idEl);
     root.appendChild(svg);
@@ -1299,8 +1956,9 @@
 
     if (!ghost && "jx" in data) {
       layoutResistorDOM(root, /** @type {CR} */ (data));
-      if (selectedId === id) root.classList.add("circuit-comp--selected");
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
       root.addEventListener("pointerdown", onPlacedCompPointerDown);
+      wireCompValueEditing(root, "resistor", id);
     } else if (ghost && orient === "h") {
       root.style.minWidth = `${PACK_W}px`;
     } else if (ghost && orient === "v") {
@@ -1333,7 +1991,7 @@
 
     if (!ghost && "jx" in data) {
       layoutGroundDOM(root, /** @type {CG} */ (data));
-      if (selectedId === id) root.classList.add("circuit-comp--selected");
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
       root.addEventListener("pointerdown", onPlacedCompPointerDown);
     }
 
@@ -1370,7 +2028,87 @@
 
     if (!ghost && "jx" in data) {
       layoutVoltmeterDOM(root, /** @type {CV} */ (data));
-      if (selectedId === id) root.classList.add("circuit-comp--selected");
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
+      root.addEventListener("pointerdown", onPlacedCompPointerDown);
+    } else if (ghost && orient === "h") {
+      root.style.minWidth = `${PACK_W}px`;
+    } else if (ghost && orient === "v") {
+      root.style.minHeight = `${PACK_W}px`;
+    }
+
+    return root;
+  }
+
+  /** @param {CA | { amIndex: number; orient?: Orient }} data @param {boolean} ghost */
+  function buildAmmeterElement(data, ghost) {
+    const orient =
+      /** @type Orient */ ("orient" in data && data.orient === "h" ? "h" : "v");
+    const amIndex =
+      /** @type {number} */ ("amIndex" in data ? data.amIndex : ammeterSeq + 1);
+    const id = ghost ? "" : /** @type {CA} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost
+      ? "circuit-comp ammeter ammeter--ghost"
+      : "circuit-comp ammeter";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.compKind = "ammeter";
+    root.dataset.orient = orient;
+
+    const idEl = document.createElement("div");
+    idEl.className = "ammeter-id";
+    idEl.textContent = `A${amIndex}`;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "ammeter-symbol");
+    drawAmmeterSymbol(svg, orient, ghost ? null : id);
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+
+    if (!ghost && "jx" in data) {
+      layoutAmmeterDOM(root, /** @type {CA} */ (data));
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
+      root.addEventListener("pointerdown", onPlacedCompPointerDown);
+    } else if (ghost && orient === "h") {
+      root.style.minWidth = `${PACK_W}px`;
+    } else if (ghost && orient === "v") {
+      root.style.minHeight = `${PACK_W}px`;
+    }
+
+    return root;
+  }
+
+  /** @param {CO | { omIndex: number; orient?: Orient }} data @param {boolean} ghost */
+  function buildOhmmeterElement(data, ghost) {
+    const orient =
+      /** @type Orient */ ("orient" in data && data.orient === "h" ? "h" : "v");
+    const omIndex =
+      /** @type {number} */ ("omIndex" in data ? data.omIndex : ohmmeterSeq + 1);
+    const id = ghost ? "" : /** @type {CO} */ (data).id;
+
+    const root = document.createElement("div");
+    root.className = ghost
+      ? "circuit-comp ohmmeter ohmmeter--ghost"
+      : "circuit-comp ohmmeter";
+    if (!ghost && id) root.dataset.sid = id;
+    root.dataset.compKind = "ohmmeter";
+    root.dataset.orient = orient;
+
+    const idEl = document.createElement("div");
+    idEl.className = "ohmmeter-id";
+    idEl.textContent = `${OHM}${omIndex}`;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "ohmmeter-symbol");
+    drawOhmmeterSymbol(svg, orient, ghost ? null : id);
+
+    root.appendChild(idEl);
+    root.appendChild(svg);
+
+    if (!ghost && "jx" in data) {
+      layoutOhmmeterDOM(root, /** @type {CO} */ (data));
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
       root.addEventListener("pointerdown", onPlacedCompPointerDown);
     } else if (ghost && orient === "h") {
       root.style.minWidth = `${PACK_W}px`;
@@ -1396,7 +2134,7 @@
 
     const idEl = document.createElement("div");
     idEl.className = "battery-id";
-    idEl.textContent = `V${vIndex}`;
+    idEl.textContent = `E${vIndex}`;
 
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("class", "battery-symbol");
@@ -1404,7 +2142,9 @@
 
     const valEl = document.createElement("div");
     valEl.className = "battery-value";
-    valEl.textContent = "5V";
+    valEl.textContent = ghost
+      ? formatBatVoltsForDisplay(DEFAULT_BAT_VOLT)
+      : formatBatVoltsForDisplay(getCompVBat(/** @type {CB} */ (data)));
 
     root.appendChild(svg);
     root.appendChild(idEl);
@@ -1413,8 +2153,9 @@
 
     if (!ghost && "jx" in data) {
       layoutBatteryDOM(root, /** @type {CB} */ (data));
-      if (selectedId === id) root.classList.add("circuit-comp--selected");
+      if (selectedCompIds.has(id)) root.classList.add("circuit-comp--selected");
       root.addEventListener("pointerdown", onPlacedCompPointerDown);
+      wireCompValueEditing(root, "battery", id);
     } else if (ghost) {
       root.style.minHeight = `${PACK_W}px`;
     }
@@ -1426,6 +2167,8 @@
   function buildCompElement(m, ghost) {
     if (m.kind === "resistor") return buildResistorElement(m, ghost);
     if (m.kind === "voltmeter") return buildVoltmeterElement(m, ghost);
+    if (m.kind === "ammeter") return buildAmmeterElement(m, ghost);
+    if (m.kind === "ohmmeter") return buildOhmmeterElement(m, ghost);
     if (m.kind === "ground") return buildGroundElement(m, ghost);
     return buildBatteryElement(m, ghost);
   }
@@ -1448,7 +2191,10 @@
     if (!wiresLayer) return;
     while (wiresLayer.firstChild) wiresLayer.removeChild(wiresLayer.firstChild);
     for (const w of wires) {
-      drawWireSegments(w.points, "wire-seg");
+      const segClass = selectedWireIds.has(w.id)
+        ? "wire-seg wire-seg--selected"
+        : "wire-seg";
+      drawWireSegments(w.points, segClass);
     }
     const nodeDeg = new Map();
     for (const w of wires) {
@@ -1489,7 +2235,7 @@
   /** @param {JunctionHit} hit @param {number} ptrId */
   function startWireRouting(hit, ptrId) {
     if (wireSession) return;
-    selectedId = null;
+    clearInteractionSelection();
     wireSession = {
       pointerId: ptrId,
       startKey: hit.key,
@@ -1608,7 +2354,7 @@
 
   /** @param {number} clientX @param {number} clientY */
   function updateJunctionHoverCursor(clientX, clientY) {
-    if (dragGhost || compMoveSession || wireSession || paletteDragKind) {
+    if (dragGhost || compMoveSession || wireSession || paletteDragKind || marqueeSession) {
       document.body.classList.remove("stage-near-junction");
       return;
     }
@@ -1656,7 +2402,16 @@
     if (!(el instanceof HTMLElement) || !el.dataset.sid) return;
     e.stopPropagation();
 
-    selectedId = el.dataset.sid;
+    const sid = el.dataset.sid;
+    if (!sid) return;
+
+    if (e.shiftKey) {
+      if (selectedCompIds.has(sid)) selectedCompIds.delete(sid);
+      else selectedCompIds.add(sid);
+      selectedWireIds.clear();
+    } else {
+      selectSingleCompOnly(sid);
+    }
     renderAll();
 
     if (pointerId !== null) {
@@ -1667,13 +2422,13 @@
       stage.classList.remove("dragging");
     }
 
-    const model = getModel(selectedId);
+    const model = getModel(sid);
     if (!model) return;
 
     const { wx: awx, wy: awy } = clientToWorld(e.clientX, e.clientY);
 
     compMoveSession = {
-      sid: selectedId,
+      sid,
       pointerId: e.pointerId,
       jx0: model.jx,
       jy0: model.jy,
@@ -1740,33 +2495,54 @@
     Object.assign(lastPointerWorld, clientToWorld(cx, cy));
   }
 
-  function removeSelected() {
-    if (!selectedId) return;
+  function deleteSelection() {
+    if (selectedCompIds.size === 0 && selectedWireIds.size === 0) return;
     commit(() => {
-      const sid = selectedId;
-      comps = comps.filter((c) => c.id !== sid);
+      const compIds = [...selectedCompIds];
+      comps = comps.filter((c) => !selectedCompIds.has(c.id));
       wires = wires.filter(
-        (w) => !wirePortTouchesComp(w.from, sid) && !wirePortTouchesComp(w.to, sid)
+        (w) =>
+          !selectedWireIds.has(w.id) &&
+          !compIds.some(
+            (cid) => wirePortTouchesComp(w.from, cid) || wirePortTouchesComp(w.to, cid)
+          )
       );
       pruneWireNodes();
-      selectedId = null;
+      clearInteractionSelection();
     });
   }
 
   function rotateSelectedOrientable() {
-    const m = getModel(selectedId);
-    if (!m || (m.kind !== "resistor" && m.kind !== "voltmeter")) return;
+    const m = getModel(soleSelectedCompId());
+    if (
+      !m ||
+      (m.kind !== "resistor" &&
+        m.kind !== "voltmeter" &&
+        m.kind !== "ammeter" &&
+        m.kind !== "ohmmeter")
+    )
+      return;
     commit(() => {
       if (m.kind === "resistor") {
         const r = /** @type {CR} */ (m);
         const mp = midPointOrientedSpan(r);
         r.orient = r.orient === "h" ? "v" : "h";
         setResistorAnchorFromMidpoint(mp.x, mp.y, r.orient, r);
-      } else {
+      } else if (m.kind === "voltmeter") {
         const v = /** @type {CV} */ (m);
         const mp = midPointOrientedSpan(v);
         v.orient = v.orient === "h" ? "v" : "h";
         setResistorAnchorFromMidpoint(mp.x, mp.y, v.orient, v);
+      } else if (m.kind === "ammeter") {
+        const a = /** @type {CA} */ (m);
+        const mp = midPointOrientedSpan(a);
+        a.orient = a.orient === "h" ? "v" : "h";
+        setResistorAnchorFromMidpoint(mp.x, mp.y, a.orient, a);
+      } else {
+        const o = /** @type {CO} */ (m);
+        const mp = midPointOrientedSpan(o);
+        o.orient = o.orient === "h" ? "v" : "h";
+        setResistorAnchorFromMidpoint(mp.x, mp.y, o.orient, o);
       }
     });
   }
@@ -1805,12 +2581,17 @@
     }
 
     if (mod && e.code === "KeyC") {
-      const m = getModel(selectedId);
+      const focus = soleSelectedCompId();
+      const m = focus ? getModel(focus) : null;
       if (!m) return;
       if (m.kind === "resistor") {
         clipboardTpl = { kind: "resistor", orient: /** @type {CR} */ (m).orient };
       } else if (m.kind === "voltmeter") {
         clipboardTpl = { kind: "voltmeter", orient: /** @type {CV} */ (m).orient };
+      } else if (m.kind === "ammeter") {
+        clipboardTpl = { kind: "ammeter", orient: /** @type {CA} */ (m).orient };
+      } else if (m.kind === "ohmmeter") {
+        clipboardTpl = { kind: "ohmmeter", orient: /** @type {CO} */ (m).orient };
       } else if (m.kind === "ground") {
         clipboardTpl = { kind: "ground" };
       } else {
@@ -1837,7 +2618,7 @@
           };
           placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         } else if (clipboardTpl.kind === "ground") {
           groundSeq += 1;
           /** @type {CG} */
@@ -1850,7 +2631,7 @@
           };
           placeGroundAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         } else if (clipboardTpl.kind === "voltmeter") {
           voltmeterSeq += 1;
           /** @type {CV} */
@@ -1864,7 +2645,35 @@
           };
           placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
+        } else if (clipboardTpl.kind === "ammeter") {
+          ammeterSeq += 1;
+          /** @type {CA} */
+          const nw = {
+            kind: "ammeter",
+            id: uid(),
+            amIndex: ammeterSeq,
+            orient: clipboardTpl.orient,
+            jx: 0,
+            jy: 0,
+          };
+          placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
+        } else if (clipboardTpl.kind === "ohmmeter") {
+          ohmmeterSeq += 1;
+          /** @type {CO} */
+          const nw = {
+            kind: "ohmmeter",
+            id: uid(),
+            omIndex: ohmmeterSeq,
+            orient: clipboardTpl.orient,
+            jx: 0,
+            jy: 0,
+          };
+          placeResistorAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
         } else {
           batterySeq += 1;
           /** @type {CB} */
@@ -1877,29 +2686,36 @@
           };
           placeBatteryAtWorldPoint(lastPointerWorld.wx, lastPointerWorld.wy, nw);
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         }
       });
       return;
     }
 
     if (e.code === "Delete") {
-      if (selectedId) {
-        removeSelected();
+      if (selectedCompIds.size || selectedWireIds.size) {
+        deleteSelection();
         e.preventDefault();
       }
       return;
     }
 
     if (e.code === "KeyR" && !mod && !e.altKey) {
-      const mR = getModel(selectedId);
-      if (!mR || (mR.kind !== "resistor" && mR.kind !== "voltmeter")) return;
+      const mR = getModel(soleSelectedCompId());
+      if (
+        !mR ||
+        (mR.kind !== "resistor" &&
+          mR.kind !== "voltmeter" &&
+          mR.kind !== "ammeter" &&
+          mR.kind !== "ohmmeter")
+      )
+        return;
       rotateSelectedOrientable();
       e.preventDefault();
     }
   }
 
-  /** @param {CR | CV} m */
+  /** @param {CR | CV | CA | CO} m */
   function placeResistorAtWorldPoint(wx, wy, m) {
     if (m.orient === "h") {
       const p = snapToIntersection(wx - SPAN_PX / 2, wy);
@@ -1942,6 +2758,14 @@
     return clipboardTpl?.kind === "voltmeter" ? clipboardTpl.orient : /** @type {Orient} */ ("v");
   }
 
+  function paletteAmmeterOrient() {
+    return clipboardTpl?.kind === "ammeter" ? clipboardTpl.orient : /** @type {Orient} */ ("v");
+  }
+
+  function paletteOhmmeterOrient() {
+    return clipboardTpl?.kind === "ohmmeter" ? clipboardTpl.orient : /** @type {Orient} */ ("v");
+  }
+
   /** @param {PointerEvent} e */
   function startPaletteDrag(kind, e, pickBtn) {
     if (dragGhost) return;
@@ -1970,6 +2794,34 @@
         {
           id: "_g",
           vmIndex: voltmeterSeq + 1,
+          orient: o,
+          jx: 0,
+          jy: 0,
+        },
+        true
+      );
+      dragGhost.style.minWidth = o === "h" ? `${PACK_W}px` : "";
+      dragGhost.style.minHeight = o === "v" ? `${PACK_W}px` : "";
+    } else if (kind === "ammeter") {
+      const o = paletteAmmeterOrient();
+      dragGhost = buildAmmeterElement(
+        {
+          id: "_g",
+          amIndex: ammeterSeq + 1,
+          orient: o,
+          jx: 0,
+          jy: 0,
+        },
+        true
+      );
+      dragGhost.style.minWidth = o === "h" ? `${PACK_W}px` : "";
+      dragGhost.style.minHeight = o === "v" ? `${PACK_W}px` : "";
+    } else if (kind === "ohmmeter") {
+      const o = paletteOhmmeterOrient();
+      dragGhost = buildOhmmeterElement(
+        {
+          id: "_g",
+          omIndex: ohmmeterSeq + 1,
           orient: o,
           jx: 0,
           jy: 0,
@@ -2021,6 +2873,20 @@
   }
 
   /** @param {PointerEvent} e */
+  function onPickAmmeterDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (!pickAmmeterBtn) return;
+    startPaletteDrag("ammeter", e, pickAmmeterBtn);
+  }
+
+  /** @param {PointerEvent} e */
+  function onPickOhmmeterDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (!pickOhmmeterBtn) return;
+    startPaletteDrag("ohmmeter", e, pickOhmmeterBtn);
+  }
+
+  /** @param {PointerEvent} e */
   function onPickGroundDown(e) {
     if (e.button !== undefined && e.button !== 0) return;
     if (!pickGroundBtn) return;
@@ -2049,9 +2915,13 @@
           ? pickResistorBtn
           : paletteDragKind === "voltmeter"
             ? pickVoltmeterBtn
-            : paletteDragKind === "ground"
-              ? pickGroundBtn
-              : pickBatteryBtn;
+            : paletteDragKind === "ammeter"
+              ? pickAmmeterBtn
+              : paletteDragKind === "ohmmeter"
+                ? pickOhmmeterBtn
+                : paletteDragKind === "ground"
+                  ? pickGroundBtn
+                  : pickBatteryBtn;
       pickBtn?.releasePointerCapture(e.pointerId);
     } catch (_) {}
 
@@ -2084,7 +2954,7 @@
             nw.jy = pMid.y - SPAN_PX / 2;
           }
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         });
       } else if (paletteDragKind === "voltmeter") {
         const o = paletteVoltmeterOrient();
@@ -2107,7 +2977,53 @@
             nw.jy = pMid.y - SPAN_PX / 2;
           }
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
+        });
+      } else if (paletteDragKind === "ammeter") {
+        const o = paletteAmmeterOrient();
+        commit(() => {
+          ammeterSeq += 1;
+          /** @type {CA} */
+          const nw = {
+            kind: "ammeter",
+            id: uid(),
+            amIndex: ammeterSeq,
+            orient: o,
+            jx: 0,
+            jy: 0,
+          };
+          if (o === "h") {
+            nw.jx = pMid.x - SPAN_PX / 2;
+            nw.jy = pMid.y;
+          } else {
+            nw.jx = pMid.x;
+            nw.jy = pMid.y - SPAN_PX / 2;
+          }
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
+        });
+      } else if (paletteDragKind === "ohmmeter") {
+        const o = paletteOhmmeterOrient();
+        commit(() => {
+          ohmmeterSeq += 1;
+          /** @type {CO} */
+          const nw = {
+            kind: "ohmmeter",
+            id: uid(),
+            omIndex: ohmmeterSeq,
+            orient: o,
+            jx: 0,
+            jy: 0,
+          };
+          if (o === "h") {
+            nw.jx = pMid.x - SPAN_PX / 2;
+            nw.jy = pMid.y;
+          } else {
+            nw.jx = pMid.x;
+            nw.jy = pMid.y - SPAN_PX / 2;
+          }
+          comps.push(nw);
+          selectSingleCompOnly(nw.id);
         });
       } else if (paletteDragKind === "ground") {
         commit(() => {
@@ -2122,7 +3038,7 @@
           };
           placeGroundAtWorldPoint(wx, wy, nw);
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         });
       } else {
         commit(() => {
@@ -2136,7 +3052,7 @@
             jy: pMid.y - SPAN_PX / 2,
           };
           comps.push(nw);
-          selectedId = nw.id;
+          selectSingleCompOnly(nw.id);
         });
       }
     }
@@ -2158,8 +3074,31 @@
       return;
     }
 
+    if (e.shiftKey) {
+      marqueeSession = {
+        pointerId: e.pointerId,
+        x0: wx,
+        y0: wy,
+        x1: wx,
+        y1: wy,
+      };
+      hideSelectionMarquee();
+      updateMarqueeDivFromSession();
+      stage.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+
+    const widHit = findNearestWireId(wx, wy, WIRE_PICK_R_PX);
+    if (widHit) {
+      selectSingleWireOnly(widHit);
+      renderAll();
+      e.preventDefault();
+      return;
+    }
+
     if (!e.target.closest(".circuit-comp")) {
-      selectedId = null;
+      clearInteractionSelection();
       renderAll();
     }
 
@@ -2173,6 +3112,13 @@
 
   function onPanPointerMove(e) {
     recordPointerWorld(e.clientX, e.clientY);
+    if (marqueeSession && marqueeSession.pointerId === e.pointerId) {
+      const p = clientToWorld(e.clientX, e.clientY);
+      marqueeSession.x1 = p.wx;
+      marqueeSession.y1 = p.wy;
+      updateMarqueeDivFromSession();
+      return;
+    }
     if (pointerId !== e.pointerId) return;
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
@@ -2223,6 +3169,8 @@
   pickBatteryBtn.addEventListener("pointerdown", onPickBatteryDown);
   pickGroundBtn?.addEventListener("pointerdown", onPickGroundDown);
   if (pickVoltmeterBtn) pickVoltmeterBtn.addEventListener("pointerdown", onPickVoltmeterDown);
+  if (pickAmmeterBtn) pickAmmeterBtn.addEventListener("pointerdown", onPickAmmeterDown);
+  if (pickOhmmeterBtn) pickOhmmeterBtn.addEventListener("pointerdown", onPickOhmmeterDown);
 
   menuFileNewBtn?.addEventListener("click", () => newCircuitPrompt());
   menuFileOpenBtn?.addEventListener("click", () => {
@@ -2246,8 +3194,9 @@
   stage.addEventListener("pointermove", onPanPointerMove);
   stage.addEventListener("pointerup", endPanDrag);
   stage.addEventListener("pointercancel", endPanDrag);
-  stage.addEventListener("lostpointercapture", () => {
-    pointerId = null;
+  stage.addEventListener("lostpointercapture", (ev) => {
+    teardownMarqueeForPointer(ev.pointerId);
+    if (pointerId === ev.pointerId) pointerId = null;
     stage.classList.remove("dragging");
   });
   stage.addEventListener("wheel", onWheel, { passive: false });
@@ -2255,6 +3204,12 @@
   window.addEventListener("keydown", onKeyDown);
 
   function endPanDrag(ev) {
+    if (teardownMarqueeForPointer(ev.pointerId)) {
+      try {
+        stage.releasePointerCapture(ev.pointerId);
+      } catch (_) {}
+      return;
+    }
     if (pointerId !== ev.pointerId) return;
     pointerId = null;
     stage.classList.remove("dragging");
@@ -2285,17 +3240,23 @@
     });
   });
 
-  document.getElementById("menu-simulate-launch")?.addEventListener("click", () => {
-    openSimulateModal(true);
+  document.getElementById("sim-panel-simulate")?.addEventListener("click", () => {
+    void runCircuitSimulation();
+  });
+  document.getElementById("sim-panel-stop")?.addEventListener("click", () => {
+    stopSimulationRequest();
+  });
+  document.getElementById("sim-panel-verify")?.addEventListener("click", () => {
+    openSimulateModal();
+  });
+  document.getElementById("menu-sim-verify")?.addEventListener("click", () => {
+    openSimulateModal();
   });
   document.getElementById("simulate-modal-backdrop")?.addEventListener("click", () => {
     closeSimulateModal();
   });
   document.getElementById("simulate-modal-close")?.addEventListener("click", () => {
     closeSimulateModal();
-  });
-  document.getElementById("simulate-run-btn")?.addEventListener("click", () => {
-    void runCircuitSimulation();
   });
 
   document.getElementById("open-commands-modal")?.addEventListener("click", () => {
@@ -2317,6 +3278,16 @@
       /** @type {HTMLElement} */ (t).isContentEditable
     )
       return;
+    if (marqueeSession) {
+      const pid = marqueeSession.pointerId;
+      marqueeSession = null;
+      hideSelectionMarquee();
+      try {
+        stage.releasePointerCapture(pid);
+      } catch (_) {}
+      e.preventDefault();
+      return;
+    }
     const sim = document.getElementById("simulate-modal");
     const cmd = document.getElementById("commands-modal");
     if (sim && !sim.classList.contains("is-hidden")) {
