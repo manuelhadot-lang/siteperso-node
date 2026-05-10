@@ -64,6 +64,16 @@
           </li>
         </ul>
       </details>
+      <details class="menu-root">
+        <summary id="menu-simulation-summary"><span class="menu-ico" aria-hidden="true">🔬</span> Simulation</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-simulation-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-simulate-launch" role="menuitem">
+              <span class="menu-ico submenu-ico" aria-hidden="true">⚡</span> Lancer ngspice
+            </button>
+          </li>
+        </ul>
+      </details>
       <div class="menu-root menu-root--commandes-btn">
         <button type="button" class="menu-command-trigger" id="open-commands-modal" aria-haspopup="dialog" aria-controls="commands-modal-dialog">
           <span class="menu-ico" aria-hidden="true">⌨️</span> Commandes
@@ -112,6 +122,43 @@
           <li>Fichier : projet JSON (composants, fils, nœuds) ; hébergé sur Render ou en fichier statique, l’enregistrement passe par le dossier <strong>Téléchargements</strong> ou la boîte du navigateur (Chrome / Edge : fichier sur disque avec handle).</li>
           <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant</li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="simulate-modal" class="commands-modal simulate-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="simulate-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="simulate-modal-dialog"
+      class="commands-modal__panel simulate-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="simulate-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="simulate-modal-title" class="commands-modal__title">
+          <span class="menu-ico" aria-hidden="true">🔬</span> Simulation ngspice
+        </h2>
+        <button type="button" class="commands-modal__close" id="simulate-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body simulate-modal__body">
+        <p id="simulate-status" class="simulate-status">Prêt. La simulation s’exécute sur le serveur (Docker Render avec ngspice), pas dans le navigateur.</p>
+        <ul id="simulate-volt-results" class="simulate-volt-list" aria-live="polite"></ul>
+        <pre id="simulate-errors" class="simulate-msg simulate-msg--errors is-hidden"></pre>
+        <pre id="simulate-warnings" class="simulate-msg simulate-msg--warnings is-hidden"></pre>
+        <div class="simulate-actions">
+          <button type="button" class="simulate-run-btn" id="simulate-run-btn">
+            <span class="menu-ico" aria-hidden="true">▶️</span> Lancer / relancer
+          </button>
+        </div>
+        <details class="simulate-details">
+          <summary>Netliste SPICE générée</summary>
+          <pre id="simulate-netlist" class="simulate-code"></pre>
+        </details>
+        <details class="simulate-details">
+          <summary>Journal ngspice (log)</summary>
+          <pre id="simulate-log" class="simulate-code simulate-code--log"></pre>
+        </details>
       </div>
     </div>
   </div>

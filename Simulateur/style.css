@@ -290,6 +290,137 @@ body {
   padding-left: 1.2rem;
 }
 
+#simulate-modal.commands-modal {
+  z-index: 520;
+}
+
+.simulate-modal__panel {
+  width: min(36rem, 100%);
+}
+
+.simulate-status {
+  margin: 0 0 0.75rem;
+  color: #aab4c8;
+  font-size: 0.82rem;
+}
+
+.simulate-volt-list {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.simulate-volt-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.35rem;
+  border-radius: 6px;
+  background: rgba(70, 130, 220, 0.1);
+  border: 1px solid rgba(110, 170, 255, 0.2);
+}
+
+.simulate-volt-list .vm-label {
+  font-weight: 600;
+  color: #d8e6ff;
+}
+
+.simulate-volt-list .vm-val {
+  font-variant-numeric: tabular-nums;
+  color: #7dffb3;
+}
+
+.simulate-volt-list .vm-pending {
+  color: #ffa64d;
+}
+
+.simulate-msg {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.simulate-msg.is-hidden {
+  display: none;
+}
+
+.simulate-msg--errors {
+  background: rgba(180, 40, 40, 0.2);
+  border: 1px solid rgba(255, 100, 100, 0.35);
+  color: #ffb8b8;
+}
+
+.simulate-msg--warnings {
+  background: rgba(200, 160, 40, 0.12);
+  border: 1px solid rgba(230, 190, 90, 0.3);
+  color: #ffe4a8;
+}
+
+.simulate-actions {
+  margin-bottom: 0.85rem;
+}
+
+.simulate-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid #4d6a94;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2a3b55 0%, #233147 100%);
+  color: #e8f0ff;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.simulate-run-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #334b6b 0%, #2a3950 100%);
+}
+
+.simulate-run-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.simulate-details {
+  margin-top: 0.55rem;
+}
+
+.simulate-details summary {
+  cursor: pointer;
+  color: #a8b8d8;
+  margin-bottom: 0.35rem;
+  user-select: none;
+}
+
+.simulate-code {
+  margin: 0.35rem 0 0;
+  padding: 0.55rem 0.65rem;
+  max-height: 10rem;
+  overflow: auto;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  background: #0f1014;
+  border: 1px solid #2e3340;
+  border-radius: 6px;
+  color: #c4d0e8;
+  white-space: pre;
+}
+
+.simulate-code--log {
+  max-height: 14rem;
+}
+
 #pick-resistor,
 #pick-battery,
 #pick-voltmeter {

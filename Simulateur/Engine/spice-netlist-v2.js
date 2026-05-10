@@ -272,7 +272,6 @@ export function buildNgspiceDeck(state, _opts) {
   lines.push("* Circuit Simulateur grille — ngspice batch (auto-generated)");
   lines.push(".TITLE Circuit_grille_DC");
   lines.push("");
-  lines.push(".GLOBAL 0");
 
   if (errors.length === 0) {
     lines.push("* --- Sources DC (piles)");
@@ -354,7 +353,9 @@ export function buildNgspiceDeck(state, _opts) {
     let i = 0;
     for (const vm of voltmeters) {
       const vmKey = `${vm.displayLabel}_${i++}`;
-      lines.push(`  echo __VM_ROW__:${vmKey}:${vm.displayLabel}:${vm.spicePlus}:${vm.spiceMinus}`);
+      lines.push(
+        `  echo "__VM_ROW__|${vmKey}|${vm.displayLabel}|${vm.spicePlus}|${vm.spiceMinus}"`
+      );
       lines.push(`  print v(${vm.spicePlus})-v(${vm.spiceMinus})`);
     }
 
