@@ -356,7 +356,17 @@ export function buildNgspiceDeck(state, _opts) {
       lines.push(
         `  echo "__VM_ROW__|${vmKey}|${vm.displayLabel}|${vm.spicePlus}|${vm.spiceMinus}"`
       );
-      lines.push(`  print v(${vm.spicePlus})-v(${vm.spiceMinus})`);
+      /*
+       * Dans .CONTROL après `op`, `print v(a)-v(0)` peut être faux / nul avec certaines versions
+       * alors que la tension entre a et la référence est correcte. Si la borne − est le nœud 0,
+       * utiliser `v(a)` (tension par rapport à la masse SPICE).
+       */
+      const p = vm.spicePlus;
+      const m = vm.spiceMinus;
+      let printLine = `  print v(${p})-v(${m})`;
+      if (m === "0") printLine = `  print v(${p})`;
+      else if (p === "0") printLine = `  print -v(${m})`;
+      lines.push(printLine);
     }
 
     lines.push(`  echo __VM_END__`);
