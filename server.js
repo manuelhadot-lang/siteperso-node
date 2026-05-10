@@ -30,6 +30,29 @@ let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
+/**
+ * Binaire ngspice : défaut "ngspice". Sous Windows sans entrée PATH, définir
+ * NGSPICE ou NGSPICE_PATH (ex. C:\Spice64\bin\ngspice.exe).
+ */
+function ngspiceExecutablePath() {
+    const fromEnv = process.env.NGSPICE || process.env.NGSPICE_PATH;
+    return typeof fromEnv === "string" && fromEnv.trim().length > 0
+        ? fromEnv.trim()
+        : "ngspice";
+}
+
+/**
+ * @param {{ message?: string; code?: string | number }} error
+ */
+function isNgspiceMissingError(error) {
+    if (!error) return false;
+    if (error.code === "ENOENT") return true;
+    const msg = `${error.message || ""}`;
+    return /not recognized|introuvable|pas reconnu|cannot find|No such file|ENOENT|spawn|est pas une commande|n'est pas reconnu|n’est pas reconnu/i.test(
+        msg
+    );
+}
+
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = {};
 if (fs.existsSync('./eleves.json')) baseEleves = JSON.parse(fs.readFileSync('./eleves.json'));
@@ -142,6 +165,7 @@ app.get('/api/version', (req, res) => {
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
         ngspiceDeckModuleUrl,
         ngspiceResultParserModuleUrl,
+        ngspiceExecutable: ngspiceExecutablePath(),
         pid: process.pid
     });
 });
@@ -173,7 +197,7 @@ async function getMergeVoltmeterMeasurements() {
 function runNgspice(netlistPath, outputPath) {
     return new Promise((resolve, reject) => {
         execFile(
-            "ngspice",
+            ngspiceExecutablePath(),
             ["-b", "-o", outputPath, netlistPath],
             { windowsHide: true, timeout: 25000, maxBuffer: 8 * 1024 * 1024 },
             (error, stdout, stderr) => {
@@ -248,13 +272,13 @@ app.post("/api/simulate", async (req, res) => {
             voltmeterValues
         });
     } catch (error) {
-        const missing = /not recognized|ENOENT|introuvable/i.test(error?.message || "");
+        const missing = isNgspiceMissingError(error);
         res.status(500).json({
             ok: false,
             phase: "run",
             errors: [
                 missing
-                    ? "ngspice introuvable. Sur Render, installe ngspice dans l'environnement de build/runtime."
+                    ? "ngspice introuvable. En local : installe ngspice (ngspice.org) ou définit NGSPICE / NGSPICE_PATH vers ngspice.exe, puis npm start. Sur Render, ngspice est fourni dans l’image Docker."
                     : "Echec d'execution ngspice."
             ],
             warnings: built.warnings,

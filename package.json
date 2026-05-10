@@ -6,7 +6,8 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check-ngspice": "node tools/check-ngspice.cjs"
   },
   "dependencies": {
     "archiver": "^7.0.1",
