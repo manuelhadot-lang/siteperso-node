@@ -7,6 +7,13 @@
   const pickResistorBtn = document.getElementById("pick-resistor");
   const pickBatteryBtn = document.getElementById("pick-battery");
   const pickVoltmeterBtn = document.getElementById("pick-voltmeter");
+  const circuitFileImportInput = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("circuit-file-import")
+  );
+  const menuFileNewBtn = document.getElementById("menu-file-new");
+  const menuFileOpenBtn = document.getElementById("menu-file-open");
+  const menuFileSaveBtn = document.getElementById("menu-file-save");
+  const menuFileSaveAsBtn = document.getElementById("menu-file-save-as");
 
   /** @typedef {'h' | 'v'} Orient */
   /** @typedef {{ kind: 'resistor'; id: string; rIndex: number; jx: number; jy: number; orient: Orient }} CR */
@@ -72,6 +79,13 @@
   /** Jonctions fil (extrémités libres et nœuds intermédiaires), id → position monde */
   /** @type {Record<string, { x: number; y: number }>} */
   let wireNodes = {};
+
+  /** Version du schéma JSON (fichiers + pile annuler/refaire). */
+  const CIRCUIT_FILE_VERSION = 1;
+  /** Dernier nom de fichier connu (.json). */
+  let circuitFileName = "circuit.json";
+  /** Handle système de fichiers (Chrome/Edge) pour « Enregistrer » sur le même fichier. */
+  let circuitSaveHandle = null;
 
   /** Rempli au début de chaque renderAll (bornes reliées à un fil posé) */
   let wiredTerminalKeys = new Set();
@@ -259,8 +273,38 @@
       : `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
 
+  /** @param {unknown} o */
+  function importCircuitData(o) {
+    if (Array.isArray(o)) {
+      comps = /** @type {CircuitComp[]} */ (o);
+      wires = [];
+      wireNodes = {};
+    } else if (o && typeof o === "object") {
+      const obj = /** @type {{ comps?: unknown; wires?: unknown; wireNodes?: unknown }} */ (o);
+      comps = Array.isArray(obj.comps) ? /** @type {CircuitComp[]} */ (obj.comps) : [];
+      wires = Array.isArray(obj.wires) ? /** @type {Wire[]} */ (obj.wires) : [];
+      wireNodes =
+        obj.wireNodes &&
+        typeof obj.wireNodes === "object" &&
+        !Array.isArray(obj.wireNodes)
+          ? {
+              .../** @type {Record<string, { x: number; y: number }>} */ (
+                /** @type {object} */ (obj.wireNodes)
+              ),
+            }
+          : {};
+    } else throw new Error("invalid circuit payload");
+    normalizeLoadedWires();
+    pruneWireNodes();
+  }
+
   function snapshot() {
-    return JSON.stringify({ comps, wires, wireNodes });
+    return JSON.stringify({
+      version: CIRCUIT_FILE_VERSION,
+      comps,
+      wires,
+      wireNodes,
+    });
   }
 
   /** @param {unknown} ep @returns {WirePort} */
@@ -313,27 +357,185 @@
   /** @param {string} json */
   function applySnapshot(json) {
     try {
-      const o = JSON.parse(json);
-      if (Array.isArray(o)) {
-        comps = o;
-        wires = [];
-        wireNodes = {};
-      } else {
-        comps = o.comps || [];
-        wires = o.wires || [];
-        wireNodes =
-          o.wireNodes && typeof o.wireNodes === "object" && !Array.isArray(o.wireNodes)
-            ? { ...o.wireNodes }
-            : {};
-        normalizeLoadedWires();
-        pruneWireNodes();
-      }
+      importCircuitData(JSON.parse(json));
     } catch (_) {
       comps = [];
       wires = [];
       wireNodes = {};
     }
     syncSeqFromModels();
+  }
+
+  function buildCircuitFileText() {
+    return JSON.stringify(
+      {
+        version: CIRCUIT_FILE_VERSION,
+        comps,
+        wires,
+        wireNodes,
+      },
+      null,
+      2
+    );
+  }
+
+  /** @param {string} base */
+  function ensureJsonFileName(base) {
+    let s = (base || "circuit.json").trim() || "circuit.json";
+    s = s.replace(/\\/g, "/").split("/").pop() || "circuit.json";
+    s = s.replace(/[^\w\s().\-àâäçéèêëïîôùûüœæÆŒÄÀÂ]+/gi, "_").trim() || "circuit.json";
+    return s.toLowerCase().endsWith(".json") ? s : `${s}.json`;
+  }
+
+  /** Téléchargement local (safari, firefox, Render, fichier hébergé statique…) */
+  function downloadJsonToDisk(text, filename) {
+    const name = ensureJsonFileName(filename);
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    queueMicrotask(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    });
+  }
+
+  /** @param {boolean} forceSaveAs */
+  async function saveCircuitToFile(forceSaveAs) {
+    const text = buildCircuitFileText();
+    const suggested = ensureJsonFileName(circuitFileName);
+
+    if (!forceSaveAs && circuitSaveHandle && circuitSaveHandle.createWritable) {
+      try {
+        const w = await circuitSaveHandle.createWritable();
+        await w.write(text);
+        await w.close();
+        closeAllMenus();
+        return;
+      } catch (_) {
+        circuitSaveHandle = null;
+      }
+    }
+
+    if (forceSaveAs && typeof window.showSaveFilePicker === "function") {
+      try {
+        const fh = /** @type {FileSystemFileHandle} */ (
+          await /** @type {any} */ (window).showSaveFilePicker({
+            suggestedName: suggested,
+            types: [
+              {
+                description: "Circuit JSON",
+                accept: { "application/json": [".json"] },
+              },
+            ],
+          })
+        );
+        circuitSaveHandle = fh;
+        const writer = await fh.createWritable();
+        await writer.write(text);
+        await writer.close();
+        circuitFileName = fh.name ? ensureJsonFileName(fh.name) : suggested;
+        closeAllMenus();
+        return;
+      } catch (e) {
+        if (e && /** @type {Error} */ (e).name === "AbortError") {
+          closeAllMenus();
+          return;
+        }
+      }
+    }
+
+    let nameOut = suggested;
+    if (forceSaveAs && typeof window.prompt === "function") {
+      const prompted = prompt(
+        "Nom du fichier (enregistré via le dossier Téléchargements du navigateur si besoin)",
+        suggested
+      );
+      if (prompted === null) {
+        closeAllMenus();
+        return;
+      }
+      nameOut = ensureJsonFileName(prompted.trim() || suggested);
+    }
+
+    circuitSaveHandle = null;
+    downloadJsonToDisk(text, nameOut);
+    circuitFileName = nameOut;
+    closeAllMenus();
+  }
+
+  function newCircuitPrompt() {
+    const empty =
+      comps.length === 0 && wires.length === 0 && Object.keys(wireNodes).length === 0;
+    if (
+      !empty &&
+      !confirm(
+        "Créer un nouveau circuit ? Les modifications non enregistrées seront perdues."
+      )
+    ) {
+      closeAllMenus();
+      return;
+    }
+    comps = [];
+    wires = [];
+    wireNodes = {};
+    undoStack.length = 0;
+    redoStack.length = 0;
+    selectedId = null;
+    circuitSaveHandle = null;
+    circuitFileName = "circuit.json";
+    syncSeqFromModels();
+    renderAll();
+    closeAllMenus();
+  }
+
+  /** @param {string} rawText @param {string} fileLabel @param {FileSystemFileHandle | null | undefined} writeHandle */
+  function loadCircuitFromText(rawText, fileLabel, writeHandle) {
+    try {
+      importCircuitData(JSON.parse(rawText));
+    } catch (_) {
+      alert("Impossible de lire ce fichier : JSON invalide ou projet incomplet.");
+      closeAllMenus();
+      return;
+    }
+    circuitFileName = ensureJsonFileName(fileLabel);
+    circuitSaveHandle = writeHandle || null;
+    undoStack.length = 0;
+    redoStack.length = 0;
+    selectedId =
+      selectedId && comps.some((c) => c.id === selectedId) ? selectedId : null;
+    syncSeqFromModels();
+    renderAll();
+    closeAllMenus();
+  }
+
+  async function menuOpenCircuit() {
+    closeAllMenus();
+    try {
+      const pick = /** @type {any} */ (window).showOpenFilePicker;
+      if (typeof pick === "function") {
+        const [fh] = await pick.call(window, {
+          types: [
+            {
+              description: "Circuit JSON",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          multiple: false,
+        });
+        const file = await fh.getFile();
+        const raw = await file.text();
+        loadCircuitFromText(raw, file.name || "circuit.json", fh);
+        return;
+      }
+    } catch (e) {
+      if (e && /** @type {Error} */ (e).name === "AbortError") return;
+    }
+    if (circuitFileImportInput) circuitFileImportInput.click();
   }
 
   /** @param {() => void} fn */
@@ -443,10 +645,31 @@
     return { x, y };
   }
 
-  function closeAllMenus() {
+  function closeDropdownMenusOnly() {
     document.querySelectorAll(".menubar details.menu-root").forEach((d) => {
       d.open = false;
     });
+  }
+
+  function closeCommandsModal() {
+    const m = document.getElementById("commands-modal");
+    if (!m) return;
+    m.classList.add("is-hidden");
+    m.setAttribute("aria-hidden", "true");
+  }
+
+  function openCommandsModal() {
+    const m = document.getElementById("commands-modal");
+    if (!m) return;
+    closeDropdownMenusOnly();
+    m.classList.remove("is-hidden");
+    m.setAttribute("aria-hidden", "false");
+    document.getElementById("commands-modal-close")?.focus();
+  }
+
+  function closeAllMenus() {
+    closeDropdownMenusOnly();
+    closeCommandsModal();
   }
 
   /** @param {CR | CV} m */
@@ -1590,6 +1813,24 @@
   pickBatteryBtn.addEventListener("pointerdown", onPickBatteryDown);
   if (pickVoltmeterBtn) pickVoltmeterBtn.addEventListener("pointerdown", onPickVoltmeterDown);
 
+  menuFileNewBtn?.addEventListener("click", () => newCircuitPrompt());
+  menuFileOpenBtn?.addEventListener("click", () => {
+    void menuOpenCircuit();
+  });
+  menuFileSaveBtn?.addEventListener("click", () => {
+    void saveCircuitToFile(false);
+  });
+  menuFileSaveAsBtn?.addEventListener("click", () => {
+    void saveCircuitToFile(true);
+  });
+  circuitFileImportInput?.addEventListener("change", async () => {
+    const f = circuitFileImportInput.files?.[0];
+    circuitFileImportInput.value = "";
+    if (!f) return;
+    const raw = await f.text();
+    loadCircuitFromText(raw, f.name, null);
+  });
+
   stage.addEventListener("pointerdown", onPanPointerDown);
   stage.addEventListener("pointermove", onPanPointerMove);
   stage.addEventListener("pointerup", endPanDrag);
@@ -1628,6 +1869,36 @@
       document.querySelectorAll(".menubar details.menu-root").forEach((other) => {
         if (other !== root) other.open = false;
       });
+      closeCommandsModal();
     });
+  });
+
+  document.getElementById("open-commands-modal")?.addEventListener("click", () => {
+    openCommandsModal();
+  });
+  document.getElementById("commands-modal-backdrop")?.addEventListener("click", () => {
+    closeCommandsModal();
+  });
+  document.getElementById("commands-modal-close")?.addEventListener("click", () => {
+    closeCommandsModal();
+  });
+
+  window.addEventListener("keydown", (e) => {
+    const modal = document.getElementById("commands-modal");
+    if (
+      !modal ||
+      modal.classList.contains("is-hidden") ||
+      e.key !== "Escape"
+    )
+      return;
+    const t = e.target;
+    if (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      /** @type {HTMLElement} */ (t).isContentEditable
+    )
+      return;
+    e.preventDefault();
+    closeCommandsModal();
   });
 })();

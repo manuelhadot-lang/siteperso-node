@@ -10,48 +10,65 @@
   <header id="topbar">
     <nav class="menubar" aria-label="Menu principal">
       <details class="menu-root">
-        <summary id="menu-composants-summary">Composants</summary>
+        <summary id="menu-file-summary"><span class="menu-ico" aria-hidden="true">📁</span> Fichier</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-file-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-new" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--new" aria-hidden="true">✨</span> Nouveau
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-open" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--open" aria-hidden="true">📂</span> Ouvrir…
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-save" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--save" aria-hidden="true">💾</span> Enregistrer
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-save-as" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--saveas" aria-hidden="true">🗂️</span> Enregistrer sous…
+            </button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-composants-summary"><span class="menu-ico" aria-hidden="true">🧰</span> Composants</summary>
         <ul class="submenu" role="menu" aria-labelledby="menu-composants-summary">
           <li role="none">
-            <button type="button" class="submenu-item submenu-item--resistor" id="pick-resistor" role="menuitem" title="Glisser sur la grille pour placer">Résistance</button>
+            <button type="button" class="submenu-item submenu-item--row submenu-item--resistor" id="pick-resistor" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--res" aria-hidden="true">🍬</span> Résistance
+            </button>
           </li>
         </ul>
       </details>
       <details class="menu-root">
-        <summary id="menu-source-summary">Source</summary>
+        <summary id="menu-source-summary"><span class="menu-ico" aria-hidden="true">⚡</span> Source</summary>
         <ul class="submenu" role="menu" aria-labelledby="menu-source-summary">
           <li role="none">
-            <button type="button" class="submenu-item submenu-item--battery" id="pick-battery" role="menuitem" title="Glisser sur la grille pour placer">Alimentation</button>
+            <button type="button" class="submenu-item submenu-item--row submenu-item--battery" id="pick-battery" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--bat" aria-hidden="true">🔋</span> Alimentation
+            </button>
           </li>
         </ul>
       </details>
       <details class="menu-root">
-        <summary id="menu-appareils-summary">Appareils</summary>
+        <summary id="menu-appareils-summary"><span class="menu-ico" aria-hidden="true">🔭</span> Appareils</summary>
         <ul class="submenu" role="menu" aria-labelledby="menu-appareils-summary">
           <li role="none">
-            <button type="button" class="submenu-item submenu-item--voltmeter" id="pick-voltmeter" role="menuitem" title="Glisser sur la grille pour placer">Voltmètre</button>
+            <button type="button" class="submenu-item submenu-item--row submenu-item--voltmeter" id="pick-voltmeter" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--vm" aria-hidden="true">🎯</span> Voltmètre
+            </button>
           </li>
         </ul>
       </details>
-      <details class="menu-root">
-        <summary id="menu-commandes-summary">Commandes</summary>
-        <div
-          class="submenu submenu--panel"
-          role="region"
-          aria-labelledby="menu-commandes-summary"
-        >
-          <ul class="commands-list">
-            <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
-            <li>Molette pour zoom</li>
-            <li><kbd>R</kbd> rotation (résistance, voltmètre) : horizontal ↔ vertical</li>
-            <li><kbd>Suppr</kbd> suppression du composant sélectionné</li>
-            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre : orientation ; alimentation : type)</li>
-            <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
-            <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
-            <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant</li>
-          </ul>
-        </div>
-      </details>
+      <div class="menu-root menu-root--commandes-btn">
+        <button type="button" class="menu-command-trigger" id="open-commands-modal" aria-haspopup="dialog" aria-controls="commands-modal-dialog">
+          <span class="menu-ico" aria-hidden="true">⌨️</span> Commandes
+        </button>
+      </div>
     </nav>
   </header>
 
@@ -60,6 +77,42 @@
       <div id="circuit-grid" aria-hidden="true"></div>
       <svg id="wires-layer" class="wires-layer" aria-hidden="true"></svg>
       <div id="components-layer" aria-hidden="true"></div>
+    </div>
+  </div>
+  <input
+    type="file"
+    id="circuit-file-import"
+    hidden
+    accept=".json,application/json"
+    aria-hidden="true"
+  />
+
+  <div id="commands-modal" class="commands-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="commands-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="commands-modal-dialog"
+      class="commands-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="commands-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="commands-modal-title" class="commands-modal__title"><span class="menu-ico" aria-hidden="true">⌨️</span> Commandes</h2>
+        <button type="button" class="commands-modal__close" id="commands-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body">
+        <ul class="commands-list commands-list--modal">
+          <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
+          <li>Molette pour zoom</li>
+          <li><kbd>R</kbd> rotation (résistance, voltmètre) : horizontal ↔ vertical</li>
+          <li><kbd>Suppr</kbd> suppression du composant sélectionné</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre : orientation ; alimentation : type)</li>
+          <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
+          <li>Fichier : projet JSON (composants, fils, nœuds) ; hébergé sur Render ou en fichier statique, l’enregistrement passe par le dossier <strong>Téléchargements</strong> ou la boîte du navigateur (Chrome / Edge : fichier sur disque avec handle).</li>
+          <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant</li>
+        </ul>
+      </div>
     </div>
   </div>
   <script src="main.js"></script>

@@ -41,6 +41,61 @@ body {
   align-self: stretch;
 }
 
+.menu-root--commandes-btn {
+  display: flex;
+  align-items: stretch;
+}
+
+.menu-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+  margin-right: 0.42rem;
+  filter: saturate(1.15) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  vertical-align: -0.1em;
+  font-style: normal;
+}
+
+.submenu-ico {
+  margin-right: 0.52rem;
+  font-size: 1.08rem;
+  min-width: 1.35em;
+}
+
+.submenu-item--row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.menu-command-trigger {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: var(--topbar-height);
+  padding: 0 1rem;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  color: #d0d0d0;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+
+.menu-command-trigger:hover {
+  background: #181818;
+}
+
+.menu-command-trigger:active {
+  background: #1f1f24;
+}
+
 .menu-root > summary {
   list-style: none;
   height: 100%;
@@ -108,16 +163,6 @@ body {
   background: #2a2a2a;
 }
 
-.submenu--panel {
-  min-width: 17.5rem;
-  max-width: 22rem;
-  padding: 0.55rem 0.9rem 0.75rem;
-  color: #bdbdbd;
-  font-size: 0.86rem;
-  line-height: 1.5;
-  cursor: default;
-}
-
 .commands-list {
   margin: 0;
   padding-left: 1.15rem;
@@ -139,6 +184,110 @@ body {
   background: #252525;
   border: 1px solid #444;
   color: #e4e4e4;
+}
+
+/* Fenêtre Commandes */
+.commands-modal.is-hidden {
+  display: none !important;
+}
+
+.commands-modal {
+  position: fixed;
+  top: var(--topbar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14px 1rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.commands-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  cursor: pointer;
+}
+
+.commands-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(32rem, 100%);
+  max-height: calc(100vh - var(--topbar-height) - 2rem);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, #202228 0%, #161619 55%, #121214 100%);
+  border: 1px solid #3d4450;
+  border-radius: 10px;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(120, 150, 200, 0.08);
+  overflow: hidden;
+}
+
+.commands-modal__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem 0.6rem;
+  border-bottom: 1px solid #343842;
+  background: rgba(36, 40, 50, 0.55);
+}
+
+.commands-modal__title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #dfe6f5;
+  display: flex;
+  align-items: center;
+}
+
+.commands-modal__title .menu-ico {
+  filter: saturate(1.3) drop-shadow(0 0 10px rgba(120, 180, 255, 0.25));
+}
+
+.commands-modal__close {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #4a5260;
+  border-radius: 6px;
+  background: #282c36;
+  color: #cfd6e8;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.commands-modal__close:hover {
+  background: #383e4e;
+  color: #fff;
+}
+
+.commands-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.95rem 1.1rem 1.25rem;
+  color: #c5cbd8;
+  font-size: 0.875rem;
+  line-height: 1.52;
+}
+
+.commands-list--modal {
+  margin: 0;
+  padding-left: 1.2rem;
 }
 
 #pick-resistor,
