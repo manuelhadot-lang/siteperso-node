@@ -141,15 +141,19 @@ body {
   color: #e4e4e4;
 }
 
-#pick-resistor {
+#pick-resistor,
+#pick-battery,
+#pick-voltmeter {
   cursor: grab;
 }
 
-body.is-dragging-resistor #pick-resistor {
+body.is-dragging-palette #pick-resistor,
+body.is-dragging-palette #pick-battery,
+body.is-dragging-palette #pick-voltmeter {
   cursor: grabbing;
 }
 
-body.is-dragging-resistor #stage {
+body.is-dragging-palette #stage {
   cursor: crosshair;
 }
 
@@ -168,6 +172,18 @@ body.is-dragging-resistor #stage {
   cursor: grabbing;
 }
 
+/* Le curseur grab des .circuit-comp passait devant celui du #stage : forcer sur le body */
+body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire),
+body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circuit-comp,
+body.stage-near-junction #stage:not(.dragging):not(.stage--routing-wire) .circuit-comp:active {
+  cursor: crosshair !important;
+}
+
+#stage.stage--routing-wire,
+#stage.stage--routing-wire .circuit-comp {
+  cursor: crosshair !important;
+}
+
 #world {
   position: absolute;
   inset: 0;
@@ -175,12 +191,10 @@ body.is-dragging-resistor #stage {
   will-change: transform;
 }
 
+/* Position / taille fixées en JS (pixels entiers, multiples de la maille) pour coller au snap et aux composants */
 #circuit-grid {
   position: absolute;
-  top: -200%;
-  left: -200%;
-  width: 500%;
-  height: 500%;
+  z-index: 0;
   background-color: transparent;
   background-image:
     linear-gradient(to right, #3a3a3a 1px, transparent 1px),
@@ -189,13 +203,46 @@ body.is-dragging-resistor #stage {
   background-position: 0 0;
 }
 
+/* Dimensions + viewBox fixés en JS (px entiers) : sinon 100% sous-pixel ≠ repère des composants → fils décalés */
+.wires-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wires-layer .wire-seg {
+  fill: none;
+  stroke: #7aabff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.wires-layer .wire-seg--preview {
+  stroke: #9dc4ff;
+  stroke-dasharray: 6 5;
+  opacity: 0.92;
+}
+
+.wires-layer .wire-node {
+  fill: #e83232;
+  stroke: #601010;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
 #components-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 2;
 }
 
-.resistor {
+.circuit-comp {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -207,7 +254,7 @@ body.is-dragging-resistor #stage {
   transition: box-shadow 0.18s ease;
 }
 
-.resistor:active {
+.circuit-comp:active {
   cursor: grabbing;
 }
 
@@ -230,6 +277,13 @@ body.is-dragging-resistor #stage {
 }
 
 .resistor-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.battery-trace {
   fill: none;
   stroke: #c6c6c6;
   stroke-width: 2;
@@ -288,12 +342,92 @@ body.is-dragging-resistor #stage {
   stroke: #965200;
 }
 
-.resistor.resistor--dragging {
+.battery {
+  color: #b8c8e0;
+}
+
+/* Alimentation : Vn et 5V alignés sur la barre longue (schéma type manuel) */
+.battery.battery--schematic {
+  position: relative;
+  box-sizing: content-box;
+  width: 52px;
+  min-height: 130px;
+  padding-left: 36px;
+  padding-right: 56px;
+}
+
+.battery-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.battery.battery--schematic .battery-id {
+  position: absolute;
+  left: 0;
+  top: var(--battery-label-y, 48px);
+  width: 32px;
+  margin: 0;
+  padding-right: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  text-align: right;
+  letter-spacing: 0.02em;
+  color: #c8dcf5;
+  pointer-events: none;
+}
+
+.battery.battery--schematic .battery-value {
+  position: absolute;
+  right: 0;
+  top: var(--battery-label-y, 48px);
+  margin: 0;
+  padding-left: 6px;
+  min-width: 38px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: left;
+  letter-spacing: 0.03em;
+  color: #8aafdf;
+  pointer-events: none;
+}
+
+.battery-sign {
+  fill: #d8d8d8;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+}
+
+.battery.battery--ghost .battery-sign {
+  fill: #9dc4ff;
+}
+
+.battery.battery--ghost .battery-trace {
+  stroke: #7aabff;
+}
+
+.battery.battery--ghost .battery-id {
+  color: #aec6ff;
+}
+
+.battery.battery--ghost .battery-value {
+  color: #6f8cbf;
+}
+
+.battery.battery--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+.circuit-comp--dragging {
   cursor: grabbing;
   opacity: 0.92;
 }
 
-.resistor:not(.resistor--ghost).resistor--selected {
+.circuit-comp:not(.battery--ghost):not(.resistor--ghost):not(.voltmeter--ghost).circuit-comp--selected {
   border-radius: 4px;
   box-shadow:
     0 0 0 1px rgba(150, 195, 255, 0.28),
@@ -301,13 +435,13 @@ body.is-dragging-resistor #stage {
     0 0 32px rgba(110, 160, 255, 0.14);
 }
 
-.resistor--v.resistor {
+.circuit-comp.resistor.circuit-comp--v {
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   width: fit-content;
 }
 
-.resistor--v .resistor-id {
+.circuit-comp.resistor.circuit-comp--v .resistor-id {
   flex: 0 0 var(--resistor-v-label-slot, 32px);
   max-width: 32px;
   margin-bottom: 0;
@@ -316,10 +450,96 @@ body.is-dragging-resistor #stage {
   padding-right: 2px;
 }
 
-.resistor--v .resistor-value {
+.circuit-comp.resistor.circuit-comp--v .resistor-value {
   margin-top: 0;
   margin-left: var(--resistor-v-label-gap, 4px);
   flex: 0 0 auto;
   text-align: left;
 }
+
+.voltmeter-id {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  margin-bottom: 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: #d0d0d0;
+  pointer-events: none;
+}
+
+.voltmeter-symbol {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+  /* même boîte que la résistance pour le calage grille ; cercle peut dépasser */
+}
+
+.voltmeter-trace {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.voltmeter-circle {
+  fill: none;
+  stroke: #c6c6c6;
+  stroke-width: 2;
+}
+
+.voltmeter-glyph {
+  fill: #c6c6c6;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.voltmeter--ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.voltmeter--ghost .voltmeter-id {
+  color: #aec6ff;
+}
+
+.voltmeter--ghost .voltmeter-trace {
+  stroke: #7aabff;
+}
+
+.voltmeter--ghost .voltmeter-circle {
+  stroke: #9dc4ff;
+}
+
+.voltmeter--ghost .voltmeter-glyph {
+  fill: #9dc4ff;
+}
+
+.voltmeter--ghost .resistor-joint {
+  fill: #ffb020;
+  stroke: #965200;
+}
+
+.circuit-comp.voltmeter.circuit-comp--v {
+  flex-direction: row;
+  /* flex-start : le SVG (hauteur PACK_W) reste calé en haut du bloc = jonctions sur les lignes de grille */
+  align-items: flex-start;
+  width: fit-content;
+}
+
+.circuit-comp.voltmeter.circuit-comp--v .voltmeter-id {
+  flex: 0 0 var(--resistor-v-label-slot, 32px);
+  max-width: 32px;
+  margin-bottom: 0;
+  margin-right: var(--resistor-v-label-gap, 4px);
+  text-align: right;
+  padding-right: 2px;
+}
+
 
