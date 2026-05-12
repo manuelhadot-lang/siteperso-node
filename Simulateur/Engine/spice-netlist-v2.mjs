@@ -1,15 +1,28 @@
+// Netlist brute (éditeur Simulateur) ou état JSON avec champ .netlist
 export function buildNgspiceDeck(state, opts = {}) {
-    const netlist = typeof state === 'string' ? state : (state.netlist || "");
+    const netlist =
+        typeof state === "string"
+            ? state
+            : typeof state?.netlist === "string"
+              ? state.netlist
+              : "";
+    if (!netlist.trim()) {
+        return {
+            ok: false,
+            errors: ["Netlist vide ou invalide : fournir une chaîne SPICE ou un objet { netlist: string }."],
+            warnings: [],
+            netlist: "",
+        };
+    }
     return {
         ok: true,
-        netlist: netlist,
-        analysisTran: netlist.toLowerCase().includes('.tran'),
-        warnings: [],
-        // Ajoutez ces lignes pour éviter des erreurs de lecture plus tard
+        netlist,
+        analysisTran: /\b\.tran\b/i.test(netlist),
         voltmeters: [],
-        nodeMeasures: [],
         ammeters: [],
         ohmeters: [],
-        scopesTranMeta: []
+        nodeMeasures: [],
+        scopesTranMeta: [],
+        warnings: [],
     };
 }

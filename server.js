@@ -10,11 +10,17 @@ const { execFile } = require("node:child_process");
 const os = require("node:os");
 const { mkdtemp, readFile: readFileAsync, rm, writeFile } = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
+const { resolveNgspiceForServer, applyPathPrepend } = require("./tools/ngspice-bundle.cjs");
 
 const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
 const io = new Server(server); // On attache Socket.io au serveur HTTP
 const PORT = process.env.PORT || 3000;
+/** Local : 127.0.0.1 (moins d’alertes pare-feu Windows). Prod : NODE_ENV=production → 0.0.0.0. Surcharge : LISTEN_HOST ou HOST. */
+const LISTEN_HOST =
+    process.env.LISTEN_HOST ||
+    process.env.HOST ||
+    (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const ADMIN_USER = process.env.ADMIN_USER;
 const ADMIN_PASS = process.env.ADMIN_PASS;
 
@@ -24,13 +30,8 @@ const dirDocs = path.join(__dirname, 'doc');
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
-<<<<<<< HEAD
-const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href; // Changé .jms en .mjs
-const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href; // Changé .jms en .mjs
-=======
-const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
-const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js")).href;
->>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
+const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href;
+const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href;
 let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
 let mergeAmmeterMeasurementsFn = null;
@@ -39,60 +40,11 @@ let mergeScopePlotsFromTranWrdataFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
 /**
- * Nettoie une valeur d’environnement (guillemets, espaces).
- * @param {string} s
- */
-function cleanEnvExecutable(s) {
-    let x = String(s).trim();
-    if ((x.startsWith('"') && x.endsWith('"')) || (x.startsWith("'") && x.endsWith("'")))
-        x = x.slice(1, -1).trim();
-    return x;
-}
-
-/**
- * Résout un chemin vers ngspice : absolu tel quel, sinon relatif au cwd puis à la racine du projet.
- * @param {string} p
- */
-function resolveNgspiceCandidate(p) {
-    const t = cleanEnvExecutable(p);
-    if (!t) return "ngspice";
-    if (path.isAbsolute(t)) return path.normalize(t);
-    const fromCwd = path.resolve(process.cwd(), t);
-    if (fs.existsSync(fromCwd)) return fromCwd;
-    const fromApp = path.resolve(__dirname, t);
-    if (fs.existsSync(fromApp)) return fromApp;
-    return t;
-}
-
-/**
- * Binaire ngspice : défaut "ngspice". Sous Windows sans entrée PATH, définir
- * NGSPICE ou NGSPICE_PATH (ex. C:\Spice64\bin\ngspice.exe).
+ * Binaire ngspice : NGSPICE / NGSPICE_PATH, sinon Simulateur/bin/ngspice(.exe)
+ * si vous y copiez le bundle (bin, lib, share).
  */
 function ngspiceExecutablePath() {
-<<<<<<< HEAD
-    const isWindows = process.platform === "win32";
-    
-    // 1. Définition des chemins absolus basés sur l'emplacement du serveur
-    const binDir = path.join(__dirname, 'Simulateur', 'bin');
-    const shareDir = path.join(__dirname, 'Simulateur', 'share', 'ngspice');
-
-    // 2. Variables d'environnement cruciales pour Ngspice
-    // NGSPICE_ASCIIRAWPATH : pour les sorties
-    // SPICE_LIB_DIR : pour trouver le fichier d'initialisation 'spinit'
-    process.env.SPICE_LIB_DIR = path.join(shareDir, 'scripts');
-    
-    // Sous Windows, on ajoute aussi le dossier bin au PATH pour les DLL
-    if (isWindows) {
-        process.env.PATH = `${binDir};${process.env.PATH}`;
-    }
-
-    const exeName = isWindows ? "ngspice.exe" : "ngspice";
-    return path.join(binDir, exeName);
-=======
-    const raw = process.env.NGSPICE || process.env.NGSPICE_PATH;
-    if (typeof raw === "string" && raw.trim().length > 0) return resolveNgspiceCandidate(raw);
-    return "ngspice";
->>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
+    return resolveNgspiceForServer(__dirname).exe;
 }
 
 /**
@@ -102,9 +54,21 @@ function isNgspiceMissingError(error) {
     if (!error) return false;
     if (error.code === "ENOENT") return true;
     const msg = `${error.message || ""}`;
-    return /not recognized|introuvable|pas reconnu|cannot find|No such file|ENOENT|spawn|est pas une commande|n'est pas reconnu|n’est pas reconnu/i.test(
+    // Ne pas matcher seul « spawn » : spawn EPERM = blocage sécurité, pas « introuvable ».
+    return /not recognized|introuvable|pas reconnu|cannot find|No such file|est pas une commande|n'est pas reconnu|n'est pas reconnu|command not found/i.test(
         msg
     );
+}
+
+/**
+ * @param {{ message?: string; code?: string | number }} error
+ */
+function isLikelySecuritySoftwareBlock(error) {
+    if (!error) return false;
+    const c = error.code;
+    if (c === "EPERM" || c === "EACCES") return true;
+    const msg = `${error.message || ""}`;
+    return /operation not permitted|accès refusé|access denied|bloqué|blocked|not permitted by/i.test(msg);
 }
 
 // --- CHARGEMENT DES ELEVES ---
@@ -233,13 +197,8 @@ async function importFresh(filePath) {
     return import(url);
 }
 
-<<<<<<< HEAD
-const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs"); // Changé .jms en .mjs
-const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs"); // Changé .jms en .mjs
-=======
-const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js");
-const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js");
->>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
+const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs");
+const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs");
 
 async function getBuildNgspiceDeck() {
     const module = await importFresh(ngspiceDeckModulePath);
@@ -277,7 +236,8 @@ async function getMergeScopePlotsFromTranWrdata() {
 }
 
 function runNgspice(netlistPath, outputPath) {
-    const exe = ngspiceExecutablePath();
+    const { exe, prependPath } = resolveNgspiceForServer(__dirname);
+    const env = applyPathPrepend(process.env, prependPath);
     return new Promise((resolve, reject) => {
         execFile(
             exe,
@@ -286,7 +246,7 @@ function runNgspice(netlistPath, outputPath) {
                 windowsHide: true,
                 timeout: 25000,
                 maxBuffer: 8 * 1024 * 1024,
-                env: process.env,
+                env,
             },
             (error, stdout, stderr) => {
                 if (error) {
@@ -404,20 +364,27 @@ app.post("/api/simulate", async (req, res) => {
         });
     } catch (error) {
         const missing = isNgspiceMissingError(error);
+        const securityBlock = isLikelySecuritySoftwareBlock(error);
         const exeTried = /** @type {{ ngspiceExe?: string }} */ (error)?.ngspiceExe || ngspiceExecutablePath();
         const tailOut = [error?.stderr, error?.stdout, error?.message]
             .filter((x) => typeof x === "string" && x.trim())
             .join("\n")
             .trim()
             .slice(0, 2000);
+        let primary;
+        if (missing) {
+            primary = `ngspice introuvable ou non exécutable (essayé : ${exeTried}). En local : installe ngspice ou définis NGSPICE / NGSPICE_PATH vers ngspice.exe, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`;
+        } else if (securityBlock) {
+            primary =
+                `Exécution de ngspice bloquée (${exeTried}). Un antivirus ou une stratégie « logiciel inconnu » (ex. Trend Micro) peut empêcher ngspice.exe : seul un administrateur informatique peut créer une exception. ` +
+                `En attendant : utiliser le site depuis un autre ordinateur, depuis WSL/Linux si autorisé, ou l’instance en ligne (Docker / Render) où ngspice tourne sur le serveur, pas sur ton PC.`;
+        } else {
+            primary = `Echec d'exécution ngspice (${exeTried}).${tailOut ? `\n\n${tailOut}` : ""}`;
+        }
         res.status(500).json({
             ok: false,
             phase: "run",
-            errors: [
-                missing
-                    ? `ngspice introuvable ou non exécutable (essayé : ${exeTried}). En local : installe ngspice ou définis NGSPICE / NGSPICE_PATH vers ngspice.exe, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`
-                    : `Echec d'exécution ngspice (${exeTried}).${tailOut ? `\n\n${tailOut}` : ""}`,
-            ],
+            errors: [primary + (tailOut && (missing || securityBlock) ? `\n\n${tailOut}` : "")],
             warnings: built.warnings,
             netlist: built.netlist,
             details: {
@@ -1052,4 +1019,6 @@ app.post('/api/save-note', (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`));
+server.listen(PORT, LISTEN_HOST, () => {
+    console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`);
+});
