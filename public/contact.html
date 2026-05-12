@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Contact & Entraide | STI2D</title>
+    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Styles spécifiques au Tchat */
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+        }
+        @media (max-width: 768px) { .contact-grid { grid-template-columns: 1fr; } }
+
+        .chat-box {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg {
+            background: #334155;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 80%;
+            font-size: 0.9rem;
+            position: relative;
+        }
+        
+        .msg.prof {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+            align-self: flex-start; /* Prof à gauche ou droite selon préférence, ici on distingue par couleur */
+        }
+
+        .msg-header {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        .chat-input-zone {
+            padding: 15px;
+            border-top: 1px solid #334155;
+            display: flex;
+            gap: 10px;
+            background: #0f172a;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .chat-input-zone input[type="text"] {
+            flex: 1;
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .btn-send {
+            background: #00d1ff;
+            color: #0f172a;
+            border: none;
+            padding: 0 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-main">
+            <a href="/" class="logo-container"><span class="logo-title">STI2D</span></a>
+            <h1>CONTACT & ENTRAIDE</h1>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="contact-grid">
+            <!-- SECTION MAIL -->
+            <div class="card" style="height: fit-content; background: #1e293b; border: 1px solid #334155;">
+                <h2 style="color: #ef4444;">📧 M'écrire directement</h2>
+                <p>Envoyez un message qui arrivera directement sur ma boîte Gmail.</p>
+                
+                <form id="email-form" onsubmit="event.preventDefault(); sendEmail();" style="margin-top:20px;">
+                    <input type="text" id="contact-name" placeholder="Votre Nom" required style="width:100%; padding:10px; margin-bottom:10px; border-radius:5px; border:1px solid #475569; background:#0f172a; color:white;">
+                    <input type="email" id="contact-email" placeholder="Votre Email (pour la réponse)" required style="width:100%; padding:10px; margin-bottom:10px; border-radius:5px; border:1px solid #475569; background:#0f172a; color:white;">
+                    <textarea id="contact-msg" placeholder="Votre message..." required style="width:100%; height:120px; padding:10px; margin-bottom:10px; border-radius:5px; border:1px solid #475569; background:#0f172a; color:white; resize:vertical;"></textarea>
+                    <button type="submit" class="download-btn" style="width:100%; background:#ef4444; border-color:#ef4444; color:white; cursor:pointer; font-weight:bold;">✉️ ENVOYER</button>
+                </form>
+                <p id="email-feedback" style="text-align:center; margin-top:10px; display:none;"></p>
+            </div>
+
+            <!-- SECTION TCHAT -->
+            <div class="chat-box">
+                <div class="chat-messages" id="messages-container">
+                    <p style="text-align:center; color:#666;">Chargement du tchat...</p>
+                </div>
+                <div class="chat-input-zone">
+                    <input type="text" id="pseudo-input" placeholder="Votre Prénom" style="width:120px; flex:none;">
+                    <input type="text" id="msg-input" placeholder="Écrivez votre message..." onkeypress="if(event.key==='Enter') sendMsg()">
+                    <button class="btn-send" onclick="sendMsg()">➤</button>
+                </div>
+            </div>
+        </div>
+        
+        <p style="text-align:center; margin-top:40px;"><a href="/" style="color: #94a3b8;">← Retour à l'accueil</a></p>
+    </main>
+
+    <!-- Chargement de la librairie client Socket.io (servie automatiquement par le serveur) -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        const isProf = new URLSearchParams(window.location.search).get('prof') === '1';
+        if(isProf) document.getElementById('pseudo-input').value = "PROF";
+
+        async function loadMessages() {
+            try {
+                const res = await fetch('/api/chat');
+                const msgs = await res.json();
+                const container = document.getElementById('messages-container');
+                container.innerHTML = msgs.map(m => `
+                    <div class="msg ${m.isProf ? 'prof' : ''}">
+                        <div class="msg-header">${m.isProf ? '🎓 PROFESSEUR' : m.author} • ${m.time}</div>
+                        ${m.text}
+                    </div>
+                `).join('');
+                container.scrollTop = container.scrollHeight;
+            } catch(e) { console.error("Erreur tchat", e); }
+        }
+
+        // Initialisation de la connexion Socket.io
+        const socket = io();
+
+        // Écoute des nouveaux messages en temps réel
+        socket.on('chat message', (m) => {
+            const container = document.getElementById('messages-container');
+            container.innerHTML += `
+                <div class="msg ${m.isProf ? 'prof' : ''}">
+                    <div class="msg-header">${m.isProf ? '🎓 PROFESSEUR' : m.author} • ${m.time}</div>
+                    ${m.text}
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+        });
+
+        function sendMsg() {
+            const author = document.getElementById('pseudo-input').value.trim();
+            const text = document.getElementById('msg-input').value.trim();
+            if(!author || !text) return alert("Indiquez votre prénom et un message !");
+            
+            // Envoi via Socket.io au lieu de fetch
+            socket.emit('chat message', { author, text, isProf });
+            document.getElementById('msg-input').value = "";
+        }
+
+        async function sendEmail() {
+            const name = document.getElementById('contact-name').value;
+            const email = document.getElementById('contact-email').value;
+            const message = document.getElementById('contact-msg').value;
+            const btn = document.querySelector('#email-form button');
+            const feedback = document.getElementById('email-feedback');
+
+            btn.disabled = true; btn.innerText = "Envoi en cours...";
+            
+            try {
+                const res = await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, email, message })
+                });
+                const data = await res.json();
+                
+                feedback.style.display = 'block';
+                if (data.success) {
+                    feedback.innerHTML = "✅ Message envoyé avec succès !";
+                    feedback.style.color = "#10b981";
+                    document.getElementById('email-form').reset();
+                } else {
+                    feedback.innerHTML = "❌ Erreur d'envoi. Vérifiez le serveur.";
+                    feedback.style.color = "#ef4444";
+                }
+            } catch (e) {
+                feedback.style.display = 'block';
+                feedback.innerHTML = "❌ Erreur de connexion.";
+                feedback.style.color = "#ef4444";
+            }
+            btn.disabled = false; btn.innerText = "✉️ ENVOYER";
+        }
+
+        loadMessages();
+    </script>
+</body>
+</html>

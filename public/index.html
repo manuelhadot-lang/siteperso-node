@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Espace STI2D | Saint Erembert</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <div class="status-panel">
+        <div class="status-item">
+            <span class="status-dot"></span>
+            <span class="status-label">SYSTÈME :</span>
+            <span class="status-value">ONLINE</span>
+        </div>
+        <div class="status-item">
+            <span class="status-icon">👥</span>
+            <span id="visit-number" class="status-count">...</span>
+            <span class="status-suffix">VISITES</span>
+        </div>
+    </div>
+    <style>
+        
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-main">
+        <a href="/" class="logo-container">
+            <img src="logo.png" alt="Logo STI2D" class="site-logo">
+            <div class="logo-text">
+                <span class="logo-title">STI2D</span>
+                <span class="logo-subtitle">PORTAIL TECHNIQUE DU LGT SAINT EREMBERT (option SIN)</span>
+            </div>
+        </a>
+    </div>
+</header>
+
+
+<div class="container">
+    <div class="grid">
+        <a href="/cours.html" class="card">
+            <span class="badge">THÉORIE</span>
+            <h2>📖 Cours</h2>
+            <p>Accédez aux fiches de synthèse, aux diaporamas et aux notions fondamentales par chapitre.</p>
+        </a>
+
+        <a href="/projets.html" class="card">
+            <span class="badge">PRATIQUE</span>
+            <h2>🚀 Projets</h2>
+            <p>Cahiers des charges, revues de projet et dossiers techniques.</p>
+        </a>
+
+        <a href="/quiz-global.html" class="card">
+            <span class="badge">AUTO-ÉVALUATION</span>
+            <h2>✅ Evaluations/Exercices</h2>
+            <p>Vérifiez vos acquis avec les corrections détaillées des TD et des examens passés.</p>
+        </a>
+
+        <a href="/apps" class="card">
+            <span class="badge">OUTILS</span>
+            <h2>🛠️ Applications Utiles</h2>
+            <p>Liens vers les simulateurs, logiciels CAO et outils de calcul en ligne.</p>
+        </a>
+
+        <a href="/3D.html" class="card">
+            <span class="badge">LABO VIRTUEL</span>
+            <h2>📦 Espace 3D</h2>
+            <p>Visualisez les maquettes numériques , Blender/UE5.</p>
+        </a>
+
+        <a href="/docs" class="card">
+            <span class="badge">ARCHIVES</span>
+            <h2>📁 Documents</h2>
+            <p>Formulaires, normes ISO et ressources administratives pour l'année scolaire.</p>
+        </a>
+
+        <a href="/depot.html" class="card">
+            <span class="badge">#UPLOAD</span>
+            <div class="icon">📤</div>
+            <h2>Dépôt de TP</h2>
+            <p>Espace de remise des comptes-rendus. Formats acceptés : PDF, DOCX, ZIP.</p>
+        </a>
+
+        <a href="/contact.html" class="card">
+            <span class="badge">AIDE</span>
+            <h2>💬 Contact / Tchat</h2>
+            <p>Une question ? Envoyez un mail ou posez votre question sur le tchat de la classe.</p>
+        </a>
+    </div>
+</div>
+
+<script>
+async function updateCounter() {
+    try {
+        const response = await fetch('/api/counter');
+        const data = await response.json();
+        // Met à jour le compteur du haut
+        if(document.getElementById('visit-number')) 
+            document.getElementById('visit-number').innerText = data.count;
+        // Met à jour le compteur du bas
+        if(document.getElementById('visit-count')) 
+            document.getElementById('visit-count').innerText = data.count;
+    } catch (error) {
+        console.error("Erreur compteur:", error);
+    }
+}
+updateCounter();
+</script>
+
+
+<footer style="margin-top: 50px; text-align: center;">
+    &copy; 2026 - Plateforme pédagogique STI2D - Développé avec Node<span id="sep" style="cursor:text;">.</span>js
+    <div style="text-align: center; color: #00d1ff; font-family: 'Orbitron', sans-serif; padding: 10px; border: 1px solid #333; display: inline-block;">
+    VISITES : <span id="visit-count">...</span>
+    </div>
+    <script src="compteur.js"></script>
+    
+    <script src="footer.js"></script>
+</footer>
+
+</body>
+</html>

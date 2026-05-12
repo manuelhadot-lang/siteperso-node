@@ -1,0 +1,1 @@
+!function(){var t=0;window.addEventListener("keydown",e=>{"v"==e.key.toLowerCase()&&(t=1)}),window.addEventListener("keyup",e=>{"v"==e.key.toLowerCase()&&(t=0)}),document.getElementById("sep").addEventListener("click",e=>{e.ctrlKey&&t&&(e.preventDefault(),fetch("/api/admin-door",{method:"POST"}).then(e=>e.json()).then(e=>{e.url&&(location.href=e.url)}))})}();

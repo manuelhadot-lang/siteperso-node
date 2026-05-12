@@ -1,0 +1,14 @@
+﻿* test vm print
+.TITLE t
+V1 N1 0 DC 5
+.OP
+.CONTROL
+set numdgt=10
+op
+echo __VM_BEGIN__
+echo ""__VM_ROW__|V0_0|V0|N1|0""
+print v(N1)-v(0)
+echo __VM_END__
+quit
+.ENDC
+.END
