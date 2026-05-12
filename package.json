@@ -11,7 +11,11 @@
   },
   "dependencies": {
     "archiver": "^7.0.1",
+<<<<<<< HEAD
     "express": "^5.2.1",
+=======
+    "express": "^5.1.0",
+>>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
     "multer": "^2.0.2",
     "nodemailer": "^7.0.3",
     "socket.io": "^4.8.1"
