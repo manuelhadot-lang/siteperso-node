@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<<<<<<< HEAD
     <meta charset="UTF-8">
     <title>Simulateur ngspice - Éditeur</title>
     <link rel="icon" href="data:,">
@@ -66,3 +67,234 @@
     <script src="script.js"></script>
 </body>
 </html>
+=======
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simulateur — grille</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <nav class="menubar" aria-label="Menu principal">
+      <details class="menu-root">
+        <summary id="menu-file-summary"><span class="menu-ico" aria-hidden="true">📁</span> Fichier</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-file-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-new" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--new" aria-hidden="true">✨</span> Nouveau
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-open" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--open" aria-hidden="true">📂</span> Ouvrir…
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-save" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--save" aria-hidden="true">💾</span> Enregistrer
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-file-save-as" role="menuitem">
+              <span class="menu-ico submenu-ico submenu-ico--saveas" aria-hidden="true">🗂️</span> Enregistrer sous…
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row" id="menu-sim-verify" role="menuitem">
+              <span class="menu-ico submenu-ico" aria-hidden="true">🔍</span> Vérification simulation…
+            </button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-composants-summary"><span class="menu-ico" aria-hidden="true">🧰</span> Composants</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-composants-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--resistor" id="pick-resistor" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--res" aria-hidden="true">🍬</span> Résistance
+            </button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-source-summary"><span class="menu-ico" aria-hidden="true">⚡</span> Source</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-source-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--battery" id="pick-battery" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--bat" aria-hidden="true">🔋</span> Alimentation
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--siggen" id="pick-siggen" role="menuitem" title="Générateur sinusoïdal — glisser pour placer ; touche X pour retourner la sortie">
+              <span class="menu-ico submenu-ico submenu-ico--sig" aria-hidden="true">∿</span> Générateur sinusoïdal
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--ground" id="pick-ground" role="menuitem" title="Référence de masse (équipotentiel − pile) — glisser sur la grille">
+              <span class="menu-ico submenu-ico submenu-ico--gnd" aria-hidden="true">⏚</span> Masse
+            </button>
+          </li>
+        </ul>
+      </details>
+      <details class="menu-root">
+        <summary id="menu-appareils-summary"><span class="menu-ico" aria-hidden="true">🔭</span> Appareils</summary>
+        <ul class="submenu" role="menu" aria-labelledby="menu-appareils-summary">
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--voltmeter" id="pick-voltmeter" role="menuitem" title="Glisser sur la grille pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--vm" aria-hidden="true">🎯</span> Voltmètre
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--ammeter" id="pick-ammeter" role="menuitem" title="Ampèremètre en série (symbole I) — glisser pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--am" aria-hidden="true">⚡</span> Ampèremètre
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--ohmmeter" id="pick-ohmmeter" role="menuitem" title="Mesure de résistance entre deux points (sans pile sur le schéma) — glisser pour placer">
+              <span class="menu-ico submenu-ico submenu-ico--ohm" aria-hidden="true">Ω</span> Ohmmètre
+            </button>
+          </li>
+          <li role="none">
+            <button type="button" class="submenu-item submenu-item--row submenu-item--scope" id="pick-scope" role="menuitem" title="Oscilloscope (CH1, CH2, masse) — visualisation après simulation transitoire">
+              <span class="menu-ico submenu-ico submenu-ico--scope" aria-hidden="true">📟</span> Oscilloscope
+            </button>
+          </li>
+        </ul>
+      </details>
+      <div class="menu-root menu-root--commandes-btn">
+        <button type="button" class="menu-command-trigger" id="open-commands-modal" aria-haspopup="dialog" aria-controls="commands-modal-dialog">
+          <span class="menu-ico" aria-hidden="true">⌨️</span> Commandes
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <div id="stage" aria-label="Grille déplaçable à la souris">
+    <div id="world">
+      <div id="circuit-grid" aria-hidden="true"></div>
+      <div id="selection-marquee" class="selection-marquee is-hidden" aria-hidden="true"></div>
+      <svg id="wires-layer" class="wires-layer" aria-hidden="true"></svg>
+      <div id="components-layer" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <footer id="sim-bottom-bar" class="sim-bottom-bar" aria-label="Simulation">
+    <div class="sim-bottom-bar__left" id="sim-panel-volt-wrap" aria-live="polite" aria-label="Mesures simulation (voltmètres, ampèremètres et ohmmètres)">
+      <span class="sr-only" id="sim-panel-volt-label">Mesures tensions, courants et résistances (V, A, Ω)</span>
+      <span class="sim-bottom-bar__volt-value" id="sim-panel-volt-value">—</span>
+    </div>
+    <div class="sim-bottom-bar__center sim-panel-siggen-row is-hidden" id="sim-panel-siggen-row" aria-label="Paramètres du générateur sélectionné">
+      <span class="sim-panel-siggen-t">Générateur</span>
+      <label class="sim-panel-siggen-lab">A <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-amp" title="Amplitude crête (V)" /></label>
+      <label class="sim-panel-siggen-lab">f <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-freq" title="Fréquence (Hz)" /></label>
+      <label class="sim-panel-siggen-lab">Off <input type="text" inputmode="decimal" class="sim-panel-siggen-in" id="siggen-in-off" title="Offset (V)" /></label>
+    </div>
+    <div class="sim-bottom-bar__right">
+      <button type="button" class="sim-panel-btn sim-panel-btn--scope is-hidden" id="sim-panel-scope" title="Courbes CH1 / CH2 (simulation transitoire)">Oscilloscope</button>
+      <button type="button" class="sim-panel-btn sim-panel-btn--verify" id="sim-panel-verify" title="Détails, netliste, journal et messages">
+        Vérification
+      </button>
+      <button type="button" class="sim-panel-btn sim-panel-btn--primary" id="sim-panel-simulate">Simuler</button>
+      <button type="button" class="sim-panel-btn" id="sim-panel-pause" disabled title="En DC (point de fonctionnement), la simulation est une seule passe — contrôle réservé à d’éventuelles évolutions transitoires.">
+        Pause
+      </button>
+      <button type="button" class="sim-panel-btn" id="sim-panel-stop" disabled title="Interrompre la requête en cours">Stop</button>
+    </div>
+  </footer>
+  <input
+    type="file"
+    id="circuit-file-import"
+    hidden
+    accept=".json,application/json"
+    aria-hidden="true"
+  />
+
+  <div id="commands-modal" class="commands-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="commands-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="commands-modal-dialog"
+      class="commands-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="commands-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="commands-modal-title" class="commands-modal__title"><span class="menu-ico" aria-hidden="true">⌨️</span> Commandes</h2>
+        <button type="button" class="commands-modal__close" id="commands-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body">
+        <ul class="commands-list commands-list--modal">
+          <li>Glisser la vue (grille vide) ou un composant sélectionné</li>
+          <li>Molette pour zoom</li>
+          <li><kbd>R</kbd> rotation (résistance, voltmètre, ampèremètre, ohmmètre) : horizontal ↔ vertical</li>
+          <li><kbd>X</kbd> retourne horizontalement le générateur sinusoïdal (sortie à gauche ou à droite)</li>
+          <li><kbd>Suppr</kbd> suppression des composants et fils sélectionnés ; clic sur un tronçon de fil puis <kbd>Suppr</kbd> pour retirer ce fil ; <kbd>Maj</kbd>+cliquer-glisser sur la grille pour encadrer une zone (ajout à la sélection), puis <kbd>Suppr</kbd> pour tout supprimer dans l’encadré</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copier le composant (résistance / voltmètre / ampèremètre / ohmmètre : orientation ; alimentation : type ; générateur : amplitude, fréquence, offset, retournement)</li>
+          <li><kbd>Ctrl</kbd>+<kbd>V</kbd> coller sous le dernier curseur sur la grille</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler — <kbd>Ctrl</kbd>+<kbd>Y</kbd> ou <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> refaire</li>
+          <li>Fichier : projet JSON (composants, fils, nœuds) ; hébergé sur Render ou en fichier statique, l’enregistrement passe par le dossier <strong>Téléchargements</strong> ou la boîte du navigateur (Chrome / Edge : fichier sur disque avec handle).</li>
+          <li>Fils : depuis une jonction rouge (composant ou extrémité de fil), cliquer–glisser (orthogonal, suit le curseur) ; <kbd>Espace</kbd> inverse le sens du coude ; relâcher sur une autre jonction pour terminer ; relâcher sur la grille fige un tronçon et place une jonction au bout ; reprendre depuis cette jonction pour continuer jusqu’à un composant — <strong>suppression</strong> : clic sur un tronçon (surbrillance orange) puis <kbd>Suppr</kbd> ; <kbd>Maj</kbd>+encadrer sur la grille ajoute composants et fils touchés à la sélection</li>
+          <li>Simulation (ngspice) : bandeau en bas — <strong>Simuler</strong>. Avec un <strong>oscilloscope</strong> sur le schéma, la passe devient <strong>transitoire</strong> (courbes CH1/CH2 vs masse) ; le bouton <strong>Oscilloscope</strong> ouvre la fenêtre des courbes (valeurs affichées à 2 décimales). Sans oscilloscope, calcul <strong>DC</strong> classique (voltmètres, etc.). L’ohmmètre (mode DC) mesure la résistance équivalente sans pile sur le schéma.</li>
+          <li>Résistance / alimentation : cliquer sur la valeur affichée sous le symbole (Ω ou tension en V) pour la modifier — le glisser-déplacement part du reste du composant</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="simulate-modal" class="commands-modal simulate-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="simulate-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="simulate-modal-dialog"
+      class="commands-modal__panel simulate-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="simulate-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="simulate-modal-title" class="commands-modal__title">
+          <span class="menu-ico" aria-hidden="true">🔍</span> Vérification simulation
+        </h2>
+        <button type="button" class="commands-modal__close" id="simulate-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body simulate-modal__body">
+        <p id="simulate-status" class="simulate-status">Lancez une simulation avec le bouton « Simuler » du bandeau inférieur, puis ouvrez cette fenêtre pour voir le détail (mesures, alertes, netliste, journal).</p>
+        <ul id="simulate-volt-results" class="simulate-volt-list" aria-live="polite"></ul>
+        <pre id="simulate-errors" class="simulate-msg simulate-msg--errors is-hidden"></pre>
+        <pre id="simulate-warnings" class="simulate-msg simulate-msg--warnings is-hidden"></pre>
+        <details class="simulate-details">
+          <summary>Netliste SPICE générée</summary>
+          <pre id="simulate-netlist" class="simulate-code"></pre>
+        </details>
+        <details class="simulate-details">
+          <summary>Journal ngspice (log)</summary>
+          <pre id="simulate-log" class="simulate-code simulate-code--log"></pre>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div id="scope-modal" class="commands-modal scope-modal is-hidden" aria-hidden="true">
+    <div class="commands-modal__backdrop" id="scope-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div
+      id="scope-modal-dialog"
+      class="commands-modal__panel scope-modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="scope-modal-title"
+    >
+      <header class="commands-modal__header">
+        <h2 id="scope-modal-title" class="commands-modal__title">
+          <span class="menu-ico" aria-hidden="true">📟</span> Oscilloscope
+        </h2>
+        <button type="button" class="commands-modal__close" id="scope-modal-close" aria-label="Fermer">✕</button>
+      </header>
+      <div class="commands-modal__body scope-modal__body">
+        <p class="scope-modal__hint">Tensions CH1 et CH2 par rapport à la borne masse (résultat de la dernière simulation transitoire).</p>
+        <canvas id="scope-modal-canvas" width="560" height="260" aria-label="Tracé CH1 et CH2"></canvas>
+      </div>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
+>>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97

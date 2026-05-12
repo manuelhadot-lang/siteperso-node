@@ -24,8 +24,13 @@ const dirDocs = path.join(__dirname, 'doc');
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
+<<<<<<< HEAD
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href; // Changé .jms en .mjs
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href; // Changé .jms en .mjs
+=======
+const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js")).href;
+const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js")).href;
+>>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
 let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
 let mergeAmmeterMeasurementsFn = null;
@@ -64,6 +69,7 @@ function resolveNgspiceCandidate(p) {
  * NGSPICE ou NGSPICE_PATH (ex. C:\Spice64\bin\ngspice.exe).
  */
 function ngspiceExecutablePath() {
+<<<<<<< HEAD
     const isWindows = process.platform === "win32";
     
     // 1. Définition des chemins absolus basés sur l'emplacement du serveur
@@ -82,6 +88,11 @@ function ngspiceExecutablePath() {
 
     const exeName = isWindows ? "ngspice.exe" : "ngspice";
     return path.join(binDir, exeName);
+=======
+    const raw = process.env.NGSPICE || process.env.NGSPICE_PATH;
+    if (typeof raw === "string" && raw.trim().length > 0) return resolveNgspiceCandidate(raw);
+    return "ngspice";
+>>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
 }
 
 /**
@@ -222,8 +233,13 @@ async function importFresh(filePath) {
     return import(url);
 }
 
+<<<<<<< HEAD
 const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs"); // Changé .jms en .mjs
 const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs"); // Changé .jms en .mjs
+=======
+const ngspiceDeckModulePath       = path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.js");
+const ngspiceResultParserModulePath = path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.js");
+>>>>>>> 43b53f2a248581678dbed2f5e84cfd237e7b2f97
 
 async function getBuildNgspiceDeck() {
     const module = await importFresh(ngspiceDeckModulePath);
