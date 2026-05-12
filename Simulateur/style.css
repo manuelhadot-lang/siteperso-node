@@ -1,0 +1,63 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: #1e1e1e;
+    color: white;
+}
+
+nav {
+    background-color: #333;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    background-color: #0078d4;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+button:hover {
+    background-color: #005a9e;
+}
+
+.main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+#editor-container {
+    flex: 1; /* L'éditeur prend 50% */
+    border-right: 2px solid #444;
+}
+
+#visualizer {
+    flex: 1; /* La visualisation prend 50% */
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background-color: #252526;
+}
+
+#circuit-canvas {
+    border: 1px dashed #666;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #333;
+}
+
+canvas {
+    width: 100% !important;
+    height: 200px;
+}
