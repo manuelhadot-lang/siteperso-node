@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -22,7 +24,28 @@ app.use(express.json());
 
 /** Mot de passe « vitrine » : si SITE_ACCESS_PASSWORD est défini (ex. sur Render), tout le site exige une session cookie. */
 const SITE_ACCESS_COOKIE = 'site_unlock';
-const SITE_ACCESS_MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 jours
+const SITE_ACCESS_DEFAULT_MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 jours si SITE_ACCESS_MAX_AGE_SEC non défini
+
+function siteAccessLogoutOnPageUnloadEnabled() {
+    const v = process.env.SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD;
+    return v === '1' || String(v || '').toLowerCase() === 'true';
+}
+
+/** Durée du cookie : nombre de secondes, ou "session" = cookie de session navigateur (pas Max-Age). */
+function siteAccessCookieMaxAgeSecondsForSetCookie() {
+    const raw = process.env.SITE_ACCESS_MAX_AGE_SEC;
+    if (raw != null && String(raw).trim().toLowerCase() === 'session') return null;
+    const n = parseInt(String(raw ?? '').trim(), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+    return SITE_ACCESS_DEFAULT_MAX_AGE_SEC;
+}
+
+/** Durée de validité du jeton signé (peut être plus courte que le cookie en mode session). */
+function siteAccessTokenLifetimeSec() {
+    const cookieAge = siteAccessCookieMaxAgeSecondsForSetCookie();
+    if (cookieAge != null) return cookieAge;
+    return 60 * 60 * 12; // avec cookie "session", le jeton reste borné (12 h)
+}
 
 function siteAccessPasswordConfigured() {
     const p = process.env.SITE_ACCESS_PASSWORD;
@@ -53,7 +76,7 @@ function parseCookieHeader(header) {
 }
 
 function createSiteAccessToken() {
-    const exp = Math.floor(Date.now() / 1000) + SITE_ACCESS_MAX_AGE_SEC;
+    const exp = Math.floor(Date.now() / 1000) + siteAccessTokenLifetimeSec();
     const key = siteAccessSigningKey();
     const sig = crypto.createHmac('sha256', key).update(String(exp)).digest('hex');
     return `${exp}.${sig}`;
@@ -101,9 +124,16 @@ function setSiteAccessCookie(res, token) {
         `${SITE_ACCESS_COOKIE}=${encodeURIComponent(token)}`,
         'Path=/',
         'HttpOnly',
-        `Max-Age=${SITE_ACCESS_MAX_AGE_SEC}`,
         'SameSite=Lax',
     ];
+    const maxAge = siteAccessCookieMaxAgeSecondsForSetCookie();
+    if (maxAge != null) parts.push(`Max-Age=${maxAge}`);
+    if (process.env.NODE_ENV === 'production') parts.push('Secure');
+    res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearSiteAccessCookie(res) {
+    const parts = [`${SITE_ACCESS_COOKIE}=`, 'Path=/', 'HttpOnly', 'Max-Age=0', 'SameSite=Lax'];
     if (process.env.NODE_ENV === 'production') parts.push('Secure');
     res.setHeader('Set-Cookie', parts.join('; '));
 }
@@ -137,12 +167,14 @@ app.get('/acces-site', (req, res) => {
       background:#00d1ff; color:#0f172a; font-weight:700; font-size:1rem; }
     button:hover { filter:brightness(1.05); }
     .err { background:#450a0a; color:#fecaca; padding:.65rem .75rem; border-radius:8px; font-size:.85rem; margin-bottom:1rem; }
+    .hint { font-size:0.8rem; color:#64748b; line-height:1.45; margin:-0.25rem 0 1rem; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Accès protégé</h1>
     <p>Ce site n’est visible qu’avec le mot de passe fourni par l’administrateur.</p>
+    ${siteAccessLogoutOnPageUnloadEnabled() ? '<p class="hint">Option active : à chaque fois que vous quittez une page du site, la session est oubliée — le mot de passe sera redemandé.</p>' : ''}
     ${err ? '<div class="err">Mot de passe incorrect.</div>' : ''}
     <form method="post" action="/acces-site">
       <input type="hidden" name="next" value="${escapeHtmlAttr(nextTarget)}">
@@ -151,6 +183,7 @@ app.get('/acces-site', (req, res) => {
       <button type="submit">Entrer</button>
     </form>
   </div>
+  <script src="/site-access-unload.js" defer></script>
 </body>
 </html>`);
 });
@@ -169,6 +202,36 @@ app.post('/acces-site', (req, res) => {
     }
     setSiteAccessCookie(res, createSiteAccessToken());
     return res.redirect(302, nextTarget);
+});
+
+/** Efface uniquement le cookie d’accès (utilisé au déchargement de page si SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD=1). */
+app.post('/acces-site/clear-session', (req, res) => {
+    if (!siteAccessPasswordConfigured() || !siteAccessLogoutOnPageUnloadEnabled()) return res.sendStatus(204);
+    clearSiteAccessCookie(res);
+    return res.sendStatus(204);
+});
+
+/** Déconnexion manuelle (lien possible dans le site). */
+app.get('/acces-site/deconnexion', (req, res) => {
+    if (!siteAccessPasswordConfigured()) return res.redirect('/');
+    clearSiteAccessCookie(res);
+    return res.redirect(302, '/acces-site');
+});
+
+app.get('/site-access-unload.js', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.type('application/javascript; charset=utf-8');
+    if (!siteAccessLogoutOnPageUnloadEnabled()) {
+        return res.send("/* SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD désactivé : aucune action au déchargement */\n");
+    }
+    res.send(`(function(){
+  function clearSiteAccessCookieBeacon(){
+    try {
+      navigator.sendBeacon("/acces-site/clear-session", "");
+    } catch (e) {}
+  }
+  window.addEventListener("pagehide", clearSiteAccessCookieBeacon);
+})();`);
 });
 
 app.use((req, res, next) => {
@@ -616,7 +679,7 @@ app.get('/projets.html', (req, res) => {
                     <p>${ouvert ? '✅ Ouvert' : '🔒 Dès le ' + planningProjets[p].split('-').reverse().join('/')}</p>
                 </a>`;
     }).join('');
-    res.send(`<html><head><meta charset="UTF-8"><link rel="stylesheet" href="style.css"></head><body style="background:#0f172a; color:white; font-family:sans-serif; padding:20px;"><h1>PROJETS STI2D</h1><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:20px;">${cartesHTML}</div></body></html>`);
+    res.send(`<html><head><meta charset="UTF-8"><link rel="stylesheet" href="style.css"></head><body style="background:#0f172a; color:white; font-family:sans-serif; padding:20px;"><h1>PROJETS STI2D</h1><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:20px;">${cartesHTML}</div><script src="/site-access-unload.js" defer></script></body></html>`);
 });
 
 // Pages de cours
@@ -1192,4 +1255,13 @@ app.post('/api/save-note', (req, res) => {
 
 server.listen(PORT, LISTEN_HOST, () => {
     console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`);
+    if (siteAccessPasswordConfigured()) {
+        console.log('🔐 Accès site protégé : visitez n’importe quelle URL pour être redirigé vers /acces-site');
+        if (siteAccessLogoutOnPageUnloadEnabled()) {
+            console.log('   ↳ SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD : cookie effacé à chaque changement de page');
+        }
+        if (siteAccessCookieMaxAgeSecondsForSetCookie() == null) {
+            console.log('   ↳ SITE_ACCESS_MAX_AGE_SEC=session : cookie jusqu’à fermeture du navigateur');
+        }
+    }
 });
