@@ -14,15 +14,12 @@ require(['vs/editor/editor.main'], function() {
     // Création de l'éditeur
     window.editor = monaco.editor.create(document.getElementById('editor-container'), {
         value: [
-            '* Test Diviseur de Tension',
+            '* Test diviseur de tension (adapté au mode batch ngspice -b)',
             'V1 1 0 DC 12',
             'R1 1 2 1k',
             'R2 2 0 2k',
-            '',
-            '.control',
-            'op',
-            'print v(1) v(2)',
-            '.endc',
+            '.op',
+            '.print op v(1) v(2)',
             '.end'
         ].join('\n'),
         language: 'plaintext',
