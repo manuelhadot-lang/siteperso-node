@@ -1,0 +1,11 @@
+# Dépendances : reconstruites dans l’image (npm ci / npm install)
+node_modules
+**/node_modules
+
+# Bundle ngspice Windows / portable : dans Docker on utilise uniquement apt (voir Dockerfile ENV NGSPICE).
+Simulateur/bin
+Simulateur/lib
+
+.git
+.env
+.env.*

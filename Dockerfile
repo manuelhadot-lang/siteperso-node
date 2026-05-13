@@ -1,9 +1,13 @@
 FROM node:20-bookworm-slim
 
-# Installe ngspice pour la route /api/simulate
+# Installe ngspice pour la route /api/simulate (paquet Debian, pas le bundle Windows du dépôt).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ngspice \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && test -x /usr/bin/ngspice
+
+# Le serveur lit NGSPICE en priorité : on force le binaire de l’image Linux (évite Simulateur/bin/*.exe).
+ENV NGSPICE=/usr/bin/ngspice
 
 WORKDIR /app
 
@@ -20,7 +24,7 @@ ENV NODE_ENV=production
 # Ne pas les copier dans ce fichier (sinon exposition dans l’historique Git / registry).
 EXPOSE 3000
 
-# Vérification rapide: ngspice doit être présent dans PATH
-RUN ngspice -v
+# Vérification : même binaire que NGSPICE
+RUN "$NGSPICE" -v
 
 CMD ["npm", "start"]
