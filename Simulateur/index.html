@@ -2,67 +2,63 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Simulateur ngspice - Éditeur</title>
-    <link rel="icon" href="data:,">
-    
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: sans-serif;
-            background: #1e1e1e;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-        nav {
-            background: #333;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            border-bottom: 1px solid #444;
-        }
-        #runBtn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        #runBtn:disabled { background: #666; }
-        
-        .container {
-            display: flex;
-            flex: 1;
-            width: 100%;
-        }
-        
-        /* IMPORTANT : z-index et pointer-events pour débloquer le clic gauche */
-        #editor-container {
-            flex: 1;
-            height: 100%;
-            position: relative;
-            z-index: 10;
-            pointer-events: all;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuit Designer Pro</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <header class="navbar">
+        <div class="menu-item">
+            📁 Fichier
+            <div class="dropdown">
+                <button onclick="fileAction('open')">📂 Ouvrir</button>
+                <button onclick="fileAction('save')">💾 Enregistrer</button>
+                <button onclick="fileAction('saveas')">📝 Enregistrer sous</button>
+                <div class="divider"></div>
+                <button onclick="window.location.reload()" class="danger">❌ Quitter</button>
+            </div>
+        </div>
 
-    <nav>
+        <div class="menu-item">
+            🧩 Composants
+            <div class="dropdown">
+                <button onclick="setTool('resistor')">⚡ Résistance</button>
+                <button onclick="setTool('capacitor')">🌌 Condensateur</button>
+            </div>
+        </div>
+
+        <div class="menu-item">
+            🔋 Sources
+            <div class="dropdown">
+                <button onclick="setTool('vsource')">🔌 Alimentation DC</button>
+            </div>
+        </div>
+
+        <div class="menu-item">
+            📏 Appareils
+            <div class="dropdown">
+                <button onclick="setTool('voltmeter')">📟 Voltmètre</button>
+            </div>
+        </div>
+
+        <div class="menu-item">
+            ❓ Aide
+            <div class="dropdown">
+                <button onclick="showHelp()">⌨️ Commandes</button>
+            </div>
+        </div>
+
         <button id="runBtn">🚀 Lancer la Simulation</button>
-        <span style="margin-left: 20px; font-size: 0.8em; color: #aaa;">F12 pour voir les résultats</span>
-    </nav>
+    </header>
 
-    <div class="container">
-        <div id="editor-container"></div>
-    </div>
+    <main id="editor-container">
+        <canvas id="schematicCanvas"></canvas>
+        <div id="ui-info">
+            <span id="tool-name">Outil : Sélection</span> | 
+            <span id="coords">X: 0, Y: 0</span>
+        </div>
+    </main>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

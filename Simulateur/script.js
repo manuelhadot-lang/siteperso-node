@@ -1,79 +1,147 @@
-// Configuration pour contourner les blocages de sécurité du navigateur
-window.MonacoEnvironment = {
-    getWorkerUrl: function (workerId, label) {
-        return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
-            self.MonacoEnvironment = { baseUrl: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/' };
-            importScripts('https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/base/worker/workerMain.js');`
-        )}`;
-    }
-};
+const canvas = document.getElementById('schematicCanvas');
+const ctx = canvas.getContext('2d');
+const toolLabel = document.getElementById('tool-name');
+const coordsLabel = document.getElementById('coords');
+const runBtn = document.getElementById('runBtn');
 
-require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+let width, height;
+let scale = 1.0;
+let offset = { x: 0, y: 0 };
+let isDragging = false;
+let lastMousePos = { x: 0, y: 0 };
+let currentTool = "selection";
 
-require(['vs/editor/editor.main'], function() {
-    // Création de l'éditeur
-    window.editor = monaco.editor.create(document.getElementById('editor-container'), {
-        value: [
-            '* Test diviseur de tension (adapté au mode batch ngspice -b)',
-            'V1 1 0 DC 12',
-            'R1 1 2 1k',
-            'R2 2 0 2k',
-            '.op',
-            '.print op v(1) v(2)',
-            '.end'
-        ].join('\n'),
-        language: 'plaintext',
-        theme: 'vs-dark',
-        automaticLayout: true,
-        readOnly: false,        // Force l'écriture
-        domReadOnly: false,     // Débloque le DOM
-        mouseWheelZoom: true
+const GRID_SIZE = 50;
+
+function init() {
+    window.addEventListener('resize', resize);
+    canvas.addEventListener('contextmenu', e => e.preventDefault()); // Désactiver clic droit menu
+
+    // Souris : Déplacement et Placement
+    canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 2) { // Clic droit pour déplacer la vue
+            isDragging = true;
+            lastMousePos = { x: e.clientX, y: e.clientY };
+        } else if (e.button === 0) { // Clic gauche pour agir
+            handleAction(e.clientX, e.clientY);
+        }
     });
 
-    // Forçage du focus pour activer le curseur et le clic gauche
-    setTimeout(() => {
-        window.editor.focus();
-        console.log("Monaco est prêt et éditable.");
-    }, 1000);
-});
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', () => isDragging = false);
+    canvas.addEventListener('wheel', handleZoom, { passive: false });
 
-// Gestion du bouton de simulation
-document.getElementById('runBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('runBtn');
-    const netlist = window.editor.getValue();
+    resize();
+    draw();
+}
 
-    if (!netlist.trim()) return alert("Veuillez saisir une netlist.");
+// Changer d'outil depuis le menu
+function setTool(tool) {
+    currentTool = tool;
+    toolLabel.innerText = `Outil : ${tool.charAt(0).toUpperCase() + tool.slice(1)}`;
+}
 
-    btn.disabled = true;
-    btn.innerText = "⚡ Simulation...";
+function showHelp() {
+    alert("🚀 ASTUCES :\n\n- Clic Droit : Déplacer la vue\n- Molette : Zoomer / Dézoomer\n- Clic Gauche : Placer un composant (aimanté sur la grille)");
+}
+
+function handleAction(mx, my) {
+    // Calcul de la position réelle sur la grille (Snap to Grid)
+    const worldX = Math.round(((mx - offset.x) / scale) / GRID_SIZE) * GRID_SIZE;
+    const worldY = Math.round(((my - offset.y) / scale) / GRID_SIZE) * GRID_SIZE;
+    
+    console.log(`Action : ${currentTool} à [${worldX}, ${worldY}]`);
+}
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight - 40;
+    canvas.width = width;
+    canvas.height = height;
+    draw();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(scale, scale);
+
+    drawGrid();
+    drawOrigin();
+
+    ctx.restore();
+}
+
+function drawGrid() {
+    const left = -offset.x / scale;
+    const top = -offset.y / scale;
+    const right = (width - offset.x) / scale;
+    const bottom = (height - offset.y) / scale;
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#1a1a1a'; // Quadrillage discret
+    ctx.lineWidth = 1 / scale;
+
+    for (let x = Math.floor(left / GRID_SIZE) * GRID_SIZE; x < right; x += GRID_SIZE) {
+        ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+    }
+    for (let y = Math.floor(top / GRID_SIZE) * GRID_SIZE; y < bottom; y += GRID_SIZE) {
+        ctx.moveTo(left, y); ctx.lineTo(right, y);
+    }
+    ctx.stroke();
+}
+
+function drawOrigin() {
+    ctx.beginPath();
+    ctx.strokeStyle = '#333';
+    ctx.arc(0, 0, 5/scale, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function handleMouseMove(e) {
+    const worldX = Math.round((e.clientX - offset.x) / scale);
+    const worldY = Math.round((e.clientY - offset.y) / scale);
+    coordsLabel.innerText = `X: ${worldX}, Y: ${worldY}`;
+
+    if (isDragging) {
+        offset.x += e.clientX - lastMousePos.x;
+        offset.y += e.clientY - lastMousePos.y;
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        draw();
+    }
+}
+
+function handleZoom(e) {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = scale * factor;
+
+    if (newScale > 0.2 && newScale < 5) {
+        // Zoom centré sur la souris
+        offset.x = e.clientX - (e.clientX - offset.x) * factor;
+        offset.y = e.clientY - (e.clientY - offset.y) * factor;
+        scale = newScale;
+        draw();
+    }
+}
+
+// Appel à ton API de simulation (ton server.js existant)
+runBtn.addEventListener('click', async () => {
+    runBtn.innerText = "⚡ Simulation...";
+    const netlist = "V1 1 0 12\nR1 1 0 1k\n.op\n.end"; // Simulation de test
 
     try {
-        // Envoi au serveur (respecte la structure attendue par votre server.js)
-        const response = await fetch('/api/simulate', {
+        const res = await fetch('/api/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                state: netlist, // Votre server.js lit req.body.state
-                gridStep: 10 
-            })
+            body: JSON.stringify({ state: netlist })
         });
-
-        const data = await response.json();
-
-        if (data.ok) {
-            console.log("✅ RESULTATS NGSPICE :");
-            console.log(data.log); // Contient la sortie texte de ngspice
-            alert("Simulation réussie ! Regardez la console (F12).");
-        } else {
-            console.error("❌ ERREUR :", data.errors);
-            alert("Erreur lors de la simulation. Détails dans la console.");
-        }
-
-    } catch (err) {
-        console.error("❌ Erreur réseau :", err);
-        alert("Impossible de contacter le serveur.");
-    } finally {
-        btn.disabled = false;
-        btn.innerText = "🚀 Lancer la Simulation";
-    }
+        const data = await res.json();
+        alert(data.ok ? "Simulation terminée !\nRésultats disponibles dans la console F12." : "Erreur.");
+    } catch (e) { alert("Erreur serveur."); }
+    
+    runBtn.innerText = "🚀 Lancer la Simulation";
 });
+
+init();

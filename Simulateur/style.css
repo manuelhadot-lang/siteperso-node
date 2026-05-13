@@ -1,63 +1,93 @@
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    background-color: #1e1e1e;
-    color: white;
-}
-
-nav {
-    background-color: #333;
-    padding: 10px;
-    display: flex;
-    gap: 10px;
-}
-
-button {
-    background-color: #0078d4;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    cursor: pointer;
-    border-radius: 4px;
-}
-
-button:hover {
-    background-color: #005a9e;
-}
-
-.main-container {
-    display: flex;
-    flex: 1;
+body, html {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background-color: #000;
+    color: #eee;
+    font-family: 'Segoe UI', Arial, sans-serif;
     overflow: hidden;
 }
 
-#editor-container {
-    flex: 1; /* L'éditeur prend 50% */
-    border-right: 2px solid #444;
-}
-
-#visualizer {
-    flex: 1; /* La visualisation prend 50% */
-    padding: 20px;
+/* Barre de navigation : Fond solide opaque */
+.navbar {
     display: flex;
-    flex-direction: column;
-    gap: 20px;
-    background-color: #252526;
-}
-
-#circuit-canvas {
-    border: 1px dashed #666;
-    height: 300px;
-    display: flex;
+    background-color: #1a1a1a; /* Gris très foncé, identique au fond mais opaque */
+    border-bottom: 1px solid #333;
+    height: 40px;
     align-items: center;
-    justify-content: center;
-    background-color: #333;
+    padding: 0 10px;
+    position: relative;
+    z-index: 1000; /* Assure que la barre est au-dessus du canvas */
 }
 
-canvas {
-    width: 100% !important;
-    height: 200px;
+.menu-item {
+    position: relative;
+    padding: 0 15px;
+    line-height: 40px;
+    cursor: pointer;
+    font-size: 13px;
+    user-select: none;
+}
+
+.menu-item:hover { background: #333; }
+
+/* Menus déroulants : Fond solide pour cacher la grille */
+.dropdown {
+    display: none;
+    position: absolute;
+    top: 40px; 
+    left: 0;
+    background-color: #252526; /* Couleur unie opaque */
+    border: 1px solid #454545;
+    min-width: 180px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.8); /* Ombre plus forte pour détacher du fond */
+    z-index: 1001; /* Encore plus haut que la navbar */
+}
+
+.menu-item:hover .dropdown { display: block; }
+
+.dropdown button {
+    width: 100%;
+    padding: 10px 15px;
+    background: none;
+    border: none;
+    color: #ccc;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dropdown button:hover { background: #094771; color: #fff; }
+.dropdown .divider { height: 1px; background: #444; margin: 4px 0; }
+.dropdown .danger:hover { background: #a1260d; }
+
+/* Bouton Simulation */
+#runBtn {
+    margin-left: auto;
+    background: #28a745;
+    border: none;
+    color: white;
+    padding: 6px 15px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Optionnel : Ajuster le conteneur pour éviter tout chevauchement bizarre */
+#editor-container {
+    position: relative;
+    width: 100vw;
+    height: calc(100vh - 40px);
+    background-color: #000; /* Le noir du fond */
+    z-index: 1;
+}
+
+#ui-info {
+    position: absolute;
+    bottom: 10px;
+    right: 15px;
+    background: rgba(0,0,0,0.6);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #888;
+    pointer-events: none;
 }
