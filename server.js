@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -15,6 +16,178 @@ const { resolveNgspiceForServer, applyPathPrepend } = require("./tools/ngspice-b
 const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
 const io = new Server(server); // On attache Socket.io au serveur HTTP
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+/** Mot de passe « vitrine » : si SITE_ACCESS_PASSWORD est défini (ex. sur Render), tout le site exige une session cookie. */
+const SITE_ACCESS_COOKIE = 'site_unlock';
+const SITE_ACCESS_MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 jours
+
+function siteAccessPasswordConfigured() {
+    const p = process.env.SITE_ACCESS_PASSWORD;
+    return typeof p === 'string' && p.length > 0;
+}
+
+function siteAccessSigningKey() {
+    const p = process.env.SITE_ACCESS_PASSWORD;
+    const extra = process.env.SITE_ACCESS_SECRET || '';
+    return crypto.createHash('sha256').update(`siteperso-unlock|${p}|${extra}`).digest();
+}
+
+function parseCookieHeader(header) {
+    const out = {};
+    if (!header || typeof header !== 'string') return out;
+    for (const part of header.split(';')) {
+        const idx = part.indexOf('=');
+        if (idx === -1) continue;
+        const k = part.slice(0, idx).trim();
+        const v = part.slice(idx + 1).trim();
+        try {
+            out[k] = decodeURIComponent(v);
+        } catch {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+
+function createSiteAccessToken() {
+    const exp = Math.floor(Date.now() / 1000) + SITE_ACCESS_MAX_AGE_SEC;
+    const key = siteAccessSigningKey();
+    const sig = crypto.createHmac('sha256', key).update(String(exp)).digest('hex');
+    return `${exp}.${sig}`;
+}
+
+function verifySiteAccessToken(token) {
+    if (!token || typeof token !== 'string') return false;
+    const dot = token.lastIndexOf('.');
+    if (dot <= 0) return false;
+    const exp = parseInt(token.slice(0, dot), 10);
+    const sig = token.slice(dot + 1);
+    if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false;
+    const key = siteAccessSigningKey();
+    const expected = crypto.createHmac('sha256', key).update(String(exp)).digest('hex');
+    try {
+        const a = Buffer.from(sig, 'utf8');
+        const b = Buffer.from(expected, 'utf8');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch {
+        return false;
+    }
+}
+
+function hasSiteAccessFromCookies(cookieHeader) {
+    const cookies = parseCookieHeader(cookieHeader);
+    return verifySiteAccessToken(cookies[SITE_ACCESS_COOKIE]);
+}
+
+/** Évite les redirections ouvertes vers des URLs absolues. */
+function isSafeSiteRedirectTarget(url) {
+    if (!url || typeof url !== 'string') return false;
+    if (!url.startsWith('/')) return false;
+    if (url.startsWith('//')) return false;
+    if (url.includes('\\')) return false;
+    if (/^\/[^/]*:/i.test(url)) return false;
+    return true;
+}
+
+function escapeHtmlAttr(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function setSiteAccessCookie(res, token) {
+    const parts = [
+        `${SITE_ACCESS_COOKIE}=${encodeURIComponent(token)}`,
+        'Path=/',
+        'HttpOnly',
+        `Max-Age=${SITE_ACCESS_MAX_AGE_SEC}`,
+        'SameSite=Lax',
+    ];
+    if (process.env.NODE_ENV === 'production') parts.push('Secure');
+    res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+app.get('/acces-site', (req, res) => {
+    if (!siteAccessPasswordConfigured()) return res.redirect('/');
+    let nextTarget = typeof req.query.next === 'string' ? req.query.next : '/';
+    if (!isSafeSiteRedirectTarget(nextTarget)) nextTarget = '/';
+    if (hasSiteAccessFromCookies(req.headers.cookie)) return res.redirect(302, nextTarget);
+    const err = req.query.err === '1';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accès au site</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background:#0f172a; color:#e2e8f0; font-family: system-ui, sans-serif; }
+    .card { width:100%; max-width:380px; padding:2rem; background:#1e293b; border-radius:12px;
+      border:1px solid #334155; box-shadow:0 20px 50px rgba(0,0,0,.35); }
+    h1 { margin:0 0 .5rem; font-size:1.25rem; color:#f8fafc; }
+    p { margin:0 0 1.25rem; font-size:.9rem; color:#94a3b8; line-height:1.5; }
+    label { display:block; font-size:.85rem; color:#94a3b8; margin-bottom:.35rem; }
+    input[type=password] { width:100%; padding:.65rem .75rem; border-radius:8px; border:1px solid #475569;
+      background:#0f172a; color:#f8fafc; font-size:1rem; }
+    input[type=password]:focus { outline:2px solid #00d1ff; outline-offset:1px; border-color:#00d1ff; }
+    button { width:100%; margin-top:1rem; padding:.75rem; border:none; border-radius:8px; cursor:pointer;
+      background:#00d1ff; color:#0f172a; font-weight:700; font-size:1rem; }
+    button:hover { filter:brightness(1.05); }
+    .err { background:#450a0a; color:#fecaca; padding:.65rem .75rem; border-radius:8px; font-size:.85rem; margin-bottom:1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Accès protégé</h1>
+    <p>Ce site n’est visible qu’avec le mot de passe fourni par l’administrateur.</p>
+    ${err ? '<div class="err">Mot de passe incorrect.</div>' : ''}
+    <form method="post" action="/acces-site">
+      <input type="hidden" name="next" value="${escapeHtmlAttr(nextTarget)}">
+      <label for="pw">Mot de passe</label>
+      <input id="pw" name="password" type="password" required autocomplete="current-password" autofocus>
+      <button type="submit">Entrer</button>
+    </form>
+  </div>
+</body>
+</html>`);
+});
+
+app.post('/acces-site', (req, res) => {
+    if (!siteAccessPasswordConfigured()) return res.redirect('/');
+    const rawNext = req.body && typeof req.body.next === 'string' ? req.body.next : '/';
+    const nextTarget = isSafeSiteRedirectTarget(rawNext) ? rawNext : '/';
+    const sent = req.body && typeof req.body.password === 'string' ? req.body.password : '';
+    const expected = process.env.SITE_ACCESS_PASSWORD;
+    const a = Buffer.from(sent, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!ok) {
+        return res.redirect(302, '/acces-site?err=1&next=' + encodeURIComponent(nextTarget));
+    }
+    setSiteAccessCookie(res, createSiteAccessToken());
+    return res.redirect(302, nextTarget);
+});
+
+app.use((req, res, next) => {
+    if (!siteAccessPasswordConfigured()) return next();
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
+        const dest = req.originalUrl || req.url || '/';
+        const safe = isSafeSiteRedirectTarget(dest) ? dest : '/';
+        return res.redirect(302, '/acces-site?next=' + encodeURIComponent(safe));
+    }
+    if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
+    return res.status(403).type('text/plain; charset=utf-8').send('Accès refusé. Ouvrez le site dans le navigateur après vous être connecté sur la page mot de passe.');
+});
+
+io.use((socket, next) => {
+    if (!siteAccessPasswordConfigured()) return next();
+    if (hasSiteAccessFromCookies(socket.handshake.headers.cookie)) return next();
+    next(new Error('unauthorized'));
+});
 const PORT = process.env.PORT || 3000;
 /** Local : 127.0.0.1 (moins d’alertes pare-feu Windows). Prod : NODE_ENV=production → 0.0.0.0. Surcharge : LISTEN_HOST ou HOST. */
 const LISTEN_HOST =
@@ -143,8 +316,6 @@ const uploadQuiz = multer({ storage: storageQuiz });
 
 
 // --- 4. MIDDLEWARES ---
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 
 function isProjectAccessible(projectKey) {
     const aujourdhui = new Date().toISOString().split('T')[0];
