@@ -15,6 +15,7 @@ let redoStack = [];
 let selectedId = null;
 let resistorCount = 0;
 let vsourceCount = 0;
+let voltmeterCount = 0;
 const GRID_SIZE = 50;
 
 /** Dernière position monde de la souris (collage à la grille). */
@@ -26,6 +27,11 @@ let clipboard = null;
 let activeDragType = null;
 /** Aperçu monde { type, x, y, vertical } aligné grille — dessiné pendant le drag. */
 let dragPreview = null;
+
+/** Fichier courant (API Fichiers) pour « Enregistrer » sans redemander le chemin. */
+let currentFileHandle = null;
+
+const LABEL_PAD = 20;
 
 function init() {
     window.addEventListener('resize', resize);
@@ -47,12 +53,31 @@ function init() {
     // Clavier
     window.addEventListener('keydown', handleKeyDown);
 
+    const fileOpen = document.getElementById("file-open-input");
+    if (fileOpen) {
+        fileOpen.addEventListener("change", async e => {
+            const f = e.target.files[0];
+            e.target.value = "";
+            if (!f) return;
+            try {
+                await loadCircuitFromText(await f.text());
+                currentFileHandle = null;
+                history = [];
+                redoStack = [];
+                saveState();
+                draw();
+            } catch (err) {
+                alert("Impossible d'ouvrir ce fichier : " + (err && err.message ? err.message : err));
+            }
+        });
+    }
+
     saveState();
     resize();
 }
 
 function isTwoTerminalType(t) {
-    return t === "resistor" || t === "vsource";
+    return t === "resistor" || t === "vsource" || t === "voltmeter";
 }
 
 function removePaletteDragCanvas() {
@@ -98,6 +123,24 @@ function createPaletteDragImage(type) {
         g.moveTo(88, 24); g.lineTo(126, 24);
         g.stroke();
         g.strokeRect(44, 16, 44, 16);
+    } else if (type === "voltmeter") {
+        g.strokeStyle = "#4DB6AC";
+        const mid = 24;
+        const cx = 66;
+        const r = 14;
+        g.beginPath();
+        g.moveTo(6, mid);
+        g.lineTo(cx - r, mid);
+        g.moveTo(cx + r, mid);
+        g.lineTo(126, mid);
+        g.stroke();
+        g.beginPath();
+        g.arc(cx, mid, r, 0, Math.PI * 2);
+        g.stroke();
+        g.fillStyle = "#ccc";
+        g.font = "bold 12px Segoe UI";
+        g.textAlign = "center";
+        g.fillText("V", cx, mid + 4);
     }
     document.body.appendChild(c);
     return { canvas: c, hx: 66, hy: 24 };
@@ -174,18 +217,27 @@ function handleDrop(e) {
     activeDragType = null;
     const worldPos = screenToWorld(e.clientX, e.clientY);
 
-    if (type === "resistor" || type === "vsource") {
+    if (type === "resistor" || type === "vsource" || type === "voltmeter") {
         const snapped = snapTwoTerminalDropWorld(worldPos.x, worldPos.y, false);
         let id;
-        if (type === "resistor") id = `R${++resistorCount}`;
-        else id = `E${++vsourceCount}`;
-        
+        let value;
+        if (type === "resistor") {
+            id = `R${++resistorCount}`;
+            value = "1k";
+        } else if (type === "vsource") {
+            id = `E${++vsourceCount}`;
+            value = "5V";
+        } else {
+            id = `V${++voltmeterCount}`;
+            value = "";
+        }
+
         components.push({
-            id: id,
-            type: type,
+            id,
+            type,
             x: snapped.x,
             y: snapped.y,
-            value: type === "vsource" ? "5V" : "1k",
+            value,
             vertical: false
         });
         saveState();
@@ -209,7 +261,12 @@ function draw() {
             type: dragPreview.type,
             x: dragPreview.x,
             y: dragPreview.y,
-            value: dragPreview.type === "vsource" ? "5V" : "1k",
+            value:
+                dragPreview.type === "vsource"
+                    ? "5V"
+                    : dragPreview.type === "resistor"
+                      ? "1k"
+                      : "",
             vertical: dragPreview.vertical
         };
         renderComponent(ghost, { ghost: true });
@@ -249,93 +306,95 @@ function drawJunctions(points) {
     }
 }
 
+function drawComponentLabels(ctx, c, w, h, isVertical) {
+    if (!c.id) return;
+    ctx.fillStyle = "#fff";
+    if (isVertical) {
+        const yMid = h / 2;
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "right";
+        ctx.fillText(c.id, -LABEL_PAD, yMid);
+        ctx.textAlign = "left";
+        if (c.value != null && String(c.value).length > 0) {
+            ctx.fillText(String(c.value), w + LABEL_PAD, yMid);
+        }
+    } else {
+        const cx = w / 2;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(c.id, cx, -12);
+        if (c.value != null && String(c.value).length > 0) {
+            ctx.textBaseline = "top";
+            ctx.fillText(String(c.value), cx, h + 12);
+        }
+    }
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "start";
+}
+
 function renderComponent(c, opts) {
     const ghost = opts && opts.ghost;
     const isSelected = !ghost && selectedId === c.id;
-    const isV = c.type === "vsource";
-    ctx.strokeStyle = isSelected ? "#0078d4" : isV ? "#FFA726" : "#4CAF50";
+    
+    // Couleurs par type
+    if (isSelected) ctx.strokeStyle = "#0078d4";
+    else if (c.type === "vsource") ctx.strokeStyle = "#FFA726";
+    else if (c.type === "voltmeter") ctx.strokeStyle = "#4DB6AC";
+    else ctx.strokeStyle = "#4CAF50";
+
     ctx.lineWidth = 2 / scale;
     ctx.fillStyle = "#fff";
     ctx.font = `${14 / scale}px Segoe UI`;
 
     let junctA, junctB;
-
     ctx.save();
     ctx.translate(c.x, c.y);
+
     if (c.vertical) {
         const h = GRID_SIZE * 3, w = GRID_SIZE;
-        const bodyH = GRID_SIZE * 1.5, bodyY = (h - bodyH) / 2;
-        if (!isV) {
-            ctx.beginPath();
-            ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, bodyY);
-            ctx.moveTo(w / 2, bodyY + bodyH); ctx.lineTo(w / 2, h);
+        const midX = w/2;
+        if (c.type === "voltmeter") {
+            const r = 18;
+            ctx.beginPath(); 
+            ctx.moveTo(midX, 0); ctx.lineTo(midX, h/2 - r); 
+            ctx.moveTo(midX, h/2 + r); ctx.lineTo(midX, h); 
             ctx.stroke();
-        }
-
-        if (isV) {
-            const cx = w / 2;
+            ctx.beginPath(); ctx.arc(midX, h/2, r, 0, Math.PI*2); ctx.stroke();
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText("V", midX, h/2);
+            ctx.textBaseline = "alphabetic";
+        } else if (c.type === "vsource") {
             const gap = 5;
-            const cyT = h / 2 - gap;
-            const cyB = h / 2 + gap;
-            ctx.beginPath();
-            ctx.moveTo(cx, 0);
-            ctx.lineTo(cx, cyT);
-            ctx.moveTo(cx, cyB);
-            ctx.lineTo(cx, h);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(w * 0.04, cyT);
-            ctx.lineTo(w * 0.96, cyT);
-            ctx.moveTo(w * 0.26, cyB);
-            ctx.lineTo(w * 0.74, cyB);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(midX, 0); ctx.lineTo(midX, h/2 - gap); ctx.moveTo(midX, h/2 + gap); ctx.lineTo(midX, h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(w*0.05, h/2 - gap); ctx.lineTo(w*0.95, h/2 - gap); ctx.moveTo(w*0.25, h/2 + gap); ctx.lineTo(w*0.75, h/2 + gap); ctx.stroke();
         } else {
-            ctx.strokeRect(w / 4, bodyY, w / 2, bodyH);
+            ctx.beginPath(); ctx.moveTo(midX, 0); ctx.lineTo(midX, h*0.25); ctx.moveTo(midX, h*0.75); ctx.lineTo(midX, h); ctx.stroke();
+            ctx.strokeRect(w/4, h*0.25, w/2, h/2);
         }
-
-        junctA = { x: c.x + w / 2, y: c.y };
-        junctB = { x: c.x + w / 2, y: c.y + h };
-        if (!ghost) {
-            ctx.textAlign = "right"; ctx.fillText(c.id, -10, h / 2 + 5);
-            ctx.textAlign = "left"; ctx.fillText(c.value, w + 10, h / 2 + 5);
-        }
+        junctA = { x: c.x + midX, y: c.y }; junctB = { x: c.x + midX, y: c.y + h };
+        if (!ghost) drawComponentLabels(ctx, c, w, h, true);
     } else {
         const w = GRID_SIZE * 3, h = GRID_SIZE;
-        const bodyW = GRID_SIZE * 1.5, bodyX = (w - bodyW) / 2;
-        if (isV) {
-            const mid = h / 2;
+        const midY = h/2;
+        if (c.type === "voltmeter") {
+            const r = 18;
+            ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w/2 - r, midY); ctx.moveTo(w/2 + r, midY); ctx.lineTo(w, midY); ctx.stroke();
+            ctx.beginPath(); ctx.arc(w/2, midY, r, 0, Math.PI*2); ctx.stroke();
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText("V", w/2, midY);
+            ctx.textBaseline = "alphabetic";
+        } else if (c.type === "vsource") {
             const gap = 5;
-            const cxL = w / 2 - gap;
-            const cxR = w / 2 + gap;
-            ctx.beginPath();
-            ctx.moveTo(0, mid);
-            ctx.lineTo(cxL, mid);
-            ctx.moveTo(cxR, mid);
-            ctx.lineTo(w, mid);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(cxL, h * 0.02);
-            ctx.lineTo(cxL, h * 0.98);
-            ctx.moveTo(cxR, h * 0.3);
-            ctx.lineTo(cxR, h * 0.7);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w/2 - gap, midY); ctx.moveTo(w/2 + gap, midY); ctx.lineTo(w, midY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(w/2 - gap, h*0.05); ctx.lineTo(w/2 - gap, h*0.95); ctx.moveTo(w/2 + gap, h*0.3); ctx.lineTo(w/2 + gap, h*0.7); ctx.stroke();
         } else {
-            ctx.beginPath();
-            ctx.moveTo(0, h / 2);
-            ctx.lineTo(bodyX, h / 2);
-            ctx.moveTo(bodyX + bodyW, h / 2);
-            ctx.lineTo(w, h / 2);
-            ctx.stroke();
-            ctx.strokeRect(bodyX, h / 4, bodyW, h / 2);
+            ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w*0.25, midY); ctx.moveTo(w*0.75, midY); ctx.lineTo(w, midY); ctx.stroke();
+            ctx.strokeRect(w*0.25, h/4, w/2, h/2);
         }
-
-        junctA = { x: c.x, y: c.y + h / 2 };
-        junctB = { x: c.x + w, y: c.y + h / 2 };
-        if (!ghost) {
-            ctx.textAlign = "center"; ctx.fillText(c.id, w / 2, -10);
-            ctx.fillText(c.value, w / 2, h + 20);
-        }
+        junctA = { x: c.x, y: c.y + midY }; junctB = { x: c.x + w, y: c.y + midY };
+        if (!ghost) drawComponentLabels(ctx, c, w, h, false);
     }
+
     ctx.restore();
     drawJunctions([junctA, junctB]);
 }
@@ -404,38 +463,61 @@ function screenToWorld(x, y) {
 function copySelection() {
     if (!selectedId) return;
     const c = components.find(x => x.id === selectedId);
-    if (c) clipboard = { type: c.type, vertical: c.vertical, value: c.value };
+    if (!c || !isTwoTerminalType(c.type)) return;
+    clipboard = { type: c.type, vertical: c.vertical, value: c.value };
 }
 
 function pasteFromClipboard() {
     if (!clipboard) return;
+    if (!isTwoTerminalType(clipboard.type)) return;
     const snapped = snapTwoTerminalDropWorld(lastWorldMouse.x, lastWorldMouse.y, clipboard.vertical);
-    let id = clipboard.type === "resistor" ? `R${++resistorCount}` : `E${++vsourceCount}`;
+    let id;
+    if (clipboard.type === "resistor") id = `R${++resistorCount}`;
+    else if (clipboard.type === "vsource") id = `E${++vsourceCount}`;
+    else id = `V${++voltmeterCount}`;
     components.push({
-        id, type: clipboard.type, x: snapped.x, y: snapped.y,
-        value: clipboard.value, vertical: clipboard.vertical
+        id,
+        type: clipboard.type,
+        x: snapped.x,
+        y: snapped.y,
+        value: clipboard.value,
+        vertical: clipboard.vertical
     });
-    selectedId = id; saveState(); draw();
+    selectedId = id;
+    saveState();
+    draw();
 }
 
 function handleKeyDown(e) {
     const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
     if (isCtrl && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
-    if (isCtrl && e.key.toLowerCase() === "c") { copySelection(); e.preventDefault(); }
-    if (isCtrl && e.key.toLowerCase() === "v") { pasteFromClipboard(); e.preventDefault(); }
+    if (isCtrl && e.key.toLowerCase() === "c") {
+        copySelection();
+        if (clipboard) e.preventDefault();
+    }
+    if (isCtrl && e.key.toLowerCase() === "v") {
+        if (clipboard) {
+            e.preventDefault();
+            pasteFromClipboard();
+        }
+    }
 
     if (selectedId && e.key.toLowerCase() === "r" && !isCtrl) {
         const comp = components.find(c => c.id === selectedId);
-        if (comp) {
+        if (comp && isTwoTerminalType(comp.type)) {
             comp.vertical = !comp.vertical;
             snapTwoTerminalComponent(comp);
-            saveState(); draw();
+            saveState();
+            draw();
         }
     }
     if (selectedId && (e.key === "Delete" || e.key === "Backspace")) {
         components = components.filter(c => c.id !== selectedId);
-        selectedId = null; saveState(); draw();
+        selectedId = null;
+        syncCountersFromComponents();
+        saveState();
+        draw();
     }
 }
 
@@ -449,6 +531,7 @@ function undo() {
     if (history.length > 1) {
         redoStack.push(history.pop());
         components = JSON.parse(history[history.length - 1]);
+        syncCountersFromComponents();
         draw();
     }
 }
@@ -458,6 +541,7 @@ function redo() {
         const state = redoStack.pop();
         history.push(state);
         components = JSON.parse(state);
+        syncCountersFromComponents();
         draw();
     }
 }
@@ -480,3 +564,150 @@ function resize() {
 }
 
 init();
+
+function getCircuitJson() {
+    return JSON.stringify(components, null, 2);
+}
+
+function syncCountersFromComponents() {
+    let maxR = 0, maxE = 0, maxV = 0;
+    for (const c of components) {
+        if (!c || !c.id) continue;
+        let m = /^R(\d+)$/.exec(c.id);
+        if (m) maxR = Math.max(maxR, +m[1]);
+        m = /^E(\d+)$/.exec(c.id);
+        if (m) maxE = Math.max(maxE, +m[1]);
+        m = /^V(\d+)$/.exec(c.id);
+        if (m) maxV = Math.max(maxV, +m[1]);
+        m = /^Vm(\d+)$/.exec(c.id);
+        if (m) maxV = Math.max(maxV, +m[1]);
+    }
+    resistorCount = maxR;
+    vsourceCount = maxE;
+    voltmeterCount = maxV;
+}
+
+function applyLoadedCircuit(list) {
+    components = Array.isArray(list) ? list.map(x => ({ ...x })) : [];
+    syncCountersFromComponents();
+    selectedId = null;
+    clipboard = null;
+    dragPreview = null;
+}
+
+async function loadCircuitFromText(text) {
+    const data = JSON.parse(text);
+    const list = Array.isArray(data)
+        ? data
+        : data && Array.isArray(data.components)
+          ? data.components
+          : null;
+    if (!list) {
+        throw new Error("Le fichier doit contenir un tableau JSON de composants.");
+    }
+    applyLoadedCircuit(list);
+}
+
+function resetCircuit() {
+    components = [];
+    selectedId = null;
+    clipboard = null;
+    dragPreview = null;
+    currentFileHandle = null;
+    history = [];
+    redoStack = [];
+    resistorCount = 0;
+    vsourceCount = 0;
+    voltmeterCount = 0;
+    saveState();
+    draw();
+}
+
+async function nouveauDocument() {
+    const enregistrer = confirm(
+        "Souhaitez-vous enregistrer le circuit actuel avant de créer un nouveau document ?\n\nOK : enregistrer\nAnnuler : ne pas enregistrer"
+    );
+    if (enregistrer) await save();
+    if (!confirm("Effacer tout le schéma et repartir à zéro ?")) return;
+    resetCircuit();
+}
+
+async function save() {
+    const json = getCircuitJson();
+    if ("showSaveFilePicker" in window && currentFileHandle) {
+        try {
+            const w = await currentFileHandle.createWritable();
+            await w.write(json);
+            await w.close();
+            return;
+        } catch (e) {
+            console.warn(e);
+        }
+    }
+    await saveAs();
+}
+
+async function saveAs() {
+    const json = getCircuitJson();
+    if ("showSaveFilePicker" in window) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: "mon_circuit.json",
+                types: [
+                    {
+                        description: "Fichier circuit JSON",
+                        accept: { "application/json": [".json"] }
+                    }
+                ]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(json);
+            await writable.close();
+            currentFileHandle = handle;
+        } catch (err) {
+            if (err && err.name !== "AbortError") console.warn(err);
+        }
+    } else {
+        currentFileHandle = null;
+        const dataStr =
+            "data:text/json;charset=utf-8," + encodeURIComponent(json);
+        const a = document.createElement("a");
+        a.href = dataStr;
+        a.download = "mon_circuit.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+}
+
+async function openCircuit() {
+    if ("showOpenFilePicker" in window) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [
+                    {
+                        description: "Circuit JSON",
+                        accept: { "application/json": [".json"] }
+                    }
+                ],
+                multiple: false
+            });
+            const file = await handle.getFile();
+            await loadCircuitFromText(await file.text());
+            currentFileHandle = handle;
+            history = [];
+            redoStack = [];
+            saveState();
+            draw();
+        } catch (err) {
+            if (err && err.name !== "AbortError") {
+                console.warn(err);
+                alert("Impossible d'ouvrir ce fichier : " + (err.message || err));
+            }
+        }
+        return;
+    }
+    const inp = document.getElementById("file-open-input");
+    if (inp) inp.click();
+    else alert("Votre navigateur ne permet pas l'ouverture de fichier depuis cette page.");
+}

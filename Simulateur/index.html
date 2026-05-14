@@ -7,11 +7,16 @@
 </head>
 <body>
     <header class="navbar">
+        <input type="file" id="file-open-input" accept=".json,application/json" hidden>
+
         <div class="menu-item">
             📁 Fichier
             <div class="dropdown">
-                <button onclick="console.log('Ouvrir')">📂 Ouvrir</button>
-                <button onclick="console.log('Sauver')">💾 Enregistrer</button>
+                <button type="button" onclick="nouveauDocument()">📄 Nouveau</button>
+                <button type="button" onclick="openCircuit()">📂 Ouvrir…</button>
+                <button type="button" onclick="save()">💾 Enregistrer</button>
+                <button type="button" onclick="saveAs()">💾 Enregistrer sous…</button>
+                <button type="button" onclick="window.close()" style="border-top: 1px solid #444; color: #ff5555;">❌ Quitter</button>
             </div>
         </div>
 
