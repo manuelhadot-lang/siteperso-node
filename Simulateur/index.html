@@ -2,8 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Circuit Designer Pro</title>
+    <title>Circuit Designer Pro - Graphique</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,40 +10,35 @@
         <div class="menu-item">
             📁 Fichier
             <div class="dropdown">
-                <button onclick="fileAction('open')">📂 Ouvrir</button>
-                <button onclick="fileAction('save')">💾 Enregistrer</button>
-                <button onclick="fileAction('saveas')">📝 Enregistrer sous</button>
-                <div class="divider"></div>
-                <button onclick="window.location.reload()" class="danger">❌ Quitter</button>
+                <button onclick="console.log('Ouvrir')">📂 Ouvrir</button>
+                <button onclick="console.log('Sauver')">💾 Enregistrer</button>
             </div>
         </div>
 
         <div class="menu-item">
             🧩 Composants
             <div class="dropdown">
-                <button onclick="setTool('resistor')">⚡ Résistance</button>
-                <button onclick="setTool('capacitor')">🌌 Condensateur</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'resistor')">⚡ Résistance</button>
             </div>
         </div>
 
         <div class="menu-item">
             🔋 Sources
             <div class="dropdown">
-                <button onclick="setTool('vsource')">🔌 Alimentation DC</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'vsource')">🔌 Pile DC (5V)</button>
             </div>
         </div>
 
         <div class="menu-item">
             📏 Appareils
             <div class="dropdown">
-                <button onclick="setTool('voltmeter')">📟 Voltmètre</button>
-            </div>
-        </div>
-
-        <div class="menu-item">
-            ❓ Aide
-            <div class="dropdown">
-                <button onclick="showHelp()">⌨️ Commandes</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'voltmeter')">📟 Voltmètre</button>
             </div>
         </div>
 
@@ -54,12 +48,11 @@
     <main id="editor-container">
         <canvas id="schematicCanvas"></canvas>
         <div id="ui-info">
-            <span id="tool-name">Outil : Sélection</span> | 
+            <span id="tool-info">R : Rotation | Ctrl+C / Ctrl+V | Clic Gauche : Déplacer | Clic Droit : Vue</span> | 
             <span id="coords">X: 0, Y: 0</span>
         </div>
     </main>
 
     <script src="script.js"></script>
-    <script src="/site-access-unload.js" defer></script>
 </body>
 </html>
