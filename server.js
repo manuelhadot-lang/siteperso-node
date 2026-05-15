@@ -19,6 +19,11 @@ const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
 const io = new Server(server); // On attache Socket.io au serveur HTTP
 
+/** Render / reverse proxy HTTPS : nécessaire pour cookies Secure et req.secure. */
+if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+}
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -103,6 +108,27 @@ function verifySiteAccessToken(token) {
 function hasSiteAccessFromCookies(cookieHeader) {
     const cookies = parseCookieHeader(cookieHeader);
     return verifySiteAccessToken(cookies[SITE_ACCESS_COOKIE]);
+}
+
+function sendSiteAccessDenied(res, req) {
+    const msg =
+        "Accès refusé. Connectez-vous via /acces-site (mot de passe du site), puis relancez la simulation.";
+    const path = req.originalUrl || req.url || "";
+    if (path.startsWith("/api/")) {
+        return res.status(403).json({ ok: false, phase: "auth", errors: [msg] });
+    }
+    return res.status(403).type("text/plain; charset=utf-8").send(msg);
+}
+
+/** POST simulation : le cookie HttpOnly n’est pas toujours renvoyé sur fetch (Render, Safari, etc.). */
+function isSimulateApiPost(req) {
+    const p = req.path || "";
+    return req.method === "POST" && (p === "/api/simulate" || p.endsWith("/api/simulate"));
+}
+
+function siteAccessRequiresSimulateCookie() {
+    const v = process.env.SITE_ACCESS_REQUIRE_AUTH_SIMULATE;
+    return v === "1" || String(v || "").toLowerCase() === "true";
 }
 
 /** Évite les redirections ouvertes vers des URLs absolues. */
@@ -225,7 +251,34 @@ app.get('/site-access-unload.js', (req, res) => {
         return res.send("/* SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD désactivé : aucune action au déchargement */\n");
     }
     res.send(`(function(){
-  function clearSiteAccessCookieBeacon(){
+  var skipClearOnUnload = false;
+  function markInternalNavigation() {
+    skipClearOnUnload = true;
+    setTimeout(function () { skipClearOnUnload = false; }, 1500);
+  }
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    while (el) {
+      if (el.tagName === "A" && el.href) {
+        try {
+          var u = new URL(el.href, location.href);
+          if (u.origin === location.origin) markInternalNavigation();
+        } catch (err) {}
+        break;
+      }
+      el = el.parentElement;
+    }
+  }, true);
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.action) return;
+    try {
+      var u = new URL(form.action, location.href);
+      if (u.origin === location.origin) markInternalNavigation();
+    } catch (err) {}
+  }, true);
+  function clearSiteAccessCookieBeacon() {
+    if (skipClearOnUnload) return;
     try {
       navigator.sendBeacon("/acces-site/clear-session", "");
     } catch (e) {}
@@ -242,8 +295,10 @@ app.use((req, res, next) => {
         const safe = isSafeSiteRedirectTarget(dest) ? dest : '/';
         return res.redirect(302, '/acces-site?next=' + encodeURIComponent(safe));
     }
+    /* Simulateur : la page reste protégée en GET ; l’API POST ne dépend pas du cookie (souvent absent sur fetch). */
+    if (isSimulateApiPost(req) && !siteAccessRequiresSimulateCookie()) return next();
     if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
-    return res.status(403).type('text/plain; charset=utf-8').send('Accès refusé. Ouvrez le site dans le navigateur après vous être connecté sur la page mot de passe.');
+    return sendSiteAccessDenied(res, req);
 });
 
 io.use((socket, next) => {
@@ -415,6 +470,7 @@ app.get('/api/version', (req, res) => {
         ok: true,
         service: "siteperso-main-server",
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
+        simulateAwaitFix: true,
         ngspiceDeckModuleUrl,
         ngspiceResultParserModuleUrl,
         ngspiceExecutable: ngspiceExecutablePath(),
@@ -439,6 +495,13 @@ async function getBuildNgspiceDeck() {
     if (typeof module.buildNgspiceDeck !== "function")
         throw new Error("Module buildNgspiceDeck introuvable.");
     return module.buildNgspiceDeck;
+}
+
+/** buildNgspiceDeck est async (ESM) ; tolère aussi une version synchrone ancienne. */
+async function invokeBuildNgspiceDeck(buildFn, state, opts) {
+    const result = buildFn(state, opts);
+    if (result != null && typeof result.then === "function") return await result;
+    return result;
 }
 
 async function getMergeVoltmeterMeasurements() {
@@ -500,7 +563,30 @@ function runNgspice(netlistPath, outputPath) {
 }
 
 app.post("/api/simulate", async (req, res) => {
+    if (
+        siteAccessPasswordConfigured() &&
+        siteAccessRequiresSimulateCookie() &&
+        !hasSiteAccessFromCookies(req.headers.cookie)
+    ) {
+        return sendSiteAccessDenied(res, req);
+    }
     const state = req.body?.state;
+    if (
+        !state ||
+        typeof state !== "object" ||
+        !Array.isArray(state.components) ||
+        !Array.isArray(state.wires)
+    ) {
+        return res.status(400).json({
+            ok: false,
+            phase: "build",
+            errors: [
+                "Schéma non reçu par le serveur. Rechargez le simulateur (Ctrl+F5), puis réessayez.",
+            ],
+            warnings: [],
+            netlist: "",
+        });
+    }
     let buildNgspiceDeck;
     let mergeVoltmeterMeasurements;
     let mergeAmmeterMeasurements;
@@ -524,14 +610,29 @@ app.post("/api/simulate", async (req, res) => {
 
     const gs = Number(req.body?.gridStep);
     const deckOpts = Number.isFinite(gs) && gs > 0 ? { gridStep: gs } : {};
-    const built = buildNgspiceDeck(state, deckOpts);
+    const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
+    if (!built || typeof built !== "object") {
+        return res.status(500).json({
+            ok: false,
+            phase: "build",
+            errors: [
+                "Réponse netlist invalide du moteur SPICE. Redéployez le serveur (server.js + Simulateur/Engine/).",
+            ],
+            warnings: [],
+            netlist: "",
+        });
+    }
     if (!built.ok) {
+        const errs = Array.isArray(built.errors)
+            ? built.errors.filter((e) => e != null && String(e).trim()).map(String)
+            : [];
+        if (!errs.length) errs.push("Impossible de générer la netlist SPICE à partir du schéma.");
         res.status(400).json({
             ok: false,
             phase: "build",
-            errors: built.errors,
-            warnings: built.warnings,
-            netlist: built.netlist
+            errors: errs,
+            warnings: built.warnings || [],
+            netlist: built.netlist || "",
         });
         return;
     }
@@ -591,8 +692,14 @@ app.post("/api/simulate", async (req, res) => {
             netlist: deckText,
             log: [combinedLog || log, waveDiag].filter(Boolean).join("\n\n--- DIAGNOSTIC COURBES ---\n"),
             voltmeterValues,
+            voltmeterIds: Array.isArray(built.voltmeters) ? built.voltmeters.map((v) => v.id) : [],
+            voltmeterNodes: Array.isArray(built.voltmeters) ? built.voltmeters : [],
             ammeterValues,
+            ammeterIds: Array.isArray(built.ammeters) ? built.ammeters.map((a) => a.id) : [],
+            ammeterBranches: Array.isArray(built.ammeters) ? built.ammeters : [],
             ohmmeterValues,
+            ohmmeterIds: Array.isArray(built.ohmeters) ? built.ohmeters.map((o) => o.id) : [],
+            ohmmeterNodes: Array.isArray(built.ohmeters) ? built.ohmeters : [],
             analysisTran: tran,
             scopePlots
         });
