@@ -737,6 +737,71 @@ function isMouseEventTargetInEditorWorkarea(e) {
     return !!(canvas && e && e.target && canvas.parentElement && canvas.parentElement.contains(e.target));
 }
 
+/** Mêmes règles que le serveur (schematic-to-spice) — message clair avant l’appel API. */
+function validateCircuitBeforeSimulate(compList) {
+    const list = Array.isArray(compList) ? compList : [];
+    if (list.length === 0) {
+        return {
+            ok: false,
+            errors: ["Circuit vide : ajoutez une résistance, une pile DC (Sources) ou un ohmmètre (Ω)."],
+        };
+    }
+    const hasVsrc = list.some(c => c && c.type === "vsource");
+    const hasOhm = list.some(c => c && c.type === "ohmmeter");
+    const needsDc = list.some(c => c && (c.type === "voltmeter" || c.type === "ammeter"));
+    if (needsDc && !hasVsrc) {
+        return {
+            ok: false,
+            errors: ["Voltmètre ou ampèremètre : ajoutez une pile DC (menu Sources → Pile)."],
+        };
+    }
+    if (!hasVsrc && !hasOhm) {
+        return {
+            ok: false,
+            errors: [
+                "Pour mesurer des résistances sans pile : placez un ohmmètre (Ω) entre les deux points du réseau, avec des fils sur ses deux bornes.",
+                "Sinon : ajoutez une pile DC pour alimenter le circuit (voltmètre, ampèremètre, loi d’Ohm avec tension).",
+            ],
+        };
+    }
+    return { ok: true, errors: [] };
+}
+
+async function parseSimulateApiResponse(res) {
+    const raw = await res.text();
+    if (!raw.trim()) return { data: {}, raw };
+    try {
+        return { data: JSON.parse(raw), raw };
+    } catch {
+        return { data: { ok: false, errors: [raw.trim().slice(0, 2000)] }, raw };
+    }
+}
+
+function formatSimulateApiError(res, data, raw) {
+    let errs = [];
+    if (Array.isArray(data.errors)) errs = data.errors.map(e => String(e)).filter(Boolean);
+    else if (data.errors != null && data.errors !== "") errs = [String(data.errors)];
+    else if (data.error) errs = [String(data.error)];
+    if (errs.length) return errs.join("\n\n");
+    if (data.phase === "build") {
+        return (
+            "Le schéma ne peut pas être simulé.\n\n" +
+            "• Résistances sans pile : ohmmètre (Ω) + fils sur les deux bornes\n" +
+            "• Tension / courant : pile DC + voltmètre ou ampèremètre en série (A)\n" +
+            "• Chaque borne de composant doit être reliée par au moins un fil"
+        );
+    }
+    if (res.status === 403) {
+        return (
+            "Accès refusé (session). Connectez-vous sur /acces-site, rechargez le simulateur (Ctrl+F5), puis relancez.\n\n" +
+            "→ /acces-site?next=" +
+            encodeURIComponent("/Simulateur/index.html")
+        );
+    }
+    if (raw && raw.length < 600 && !raw.trimStart().startsWith("<")) return raw.trim();
+    return `Erreur HTTP ${res.status} — rechargez la page (Ctrl+F5) et réessayez.`;
+}
+
 async function runSimulation() {
     const bodyEl = document.getElementById("sim-panel-body");
     const runBtn = document.getElementById("runBtn");
@@ -750,35 +815,25 @@ async function runSimulation() {
     try {
         const raw = JSON.parse(getCircuitJson());
         const state = { components: raw.components || [], wires: raw.wires || [] };
+        const pre = validateCircuitBeforeSimulate(state.components);
+        if (!pre.ok) {
+            bodyEl.innerHTML = `<pre class="sim-error">${escapeHtmlSim(pre.errors.join("\n\n"))}</pre>`;
+            return;
+        }
         const res = await fetch("/api/simulate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
             body: JSON.stringify({ state, gridStep: GRID_SIZE }),
         });
-        const ct = (res.headers.get("content-type") || "").toLowerCase();
-        let data = {};
-        if (ct.includes("application/json")) {
-            data = await res.json().catch(() => ({}));
-        } else if (!res.ok) {
-            const text = (await res.text().catch(() => "")).trim();
-            data = text ? { ok: false, errors: [text] } : {};
-        } else {
-            data = await res.json().catch(() => ({}));
-        }
+        const { data, raw: rawBody } = await parseSimulateApiResponse(res);
         if (!res.ok || data.ok === false) {
-            let err =
-                (data.errors && data.errors.join("\n")) ||
-                data.message ||
-                (res.status === 403
-                    ? "Accès refusé (session). Sur Render : ouvrez /acces-site, connectez-vous, rechargez le simulateur (Ctrl+F5), puis relancez."
-                    : `Erreur HTTP ${res.status}`);
-            if (res.status === 403) {
-                const next = encodeURIComponent("/Simulateur/index.html");
-                err +=
-                    `\n\n→ Connexion : /acces-site?next=${next}`;
+            const err = formatSimulateApiError(res, data, rawBody);
+            let html = `<pre class="sim-error">${escapeHtmlSim(err)}</pre>`;
+            if (Array.isArray(data.warnings) && data.warnings.length) {
+                html += `<p class="sim-warn">${escapeHtmlSim(data.warnings.join(" "))}</p>`;
             }
-            bodyEl.innerHTML = `<pre class="sim-error">${escapeHtmlSim(err)}</pre>`;
+            bodyEl.innerHTML = html;
             return;
         }
         const vm = data.voltmeterValues || {};
