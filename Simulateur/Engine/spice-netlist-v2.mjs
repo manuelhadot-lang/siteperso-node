@@ -1,3 +1,12 @@
+/** Import à chaque build pour éviter le cache ESM de schematic-to-spice (rechargé via importFresh côté serveur). */
+async function loadSchematicBuilder() {
+    const mod = await import(`./schematic-to-spice.mjs?fresh=${Date.now()}`);
+    if (typeof mod.buildNetlistFromGraphicalState !== "function") {
+        throw new Error("buildNetlistFromGraphicalState introuvable dans schematic-to-spice.mjs");
+    }
+    return mod.buildNetlistFromGraphicalState;
+}
+
 /**
  * Mode batch ngspice (-b) : un bloc .control sans analyse au niveau circuit
  * (.op, .tran, .dc, …) échoue souvent. On insère .op avant .control si besoin,
@@ -21,7 +30,25 @@ function normalizeSpiceNetlistForNgspiceBatch(text) {
 }
 
 // Netlist brute (éditeur Simulateur) ou état JSON avec champ .netlist
-export function buildNgspiceDeck(state, opts = {}) {
+export async function buildNgspiceDeck(state, opts = {}) {
+    if (
+        state &&
+        typeof state === "object" &&
+        !state.netlist &&
+        Array.isArray(state.components) &&
+        Array.isArray(state.wires)
+    ) {
+        const buildNetlistFromGraphicalState = await loadSchematicBuilder();
+        const built = buildNetlistFromGraphicalState(state, opts);
+        if (!built.ok) return built;
+        const nrm = normalizeSpiceNetlistForNgspiceBatch(built.netlist);
+        return {
+            ...built,
+            netlist: nrm,
+            warnings: built.warnings || [],
+        };
+    }
+
     const raw =
         typeof state === "string"
             ? state

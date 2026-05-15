@@ -21,6 +21,15 @@
         </div>
 
         <div class="menu-item">
+            🌓 Mode
+            <div class="dropdown">
+                <button type="button" onclick="setTheme('black')">🌑 Black (Sombre)</button>
+                <button type="button" onclick="setTheme('white')">☀️ White (Clair)</button>
+                <button type="button" onclick="toggleGrid()" id="grid-toggle-btn">🏁 Grille : Active</button>
+            </div>
+        </div>
+
+        <div class="menu-item">
             🧩 Composants
             <div class="dropdown">
                 <button draggable="true" 
@@ -44,6 +53,12 @@
                 <button draggable="true" 
                         onmousedown="event.stopPropagation()" 
                         ondragstart="handleDragStart(event, 'voltmeter')">📟 Voltmètre</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'ammeter')">📉 Ampèremètre</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'ohmmeter')">Ω Ohmmètre</button>
             </div>
         </div>
 
@@ -51,13 +66,24 @@
     </header>
 
     <main id="editor-container">
-        <canvas id="schematicCanvas"></canvas>
-        <div id="ui-info">
-            <span id="tool-info">R : Rotation | Ctrl+C / Ctrl+V | Clic Gauche : Déplacer | Clic Droit : Vue</span> | 
-            <span id="coords">X: 0, Y: 0</span>
+        <div id="editor-workarea" class="editor-workarea">
+            <canvas id="schematicCanvas" tabindex="-1" aria-label="Schéma du circuit"></canvas>
+            <div id="comp-value-editor" class="comp-value-editor" hidden>
+                <input id="comp-value-input" type="text" spellcheck="false" autocomplete="off" aria-label="Valeur du composant">
+            </div>
+            <div id="ui-info">
+                <span id="tool-info">Fils : jonctions | Clic fil : sélection | Suppr : supprimer fil/composant | Ohmmètre : mesure R sans pile | R : rotation | Clic R/pile : valeur | Ctrl+C/V | Clic droit : vue</span> | 
+                <span id="coords">X: 0, Y: 0</span>
+            </div>
         </div>
+        <section id="sim-panel" class="sim-panel" aria-label="Résultats simulation">
+            <h3 class="sim-panel-title">Résultats simulation (ngspice)</h3>
+            <div id="sim-panel-body" class="sim-panel-body">
+                <p class="sim-muted">Simulation : voltmètres, ampèremètres, ohmmètres (résistances sans pile possible).</p>
+            </div>
+        </section>
     </main>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=ohmmeter-20260515"></script>
 </body>
 </html>
