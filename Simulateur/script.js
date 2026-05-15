@@ -753,12 +753,31 @@ async function runSimulation() {
         const res = await fetch("/api/simulate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
+            credentials: "include",
             body: JSON.stringify({ state, gridStep: GRID_SIZE }),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!data.ok) {
-            const err = (data.errors && data.errors.join("\n")) || data.message || `Erreur HTTP ${res.status}`;
+        const ct = (res.headers.get("content-type") || "").toLowerCase();
+        let data = {};
+        if (ct.includes("application/json")) {
+            data = await res.json().catch(() => ({}));
+        } else if (!res.ok) {
+            const text = (await res.text().catch(() => "")).trim();
+            data = text ? { ok: false, errors: [text] } : {};
+        } else {
+            data = await res.json().catch(() => ({}));
+        }
+        if (!res.ok || data.ok === false) {
+            let err =
+                (data.errors && data.errors.join("\n")) ||
+                data.message ||
+                (res.status === 403
+                    ? "Accès refusé (session). Sur Render : ouvrez /acces-site, connectez-vous, rechargez le simulateur (Ctrl+F5), puis relancez."
+                    : `Erreur HTTP ${res.status}`);
+            if (res.status === 403) {
+                const next = encodeURIComponent("/Simulateur/index.html");
+                err +=
+                    `\n\n→ Connexion : /acces-site?next=${next}`;
+            }
             bodyEl.innerHTML = `<pre class="sim-error">${escapeHtmlSim(err)}</pre>`;
             return;
         }
