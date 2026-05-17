@@ -21,11 +21,11 @@
         </div>
 
         <div class="menu-item">
-            🌓 Mode
+            🌓 Affichage
             <div class="dropdown">
-                <button type="button" onclick="setTheme('black')">🌑 Black (Sombre)</button>
-                <button type="button" onclick="setTheme('white')">☀️ White (Clair)</button>
-                <button type="button" onclick="toggleGrid()" id="grid-toggle-btn">🏁 Grille : Active</button>
+                <button type="button" onclick="setTheme('black')">🌑 Thème sombre</button>
+                <button type="button" onclick="setTheme('white')">☀️ Thème clair</button>
+                <button type="button" onclick="toggleGrid()" id="grid-toggle-btn">▦ Grille : Active</button>
             </div>
         </div>
 
@@ -34,35 +34,92 @@
             <div class="dropdown">
                 <button draggable="true" 
                         onmousedown="event.stopPropagation()" 
-                        ondragstart="handleDragStart(event, 'resistor')">⚡ Résistance</button>
+                        ondragstart="handleDragStart(event, 'resistor')">▭ Résistance</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'capacitor')">⫿ Condensateur</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'inductor')">∿ Bobine</button>
+                <button draggable="true" 
+                        onmousedown="event.stopPropagation()" 
+                        ondragstart="handleDragStart(event, 'diode')">▷| Diode (1N4148)</button>
+                <div class="menu-item-has-submenu">
+                    <span class="submenu-label">⊳ NPN ▸</span>
+                    <div class="dropdown submenu">
+                        <button draggable="true"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event, 'npn', '2N2222')">2N2222</button>
+                    </div>
+                </div>
+                <div class="menu-item-has-submenu">
+                    <span class="submenu-label">△ AOP ▸</span>
+                    <div class="dropdown submenu">
+                        <button draggable="true"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event, 'opamp', 'LM741')">LM741</button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="menu-item">
+        <div class="menu-item menu-panel-aligned">
             🔋 Sources
-            <div class="dropdown">
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
-                        ondragstart="handleDragStart(event, 'vsource')">🔌 Pile DC (5V)</button>
+            <div class="dropdown menu-dropdown-aligned">
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'vsource')"><span class="menu-icon" aria-hidden="true">🔋</span><span class="menu-label">Pile DC (5V)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'vsin')"><span class="menu-icon" aria-hidden="true">∿</span><span class="menu-label">Générateur sinus</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'vsquare')"><span class="menu-icon" aria-hidden="true">⊓</span><span class="menu-label">Générateur carré</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'vterm')"><span class="menu-icon" aria-hidden="true">△</span><span class="menu-label">Borne (5V)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'ground')"><span class="menu-icon" aria-hidden="true">⏚</span><span class="menu-label">Masse (GND)</span></button>
             </div>
         </div>
 
-        <div class="menu-item">
-            📏 Appareils
-            <div class="dropdown">
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
-                        ondragstart="handleDragStart(event, 'voltmeter')">📟 Voltmètre</button>
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
-                        ondragstart="handleDragStart(event, 'ammeter')">📉 Ampèremètre</button>
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
-                        ondragstart="handleDragStart(event, 'ohmmeter')">Ω Ohmmètre</button>
+        <div class="menu-item menu-panel-aligned">
+            👁 Visualisation
+            <div class="dropdown menu-dropdown-aligned">
+                <button type="button" class="menu-row" onclick="menuOpenOscilloscope()"><span class="menu-icon" aria-hidden="true">📈</span><span class="menu-label">Oscilloscope</span></button>
+                <button type="button" class="menu-row" onclick="menuToggleSimPanel()"><span class="menu-icon" aria-hidden="true">▤</span><span class="menu-label">Panneau simulation</span></button>
             </div>
         </div>
 
-        <button id="runBtn">🚀 Lancer la Simulation</button>
+        <div class="menu-item menu-panel-aligned">
+            📏 Mesures
+            <div class="dropdown menu-dropdown-aligned">
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'voltmeter')"><span class="menu-icon" aria-hidden="true">🅥</span><span class="menu-label">Voltmètre (DC)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'ammeter')"><span class="menu-icon" aria-hidden="true">🅐</span><span class="menu-label">Ampèremètre (DC)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'voltmeter_rms')"><span class="menu-icon" aria-hidden="true">V~</span><span class="menu-label">Voltmètre (Veff)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'ammeter_rms')"><span class="menu-icon" aria-hidden="true">A~</span><span class="menu-label">Ampèremètre (Aeff)</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'ohmmeter')"><span class="menu-icon" aria-hidden="true">Ω</span><span class="menu-label">Ohmmètre</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'oscilloscope')"><span class="menu-icon" aria-hidden="true">📈</span><span class="menu-label">Oscilloscope</span></button>
+            </div>
+        </div>
+
+        <div class="sim-toolbar">
+            <button id="runBtn" type="button">▶ Simulation en direct</button>
+            <button id="stopSimBtn" type="button" hidden>■ Arrêter</button>
+        </div>
     </header>
 
     <main id="editor-container">
@@ -72,18 +129,31 @@
                 <input id="comp-value-input" type="text" spellcheck="false" autocomplete="off" aria-label="Valeur du composant">
             </div>
             <div id="ui-info">
-                <span id="tool-info">Fils : jonctions | Clic fil : sélection | Suppr : supprimer fil/composant | Ohmmètre : mesure R sans pile | R : rotation | Clic R/pile : valeur | Ctrl+C/V | Clic droit : vue</span> | 
+                <span id="tool-info">Fils : clic borne pour début/fin | croisement sans jonction | Échap : figer l’extrémité | Suppr : supprimer | NPN/AOP : X/Y, R | Ctrl+C/V | Clic droit : vue</span> | 
                 <span id="coords">X: 0, Y: 0</span>
             </div>
         </div>
-        <section id="sim-panel" class="sim-panel" aria-label="Résultats simulation">
-            <h3 class="sim-panel-title">Résultats simulation (ngspice)</h3>
-            <div id="sim-panel-body" class="sim-panel-body">
-                <p class="sim-muted">Simulation : voltmètres, ampèremètres, ohmmètres (résistances sans pile possible).</p>
+        <section id="sim-panel" class="sim-panel" aria-label="Simulation et réglages">
+            <div class="sim-panel-toolbar">
+                <span class="sim-panel-toolbar-title">Simulation</span>
+                <button type="button" id="sim-panel-close-btn" class="sim-panel-close-btn" onclick="closeSimPanel()" title="Fermer le panneau">✕ Fermer</button>
             </div>
+            <div id="sim-panel-row" class="sim-panel-row">
+                <div id="inspector-panel" class="inspector-panel" hidden>
+                    <h3 class="sim-panel-title" id="inspector-title">Réglages composant</h3>
+                    <div id="inspector-body" class="inspector-body"></div>
+                </div>
+                <div id="sim-results-wrap" class="sim-results-wrap">
+                    <h3 class="sim-panel-title">Résultats simulation (ngspice)</h3>
+                    <div id="sim-panel-body" class="sim-panel-body">
+                        <p class="sim-muted">Lancez une simulation avec le bouton 🚀.</p>
+                    </div>
+                </div>
+            </div>
+            <p id="inspector-placeholder" class="sim-muted inspector-placeholder">Cliquez sur un générateur sinus ou carré pour afficher ses réglages à côté des résultats.</p>
         </section>
     </main>
 
-    <script src="script.js?v=render-await-20260515d"></script>
+    <script src="script.js?v=marquee-junc-20260517"></script>
 </body>
 </html>

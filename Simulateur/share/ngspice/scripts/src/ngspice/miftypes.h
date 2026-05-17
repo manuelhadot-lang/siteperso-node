@@ -102,7 +102,7 @@ typedef enum {
     MIF_DIFF_VOLTAGE,           /* vd - Differential voltage */
     MIF_CURRENT,                /* i - Single-ended current */
     MIF_DIFF_CURRENT,           /* id - Differential current */
-    MIF_VSOURCE_CURRENT,        /* vnam - Voltage source current */
+    MIF__CURRENT,        /* vnam - Voltage source current */
     MIF_CONDUCTANCE,            /* g - Single-ended VCIS */
     MIF_DIFF_CONDUCTANCE,       /* gd - Differential VCIS */
     MIF_RESISTANCE,             /* h - Single-ended ICVS */

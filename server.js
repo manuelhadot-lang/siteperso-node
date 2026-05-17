@@ -327,6 +327,8 @@ let buildNgspiceDeckFn = null;
 let mergeVoltmeterMeasurementsFn = null;
 let mergeAmmeterMeasurementsFn = null;
 let mergeOhmmeterMeasurementsFn = null;
+let mergeOscilloscopeMeasurementsFn = null;
+let deriveOscilloscopeValuesFromScopePlotsFn = null;
 let mergeScopePlotsFromTranWrdataFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
@@ -525,11 +527,39 @@ async function getMergeOhmmeterMeasurements() {
     return module.mergeOhmmeterMeasurements;
 }
 
+async function getMergeOscilloscopeMeasurements() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeOscilloscopeMeasurements !== "function")
+        throw new Error("Module mergeOscilloscopeMeasurements introuvable.");
+    return module.mergeOscilloscopeMeasurements;
+}
+
 async function getMergeScopePlotsFromTranWrdata() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.mergeScopePlotsFromTranWrdata !== "function")
         throw new Error("Module mergeScopePlotsFromTranWrdata introuvable.");
     return module.mergeScopePlotsFromTranWrdata;
+}
+
+async function getDeriveOscilloscopeValuesFromScopePlots() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.deriveOscilloscopeValuesFromScopePlots !== "function")
+        throw new Error("Module deriveOscilloscopeValuesFromScopePlots introuvable.");
+    return module.deriveOscilloscopeValuesFromScopePlots;
+}
+
+async function getMergeVoltmeterRmsFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeVoltmeterRmsFromTranWrdata !== "function")
+        throw new Error("Module mergeVoltmeterRmsFromTranWrdata introuvable.");
+    return module.mergeVoltmeterRmsFromTranWrdata;
+}
+
+async function getMergeAmmeterRmsFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeAmmeterRmsFromTranWrdata !== "function")
+        throw new Error("Module mergeAmmeterRmsFromTranWrdata introuvable.");
+    return module.mergeAmmeterRmsFromTranWrdata;
 }
 
 function runNgspice(netlistPath, outputPath) {
@@ -591,13 +621,21 @@ app.post("/api/simulate", async (req, res) => {
     let mergeVoltmeterMeasurements;
     let mergeAmmeterMeasurements;
     let mergeOhmmeterMeasurements;
+    let mergeOscilloscopeMeasurements;
+    let deriveOscilloscopeValuesFromScopePlots;
     let mergeScopePlotsFromTranWrdata;
+    let mergeVoltmeterRmsFromTranWrdata;
+    let mergeAmmeterRmsFromTranWrdata;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
         mergeAmmeterMeasurements = await getMergeAmmeterMeasurements();
         mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
+        mergeOscilloscopeMeasurements = await getMergeOscilloscopeMeasurements();
+        deriveOscilloscopeValuesFromScopePlots = await getDeriveOscilloscopeValuesFromScopePlots();
         mergeScopePlotsFromTranWrdata = await getMergeScopePlotsFromTranWrdata();
+        mergeVoltmeterRmsFromTranWrdata = await getMergeVoltmeterRmsFromTranWrdata();
+        mergeAmmeterRmsFromTranWrdata = await getMergeAmmeterRmsFromTranWrdata();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -665,6 +703,8 @@ app.post("/api/simulate", async (req, res) => {
             : mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
         const ammeterValues = tran ? {} : mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
         const ohmmeterValues = tran ? {} : mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
+        let voltmeterRmsValues = {};
+        let ammeterRmsValues = {};
         let scopePlots = {};
         let waveDiag = "";
         if (tran) {
@@ -677,6 +717,15 @@ app.post("/api/simulate", async (req, res) => {
             }
             const meta = Array.isArray(built.scopesTranMeta) ? built.scopesTranMeta : [];
             scopePlots = mergeScopePlotsFromTranWrdata(waveTxt, meta);
+            const metersMeta = built.metersTranMeta || {};
+            voltmeterRmsValues = mergeVoltmeterRmsFromTranWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.voltmetersRms) ? metersMeta.voltmetersRms : []
+            );
+            ammeterRmsValues = mergeAmmeterRmsFromTranWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.ammetersRms) ? metersMeta.ammetersRms : []
+            );
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
@@ -686,6 +735,9 @@ app.post("/api/simulate", async (req, res) => {
                 `[wrdata] Plots extraits : ${plotKeys.length ? plotKeys.join(", ") : "(aucun)"}`
             ].join("\n");
         }
+        const oscilloscopeValues = tran
+            ? deriveOscilloscopeValuesFromScopePlots(scopePlots)
+            : mergeOscilloscopeMeasurements(combinedLog, built.oscilloscopes || []);
         res.json({
             ok: true,
             warnings: built.warnings,
@@ -697,9 +749,22 @@ app.post("/api/simulate", async (req, res) => {
             ammeterValues,
             ammeterIds: Array.isArray(built.ammeters) ? built.ammeters.map((a) => a.id) : [],
             ammeterBranches: Array.isArray(built.ammeters) ? built.ammeters : [],
+            voltmeterRmsValues,
+            voltmeterRmsIds: Array.isArray(built.voltmetersRms)
+                ? built.voltmetersRms.map((v) => v.id)
+                : [],
+            voltmeterRmsNodes: Array.isArray(built.voltmetersRms) ? built.voltmetersRms : [],
+            ammeterRmsValues,
+            ammeterRmsIds: Array.isArray(built.ammetersRms) ? built.ammetersRms.map((a) => a.id) : [],
+            ammeterRmsBranches: Array.isArray(built.ammetersRms) ? built.ammetersRms : [],
             ohmmeterValues,
             ohmmeterIds: Array.isArray(built.ohmeters) ? built.ohmeters.map((o) => o.id) : [],
             ohmmeterNodes: Array.isArray(built.ohmeters) ? built.ohmeters : [],
+            oscilloscopeValues,
+            oscilloscopeIds: Array.isArray(built.oscilloscopes)
+                ? built.oscilloscopes.map((o) => o.id)
+                : [],
+            oscilloscopeNodes: Array.isArray(built.oscilloscopes) ? built.oscilloscopes : [],
             analysisTran: tran,
             scopePlots
         });

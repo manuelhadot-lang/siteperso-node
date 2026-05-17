@@ -1,0 +1,10 @@
+* test tran
+V1 n1 0 SIN(0 5 1000)
+.tran 2.5u 4m
+.control
+tran 2.5u 4m
+set wr_singlescale
+wrdata tran_test.txt time v(n1)
+quit
+.endc
+.end

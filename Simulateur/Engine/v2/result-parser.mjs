@@ -333,12 +333,261 @@ export function mergeOhmmeterMeasurements(log, ohmmeters) {
     return out;
 }
 
+/**
+ * @param {string} log
+ * @param {{ id: string; ch1NodePlus: string; ch1NodeMinus: string; ch2NodePlus: string; ch2NodeMinus: string }[]} oscilloscopes
+ */
+export function mergeOscilloscopeMeasurements(log, oscilloscopes) {
+    const out = {};
+    if (!log || typeof log !== "string" || !Array.isArray(oscilloscopes) || oscilloscopes.length === 0) {
+        return out;
+    }
 
+    const map = collectNodeVoltagesFromLog(log);
 
+    function channelVoltage(nodePlus, nodeMinus) {
+        const np = String(nodePlus || "").trim().toLowerCase();
+        const nm = String(nodeMinus || "").trim().toLowerCase();
+        if (!np || !nm) return null;
+        if (isSpiceReferenceNode(nodePlus) && isSpiceReferenceNode(nodeMinus)) return null;
+        const vp = nodeVoltageFromMap(nodePlus, map);
+        const vm = nodeVoltageFromMap(nodeMinus, map);
+        if (vp == null || vm == null) return null;
+        return vp - vm;
+    }
+
+    for (const osc of oscilloscopes) {
+        const v1 = channelVoltage(osc.ch1NodePlus, osc.ch1NodeMinus);
+        const v2 = channelVoltage(osc.ch2NodePlus, osc.ch2NodeMinus);
+        if (v1 == null && v2 == null) continue;
+        const row = { id: osc.id };
+        if (v1 != null) {
+            row.ch1 = {
+                voltage: v1,
+                unit: "V",
+                nodePlus: osc.ch1NodePlus,
+                nodeMinus: osc.ch1NodeMinus,
+            };
+        }
+        if (v2 != null) {
+            row.ch2 = {
+                voltage: v2,
+                unit: "V",
+                nodePlus: osc.ch2NodePlus,
+                nodeMinus: osc.ch2NodeMinus,
+            };
+        }
+        out[osc.id] = row;
+    }
+
+    return out;
+}
+
+/**
+ * @param {string} waveTxt
+ * @returns {number[][]}
+ */
+function parseWrdataNumericRows(waveTxt) {
+    const rows = [];
+    if (!waveTxt || typeof waveTxt !== "string") return rows;
+    for (const line of waveTxt.split(/\r?\n/)) {
+        const t = line.trim();
+        if (!t || t.startsWith("*")) continue;
+        const nums = t.split(/\s+/).map(s => parseFloat(s)).filter(n => Number.isFinite(n));
+        if (nums.length >= 2) rows.push(nums);
+    }
+    return rows;
+}
+
+function waveformPeakToPeak(values) {
+    if (!Array.isArray(values) || values.length === 0) return NaN;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const v of values) {
+        if (!Number.isFinite(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+    }
+    return Number.isFinite(min) && Number.isFinite(max) ? max - min : NaN;
+}
+
+function waveformRms(values) {
+    if (!Array.isArray(values) || values.length === 0) return NaN;
+    let sum = 0;
+    let n = 0;
+    for (const v of values) {
+        if (!Number.isFinite(v)) continue;
+        sum += v * v;
+        n++;
+    }
+    return n > 0 ? Math.sqrt(sum / n) : NaN;
+}
+
+/**
+ * @param {string} waveTxt — sortie ngspice wrdata
+ * @param {{ id: string; timeCol?: number; wrVarCount?: number; ch1: { wrIndex?: number; minusWrIndex?: number | null; minusIsGnd?: boolean }; ch2: { wrIndex?: number; minusWrIndex?: number | null; minusIsGnd?: boolean } }[]} meta
+ */
 export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
 
-    return {};
+    let wrVarCount = 0;
+    for (const m of meta) {
+        if (m.wrVarCount > wrVarCount) wrVarCount = m.wrVarCount;
+        const idxs = [m.ch1?.wrIndex, m.ch2?.wrIndex, m.ch1?.minusWrIndex, m.ch2?.minusWrIndex];
+        for (const ix of idxs) {
+            if (ix != null && ix + 1 > wrVarCount) wrVarCount = ix + 1;
+        }
+    }
+    if (wrVarCount < 2) wrVarCount = 2;
+    const ncol = rows[0].length;
+    const colOffset = Math.max(0, ncol - wrVarCount);
 
+    function channelDiff(row, ch) {
+        if (!ch || ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
+        const plusCol = ch.wrIndex + colOffset;
+        const vp = row[plusCol];
+        if (!Number.isFinite(vp)) return NaN;
+        if (ch.minusIsGnd || ch.minusWrIndex == null) return vp;
+        const vm = row[ch.minusWrIndex + colOffset];
+        if (!Number.isFinite(vm)) return NaN;
+        return vp - vm;
+    }
+
+    for (const m of meta) {
+        if (!m || !m.id) continue;
+        const timeCol = m.timeCol ?? 0;
+        const tArr = [];
+        const v1Arr = [];
+        const v2Arr = [];
+        for (const row of rows) {
+            if (row.length <= timeCol) continue;
+            const d1 = channelDiff(row, m.ch1);
+            const d2 = channelDiff(row, m.ch2);
+            if (!Number.isFinite(row[timeCol]) || !Number.isFinite(d1) || !Number.isFinite(d2)) {
+                continue;
+            }
+            tArr.push(row[timeCol]);
+            v1Arr.push(d1);
+            v2Arr.push(d2);
+        }
+        if (tArr.length === 0) continue;
+        out[m.id] = {
+            ch1: { time: tArr, voltage: v1Arr, unit: "V", label: "CH1" },
+            ch2: { time: tArr, voltage: v2Arr, unit: "V", label: "CH2" },
+        };
+    }
+
+    return out;
+}
+
+/**
+ * Valeurs résumées (crête à crête) pour le tableau lorsque l’analyse est .tran.
+ * @param {Record<string, { ch1?: { voltage?: number[] }; ch2?: { voltage?: number[] } }>} scopePlots
+ */
+function channelDiffFromRow(row, ch, colOffset) {
+    if (!ch || ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
+    const plusCol = ch.wrIndex + colOffset;
+    const vp = row[plusCol];
+    if (!Number.isFinite(vp)) return NaN;
+    if (ch.minusIsGnd || ch.minusWrIndex == null) return vp;
+    const vm = row[ch.minusWrIndex + colOffset];
+    if (!Number.isFinite(vm)) return NaN;
+    return vp - vm;
+}
+
+/**
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; channel: { wrIndex?: number; minusWrIndex?: number | null; minusIsGnd?: boolean }; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeVoltmeterRmsFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || !m.channel) continue;
+        let wrVarCount = m.wrVarCount || 2;
+        if (m.channel.wrIndex != null && m.channel.wrIndex + 1 > wrVarCount) {
+            wrVarCount = m.channel.wrIndex + 1;
+        }
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        for (const row of rows) {
+            const d = channelDiffFromRow(row, m.channel, colOffset);
+            if (Number.isFinite(d)) vals.push(d);
+        }
+        const vrms = waveformRms(vals);
+        if (!Number.isFinite(vrms)) continue;
+        out[m.id] = {
+            voltage: vrms,
+            unit: "V",
+            measure: "Vrms",
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
+        };
+    }
+    return out;
+}
+
+/**
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; currentWrIndex?: number; branch?: string }[]} meta
+ */
+export function mergeAmmeterRmsFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || m.currentWrIndex == null || m.currentWrIndex === undefined) continue;
+        const wrVarCount = m.wrVarCount || m.currentWrIndex + 1;
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        for (const row of rows) {
+            const i = row[m.currentWrIndex + colOffset];
+            if (Number.isFinite(i)) vals.push(i);
+        }
+        const irms = waveformRms(vals);
+        if (!Number.isFinite(irms)) continue;
+        out[m.id] = {
+            current: irms,
+            unit: "A",
+            measure: "Arms",
+            branch: m.branch,
+        };
+    }
+    return out;
+}
+
+export function deriveOscilloscopeValuesFromScopePlots(scopePlots) {
+    const out = {};
+    if (!scopePlots || typeof scopePlots !== "object") return out;
+    for (const [id, plot] of Object.entries(scopePlots)) {
+        if (!plot) continue;
+        const row = {};
+        if (plot.ch1 && Array.isArray(plot.ch1.voltage) && plot.ch1.voltage.length) {
+            const vpp = waveformPeakToPeak(plot.ch1.voltage);
+            row.ch1 = {
+                voltage: vpp,
+                unit: "V",
+                measure: "Vpp",
+            };
+        }
+        if (plot.ch2 && Array.isArray(plot.ch2.voltage) && plot.ch2.voltage.length) {
+            const vpp = waveformPeakToPeak(plot.ch2.voltage);
+            row.ch2 = {
+                voltage: vpp,
+                unit: "V",
+                measure: "Vpp",
+            };
+        }
+        if (row.ch1 || row.ch2) out[id] = row;
+    }
+    return out;
 }
 
 
