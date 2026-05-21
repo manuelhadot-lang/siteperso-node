@@ -11,9 +11,16 @@ const { Server } = require("socket.io"); // Module Socket.io
 const archiver = require('archiver'); // Nécessite 'npm install archiver'
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const { mkdtemp, readFile: readFileAsync, rm, writeFile } = require("node:fs/promises");
+const { copyFile, mkdtemp, readFile: readFileAsync, rm, writeFile } = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
-const { resolveNgspiceForServer, applyPathPrepend } = require("./tools/ngspice-bundle.cjs");
+const {
+    resolveNgspiceForServer,
+    applyPathPrepend,
+    isNgspiceWrongPlatformBinary,
+    resolveDigitalCmSourcePath,
+} = require("./tools/ngspice-bundle.cjs");
+
+const XSPICE_DIGITAL_CM_PLACEHOLDER = "__XSPICE_DIGITAL_CM__";
 
 const app = express();
 const server = http.createServer(app); // On crée le serveur HTTP avec Express
@@ -355,13 +362,19 @@ function isNgspiceMissingError(error) {
 
 /**
  * @param {{ message?: string; code?: string | number }} error
+ * @param {string} [exeTried]
  */
-function isLikelySecuritySoftwareBlock(error) {
-    if (!error) return false;
+function isLikelySecuritySoftwareBlock(error, exeTried) {
+    if (!error || isNgspiceWrongPlatformBinary(exeTried || "")) return false;
+    if (!isWin32Platform()) return false;
     const c = error.code;
     if (c === "EPERM" || c === "EACCES") return true;
     const msg = `${error.message || ""}`;
     return /operation not permitted|accès refusé|access denied|bloqué|blocked|not permitted by/i.test(msg);
+}
+
+function isWin32Platform() {
+    return process.platform === "win32";
 }
 
 // --- CHARGEMENT DES ELEVES ---
@@ -520,6 +533,41 @@ async function getMergeAmmeterMeasurements() {
     return module.mergeAmmeterMeasurements;
 }
 
+async function getMergeLedMeasurements() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLedMeasurements !== "function")
+        throw new Error("Module mergeLedMeasurements introuvable.");
+    return module.mergeLedMeasurements;
+}
+
+async function getMergeLedTranPlotsFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLedTranPlotsFromWrdata !== "function")
+        throw new Error("Module mergeLedTranPlotsFromWrdata introuvable.");
+    return module.mergeLedTranPlotsFromWrdata;
+}
+
+async function getMergeLedValuesFromTranPlots() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLedValuesFromTranPlots !== "function")
+        throw new Error("Module mergeLedValuesFromTranPlots introuvable.");
+    return module.mergeLedValuesFromTranPlots;
+}
+
+async function getMergeLogicGateMeasurements() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLogicGateMeasurements !== "function")
+        throw new Error("Module mergeLogicGateMeasurements introuvable.");
+    return module.mergeLogicGateMeasurements;
+}
+
+async function getMergeLogicGateTranFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLogicGateTranFromWrdata !== "function")
+        throw new Error("Module mergeLogicGateTranFromWrdata introuvable.");
+    return module.mergeLogicGateTranFromWrdata;
+}
+
 async function getMergeOhmmeterMeasurements() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.mergeOhmmeterMeasurements !== "function")
@@ -562,18 +610,23 @@ async function getMergeAmmeterRmsFromTranWrdata() {
     return module.mergeAmmeterRmsFromTranWrdata;
 }
 
-function runNgspice(netlistPath, outputPath) {
+function runNgspice(netlistPath, outputPath, opts = {}) {
     const { exe, prependPath } = resolveNgspiceForServer(__dirname);
     const env = applyPathPrepend(process.env, prependPath);
+    const cwd = opts.cwd || __dirname;
+    const args = ["-b"];
+    if (opts.xspiceRc) args.push("-f", opts.xspiceRc);
+    args.push("-o", outputPath, netlistPath);
     return new Promise((resolve, reject) => {
         execFile(
             exe,
-            ["-b", "-o", outputPath, netlistPath],
+            args,
             {
                 windowsHide: true,
                 timeout: 25000,
                 maxBuffer: 8 * 1024 * 1024,
                 env,
+                cwd,
             },
             (error, stdout, stderr) => {
                 if (error) {
@@ -620,6 +673,11 @@ app.post("/api/simulate", async (req, res) => {
     let buildNgspiceDeck;
     let mergeVoltmeterMeasurements;
     let mergeAmmeterMeasurements;
+    let mergeLedMeasurements;
+    let mergeLedTranPlotsFromWrdata;
+    let mergeLedValuesFromTranPlots;
+    let mergeLogicGateMeasurements;
+    let mergeLogicGateTranFromWrdata;
     let mergeOhmmeterMeasurements;
     let mergeOscilloscopeMeasurements;
     let deriveOscilloscopeValuesFromScopePlots;
@@ -630,6 +688,11 @@ app.post("/api/simulate", async (req, res) => {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
         mergeAmmeterMeasurements = await getMergeAmmeterMeasurements();
+        mergeLedMeasurements = await getMergeLedMeasurements();
+        mergeLedTranPlotsFromWrdata = await getMergeLedTranPlotsFromWrdata();
+        mergeLedValuesFromTranPlots = await getMergeLedValuesFromTranPlots();
+        mergeLogicGateMeasurements = await getMergeLogicGateMeasurements();
+        mergeLogicGateTranFromWrdata = await getMergeLogicGateTranFromWrdata();
         mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
         mergeOscilloscopeMeasurements = await getMergeOscilloscopeMeasurements();
         deriveOscilloscopeValuesFromScopePlots = await getDeriveOscilloscopeValuesFromScopePlots();
@@ -647,7 +710,9 @@ app.post("/api/simulate", async (req, res) => {
     }
 
     const gs = Number(req.body?.gridStep);
-    const deckOpts = Number.isFinite(gs) && gs > 0 ? { gridStep: gs } : {};
+    const { exe: ngspiceExe } = resolveNgspiceForServer(__dirname);
+    const deckOpts = { repoRoot: __dirname, ngspiceExe };
+    if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
     if (!built || typeof built !== "object") {
         return res.status(500).json({
@@ -679,15 +744,37 @@ app.post("/api/simulate", async (req, res) => {
     const netlistPath = path.join(tempDir, "circuit.cir");
     const outputPath = path.join(tempDir, "ngspice.log");
     const wavePathFs = path.join(tempDir, "tran_waves.txt");
-    const wavePathSpice = wavePathFs.replace(/\\/g, "/");
 
     try {
         let deckText = built.netlist;
+        // Toujours chemins relatifs : ngspice tourne dans tempDir (évite espaces dans le chemin du projet).
         if (built.analysisTran && typeof deckText === "string") {
-            deckText = deckText.split("__TRAN_WAVE_PATH__").join(wavePathSpice);
+            deckText = deckText.split("__TRAN_WAVE_PATH__").join("tran_waves.txt");
+        }
+        let xspiceRc;
+        if (typeof deckText === "string" && deckText.includes(XSPICE_DIGITAL_CM_PLACEHOLDER)) {
+            const digitalSrc = resolveDigitalCmSourcePath(__dirname);
+            if (!digitalSrc) {
+                return res.status(500).json({
+                    ok: false,
+                    phase: "run",
+                    errors: [
+                        "digital.cm introuvable (Simulateur/lib/ngspice/digital.cm). Voir Simulateur/lib/ngspice/README.txt.",
+                    ],
+                    warnings: built.warnings,
+                    netlist: built.netlist,
+                });
+            }
+            await copyFile(digitalSrc, path.join(tempDir, "digital.cm"));
+            xspiceRc = path.join(tempDir, "ngspice-xspice.rc");
+            await writeFile(xspiceRc, "codemodel digital.cm\n", "utf8");
+            xspiceRc = path.basename(xspiceRc);
         }
         await writeFile(netlistPath, deckText, "utf8");
-        const runResult = await runNgspice(netlistPath, outputPath);
+        const runResult = await runNgspice("circuit.cir", "ngspice.log", {
+            cwd: tempDir,
+            xspiceRc,
+        });
         let log = "";
         try {
             log = await readFileAsync(outputPath, "utf8");
@@ -702,10 +789,13 @@ app.post("/api/simulate", async (req, res) => {
             ? {}
             : mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
         const ammeterValues = tran ? {} : mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
+        let ledValues = mergeLedMeasurements(combinedLog, built.leds || []);
+        let logicValues = mergeLogicGateMeasurements(combinedLog, built.logicGates || []);
         const ohmmeterValues = tran ? {} : mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
         let voltmeterRmsValues = {};
         let ammeterRmsValues = {};
         let scopePlots = {};
+        let ledTranPlots = {};
         let waveDiag = "";
         if (tran) {
             let waveTxt = "";
@@ -717,6 +807,13 @@ app.post("/api/simulate", async (req, res) => {
             }
             const meta = Array.isArray(built.scopesTranMeta) ? built.scopesTranMeta : [];
             scopePlots = mergeScopePlotsFromTranWrdata(waveTxt, meta);
+            const ledsMeta = Array.isArray(built.ledsTranMeta) ? built.ledsTranMeta : [];
+            ledTranPlots = mergeLedTranPlotsFromWrdata(waveTxt, ledsMeta);
+            const fromTran = mergeLedValuesFromTranPlots(ledTranPlots);
+            if (Object.keys(fromTran).length > 0) ledValues = fromTran;
+            const lgMeta = Array.isArray(built.logicGatesTranMeta) ? built.logicGatesTranMeta : [];
+            const fromTranLg = mergeLogicGateTranFromWrdata(waveTxt, lgMeta);
+            if (Object.keys(fromTranLg).length > 0) logicValues = fromTranLg;
             const metersMeta = built.metersTranMeta || {};
             voltmeterRmsValues = mergeVoltmeterRmsFromTranWrdata(
                 waveTxt,
@@ -729,11 +826,21 @@ app.post("/api/simulate", async (req, res) => {
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
+            const ledPlotKeys = Object.keys(ledTranPlots);
             waveDiag = [
                 `[wrdata] Fichier courbes : ${waveTxt.length} octets, ${linesCnt} lignes`,
                 `[wrdata] Premières données : ${waveTxt.slice(0, 300).replace(/\r/g, "") || "(vide)"}`,
-                `[wrdata] Plots extraits : ${plotKeys.length ? plotKeys.join(", ") : "(aucun)"}`
+                `[wrdata] Oscilloscopes : ${plotKeys.length ? plotKeys.join(", ") : "(aucun)"}`,
+                `[wrdata] LED (courant i(VIL_*)) : ${ledPlotKeys.length ? ledPlotKeys.join(", ") : "(aucun)"}`
             ].join("\n");
+            const oscList = Array.isArray(built.oscilloscopes) ? built.oscilloscopes : [];
+            if (oscList.length > 0 && plotKeys.length === 0) {
+                const miss = oscList.map((o) => o.id).join(", ");
+                built.warnings = built.warnings || [];
+                built.warnings.push(
+                    `Oscilloscope(s) ${miss} : aucune courbe dans tran_waves.txt. Reliez CH1, CH2 et la masse (borne du bas) ; vérifiez qu’il y a un générateur sinus/carré.`
+                );
+            }
         }
         const oscilloscopeValues = tran
             ? deriveOscilloscopeValuesFromScopePlots(scopePlots)
@@ -749,6 +856,13 @@ app.post("/api/simulate", async (req, res) => {
             ammeterValues,
             ammeterIds: Array.isArray(built.ammeters) ? built.ammeters.map((a) => a.id) : [],
             ammeterBranches: Array.isArray(built.ammeters) ? built.ammeters : [],
+            ledValues,
+            ledIds: Array.isArray(built.leds) ? built.leds.map((l) => l.id) : [],
+            ledBranches: Array.isArray(built.leds) ? built.leds : [],
+            ledTranPlots,
+            logicValues,
+            logicIds: Array.isArray(built.logicGates) ? built.logicGates.map((g) => g.id) : [],
+            logicGates: Array.isArray(built.logicGates) ? built.logicGates : [],
             voltmeterRmsValues,
             voltmeterRmsIds: Array.isArray(built.voltmetersRms)
                 ? built.voltmetersRms.map((v) => v.id)
@@ -766,31 +880,48 @@ app.post("/api/simulate", async (req, res) => {
                 : [],
             oscilloscopeNodes: Array.isArray(built.oscilloscopes) ? built.oscilloscopes : [],
             analysisTran: tran,
-            scopePlots
+            scopePlots,
+            seg7Displays: Array.isArray(built.seg7Displays) ? built.seg7Displays : [],
         });
     } catch (error) {
-        const missing = isNgspiceMissingError(error);
-        const securityBlock = isLikelySecuritySoftwareBlock(error);
         const exeTried = /** @type {{ ngspiceExe?: string }} */ (error)?.ngspiceExe || ngspiceExecutablePath();
-        const tailOut = [error?.stderr, error?.stdout, error?.message]
+        const wrongPlatform = isNgspiceWrongPlatformBinary(exeTried);
+        const missing = isNgspiceMissingError(error);
+        const securityBlock = isLikelySecuritySoftwareBlock(error, exeTried);
+        let logTail = "";
+        try {
+            logTail = await readFileAsync(outputPath, "utf8");
+        } catch {
+            /* pas de ngspice.log */
+        }
+        const tailOut = [logTail, error?.stderr, error?.stdout, error?.message]
             .filter((x) => typeof x === "string" && x.trim())
             .join("\n")
             .trim()
-            .slice(0, 2000);
+            .slice(-4000);
         let primary;
-        if (missing) {
-            primary = `ngspice introuvable ou non exécutable (essayé : ${exeTried}). En local : installe ngspice ou définis NGSPICE / NGSPICE_PATH vers ngspice.exe, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`;
+        if (wrongPlatform) {
+            primary =
+                `Binaire ngspice incompatible (${exeTried}) : un exécutable Windows (.exe) ne peut pas tourner sur ${process.platform}. ` +
+                `Sur Render / Docker / Linux : définir la variable d’environnement NGSPICE=/usr/bin/ngspice (voir Dockerfile) ou installer ngspice via le système ; ne pas déployer Simulateur/bin/ngspice.exe sur le serveur. ` +
+                `En local Windows : utiliser ngspice.exe dans Simulateur/bin/ ou NGSPICE vers votre installation.`;
+        } else if (missing) {
+            const hint = isWin32Platform()
+                ? "place ngspice.exe ou ngspice_con.exe dans Simulateur/bin/, ou définis NGSPICE / NGSPICE_PATH"
+                : "installe ngspice (apt install ngspice) ou définis NGSPICE=/usr/bin/ngspice";
+            primary = `ngspice introuvable ou non exécutable (essayé : ${exeTried}). ${hint}, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`;
         } else if (securityBlock) {
             primary =
                 `Exécution de ngspice bloquée (${exeTried}). Un antivirus ou une stratégie « logiciel inconnu » (ex. Trend Micro) peut empêcher ngspice.exe : seul un administrateur informatique peut créer une exception. ` +
-                `En attendant : utiliser le site depuis un autre ordinateur, depuis WSL/Linux si autorisé, ou l’instance en ligne (Docker / Render) où ngspice tourne sur le serveur, pas sur ton PC.`;
+                `En attendant : utiliser le site hébergé en ligne (Docker / Render) où ngspice tourne sur le serveur, pas sur le PC du visiteur.`;
         } else {
             primary = `Echec d'exécution ngspice (${exeTried}).${tailOut ? `\n\n${tailOut}` : ""}`;
         }
+        const attachTail = tailOut && (missing || securityBlock || wrongPlatform);
         res.status(500).json({
             ok: false,
             phase: "run",
-            errors: [primary + (tailOut && (missing || securityBlock) ? `\n\n${tailOut}` : "")],
+            errors: [primary + (attachTail ? `\n\n${tailOut}` : "")],
             warnings: built.warnings,
             netlist: built.netlist,
             details: {

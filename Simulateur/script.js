@@ -13,6 +13,15 @@ let canvasPointerId = null;
 /** Début d’un clic sur composant (distinguer clic = édition valeur vs glisser). */
 let dragStartClient = null;
 let valueEditorCompId = null;
+let ledColorEditorCompId = null;
+let ledAnimRaf = null;
+/** @type {Record<string, { time: number[]; current: number[] }>} */
+let lastLedTranPlots = {};
+let ledTranAnimStartMs = 0;
+
+const LED_DEFAULT_COLOR = "#e53935";
+const LED_DEFAULT_IMAX_A = 0.02;
+const LED_ON_CURRENT_A = 0.0005;
 
 let components = [];
 let history = [];
@@ -35,11 +44,27 @@ let opampCount = 0;
 let vsourceCount = 0;
 let groundCount = 0;
 let vtermCount = 0;
+let logicStateCount = 0;
 let voltmeterCount = 0;
 let ammeterCount = 0;
 let voltmeterRmsCount = 0;
 let ammeterRmsCount = 0;
 let ohmmeterCount = 0;
+let ledCount = 0;
+let lampCount = 0;
+let seg7Count = 0;
+let lcdCount = 0;
+let logicNotCount = 0;
+let logicAndCount = 0;
+let logicOrCount = 0;
+let logicNandCount = 0;
+let logicNorCount = 0;
+let logicXorCount = 0;
+let logicXnorCount = 0;
+let logicDbasCount = 0;
+let logicJkCount = 0;
+let ic74ls00Count = 0;
+let ic74ls74Count = 0;
 let vsinCount = 0;
 let vsquareCount = 0;
 let oscilloscopeCount = 0;
@@ -55,11 +80,37 @@ const DIODE_BASE_W = GRID_SIZE * 3;
 const DIODE_BASE_H = GRID_SIZE;
 const OPAMP_BASE_W = GRID_SIZE * 4;
 const OPAMP_BASE_H = GRID_SIZE * 2;
+/** Portes logiques CEI 60617-12 : 3×4 carreaux (inverseur 3×2), fils 1 carreau hors symbole. */
+const LOGIC_GATE_W = GRID_SIZE * 3;
+const LOGIC_GATE_H2 = GRID_SIZE * 4;
+const LOGIC_GATE_H1 = GRID_SIZE * 2;
+const LOGIC_GATE_LEAD = GRID_SIZE;
+/** Bascules D / JK (orientation 0 : rectangle 4×4 carreaux, modèle schéma). */
+const LOGIC_FF_W = GRID_SIZE * 4;
+const LOGIC_FF_H = GRID_SIZE * 4;
+const LOGIC_FF_LEAD = GRID_SIZE;
+/** Boîtier DIP 14 broches 74HC00 / 74LS00. */
+const IC74LS00_W = GRID_SIZE * 3;
+const IC74LS00_H = GRID_SIZE * 7;
+const IC74LS00_LEAD = GRID_SIZE;
 const NPN_BASE_W = GRID_SIZE * 2;
 const NPN_BASE_H = GRID_SIZE * 4;
 const SIGNAL_GEN_BOX = GRID_SIZE * 2;
 const OSC_W = GRID_SIZE * 2;
 const OSC_H = GRID_SIZE * 3;
+/** Afficheur 7 segments cathode commune : 7 entrées (a–g) à gauche, masse C en bas. */
+const SEG7_BASE_W = GRID_SIZE * 4;
+const SEG7_BASE_H = GRID_SIZE * 10;
+const SEG7_SEGMENT_NAMES = ["a", "b", "c", "d", "e", "f", "g"];
+const SEG7_COMMON_IDX = 7;
+const SEG7_ON_COLOR = "#e53935";
+const SEG7_OFF_COLOR = "#4a1515";
+/** Inclinaison italique des segments (comme un vrai afficheur). */
+const SEG7_ITALIC_SKEW = -0.2;
+const SEG7_PIN_A_Y = GRID_SIZE * 2;
+const SEG7_CATHODE_X = GRID_SIZE * 4;
+/** Taille du chiffre calée sur un cadre 3 carreaux (cadre élargi = chiffre inchangé). */
+const SEG7_DIGIT_REF_FRAME_W = GRID_SIZE * 3;
 
 /** Dernière position monde de la souris (collage à la grille). */
 let lastWorldMouse = { x: 0, y: 0 };
@@ -69,6 +120,8 @@ let clipboard = null;
 /** Glisser depuis la palette : type en cours. */
 let activeDragType = null;
 let activeDragModel = null;
+/** Type palette conservé jusqu’au drop (dragend peut effacer activeDragType avant drop). */
+let paletteDragType = null;
 /** Aperçu monde { type, x, y, vertical } aligné grille — dessiné pendant le drag. */
 let dragPreview = null;
 
@@ -168,7 +221,29 @@ function dist(ax, ay, bx, by) {
 }
 
 function usesFourWayOrient(type) {
-    return type === "diode" || type === "npn" || type === "opamp" || type === "ground" || type === "vterm";
+    return (
+        type === "diode" ||
+        type === "led" ||
+        type === "lamp" ||
+        type === "seg7" ||
+        type === "lcd" ||
+        type === "logic_not" ||
+        type === "logic_and" ||
+        type === "logic_or" ||
+        type === "logic_nand" ||
+        type === "logic_nor" ||
+        type === "logic_xor" ||
+        type === "logic_xnor" ||
+        type === "logic_dff" ||
+        type === "logic_jk" ||
+        type === "ic_74ls00" ||
+        type === "ic_74ls74" ||
+        type === "npn" ||
+        type === "opamp" ||
+        type === "ground" ||
+        type === "vterm" ||
+        type === "logic_state"
+    );
 }
 
 function isGroundType(t) {
@@ -179,8 +254,384 @@ function isVtermType(t) {
     return t === "vterm";
 }
 
+function isLogicStateType(t) {
+    return t === "logic_state";
+}
+
 function isSingleTerminalRefType(t) {
-    return isGroundType(t) || isVtermType(t);
+    return isGroundType(t) || isVtermType(t) || isLogicStateType(t);
+}
+
+/** Affichage 0 ou 1 pour une borne d’état logique. */
+function normalizeLogicStateDisplay(val) {
+    const t = String(val ?? "")
+        .trim()
+        .toLowerCase();
+    if (t === "1" || t === "haut" || t === "high" || t === "true" || t === "on" || t === "vcc") return "1";
+    return "0";
+}
+
+/** Rail logique 3,3 V ou 5 V (propriété composant logicRail). */
+function parseLogicRail(rail) {
+    if (rail == null || rail === "") return 5;
+    const n = parseFloat(String(rail).replace(",", "."));
+    return Number.isFinite(n) && Math.abs(n - 3.3) < 0.05 ? 3.3 : 5;
+}
+
+function toggleLogicRail(rail) {
+    return parseLogicRail(rail) === 3.3 ? 5 : 3.3;
+}
+
+function formatLogicRailShort(rail) {
+    return parseLogicRail(rail) === 3.3 ? "3,3 V" : "5 V";
+}
+
+function ensureLogicRailField(c) {
+    if (!c || (c.type !== "logic_state" && !isLogicFamilyType(c.type))) return;
+    if (c.logicRail == null || c.logicRail === "") c.logicRail = 5;
+}
+
+function isLedType(t) {
+    return t === "led";
+}
+
+function isOptoPlaceholderType(t) {
+    return t === "lamp" || t === "lcd";
+}
+
+function isSeg7Type(t) {
+    return t === "seg7";
+}
+
+function isOptoTwoTerminalType(t) {
+    return isLedType(t) || isOptoPlaceholderType(t);
+}
+
+function isLogicNotType(t) {
+    return t === "logic_not";
+}
+
+function isLogicGateType(t) {
+    return (
+        t === "logic_not" ||
+        t === "logic_and" ||
+        t === "logic_or" ||
+        t === "logic_nand" ||
+        t === "logic_nor" ||
+        t === "logic_xor" ||
+        t === "logic_xnor"
+    );
+}
+
+function isLogicFlipFlopType(t) {
+    return t === "logic_dff" || t === "logic_jk";
+}
+
+function isIc74ls00Type(t) {
+    return t === "ic_74ls00";
+}
+
+function isIc74ls74Type(t) {
+    return t === "ic_74ls74";
+}
+
+function isLogicIcType(t) {
+    return isIc74ls00Type(t) || isIc74ls74Type(t);
+}
+
+function isLogicFamilyType(t) {
+    return isLogicGateType(t) || isLogicFlipFlopType(t) || isLogicIcType(t);
+}
+
+function logicGateKind(t) {
+    switch (t) {
+        case "logic_not":
+            return { iec: "1", invert: true, inputs: 1 };
+        case "logic_and":
+            return { iec: "&", invert: false, inputs: 2 };
+        case "logic_or":
+            return { iec: "\u22651", invert: false, inputs: 2 };
+        case "logic_nand":
+            return { iec: "&", invert: true, inputs: 2 };
+        case "logic_nor":
+            return { iec: "\u22651", invert: true, inputs: 2 };
+        case "logic_xor":
+            return { iec: "=1", invert: false, inputs: 2 };
+        case "logic_xnor":
+            return { iec: "=1", invert: true, inputs: 2 };
+        default:
+            return { iec: "?", invert: false, inputs: 2 };
+    }
+}
+
+function logicGateBaseH(type) {
+    return isLogicNotType(type) ? LOGIC_GATE_H1 : LOGIC_GATE_H2;
+}
+
+function logicGateDimsFromOrient(orient, type) {
+    const o = ((orient % 4) + 4) % 4;
+    const bw = LOGIC_GATE_W;
+    const bh = logicGateBaseH(type);
+    const wide = o === 0 || o === 2;
+    return { w: wide ? bw : bh, h: wide ? bh : bw };
+}
+
+function logicGateJunctionsWorld(c) {
+    const g = GRID_SIZE;
+    const bw = LOGIC_GATE_W;
+    const bh = logicGateBaseH(c.type);
+    const kind = logicGateKind(c.type);
+    const lead = LOGIC_GATE_LEAD;
+    const points =
+        kind.inputs === 1
+            ? [
+                  [-lead, bh / 2],
+                  [bw + lead, bh / 2],
+              ]
+            : [
+                  [-lead, g],
+                  [-lead, 3 * g],
+                  [bw + lead, 2 * g],
+              ];
+    return junctionsFromLocalBase(c, points, bw, bh);
+}
+
+function snapLogicGateDropWorld(wx, wy, type, orient, mirrorX = false, mirrorY = false) {
+    const bh = logicGateBaseH(type);
+    const g = GRID_SIZE;
+    const lead = LOGIC_GATE_LEAD;
+    const anchorY = isLogicNotType(type) ? bh / 2 : g;
+    return snapByLocalJunction(type, wx, wy, orient, -lead, anchorY, LOGIC_GATE_W, bh, mirrorX, mirrorY);
+}
+
+function snapLogicGateComponent(comp) {
+    const bh = logicGateBaseH(comp.type);
+    const g = GRID_SIZE;
+    const lead = LOGIC_GATE_LEAD;
+    const anchorY = isLogicNotType(comp.type) ? bh / 2 : g;
+    const jb = localBaseToWorld(comp, -lead, anchorY, LOGIC_GATE_W, bh);
+    const p = snapLogicGateDropWorld(
+        jb.x,
+        jb.y,
+        comp.type,
+        getCompOrient(comp),
+        !!comp.mirrorX,
+        !!comp.mirrorY
+    );
+    comp.x = p.x;
+    comp.y = p.y;
+}
+
+function logicFlipFlopBaseH(type) {
+    return LOGIC_FF_H;
+}
+
+function logicFlipFlopDimsFromOrient(orient, type) {
+    const o = ((orient % 4) + 4) % 4;
+    const bw = LOGIC_FF_W;
+    const bh = logicFlipFlopBaseH(type);
+    const wide = o === 0 || o === 2;
+    return { w: wide ? bw : bh, h: wide ? bh : bw };
+}
+
+function logicFlipFlopPinLocalY(type, pinIndex) {
+    const g = GRID_SIZE;
+    if (type === "logic_dff") {
+        if (pinIndex === 0) return g;
+        if (pinIndex === 1) return 3 * g;
+        if (pinIndex === 2) return 2 * g;
+        if (pinIndex === 3) return 3 * g;
+        return 2 * g;
+    }
+    if (pinIndex === 0) return g;
+    if (pinIndex === 1) return 2 * g;
+    if (pinIndex === 2) return 3 * g;
+    if (pinIndex === 3) return g;
+    if (pinIndex === 4) return 3 * g;
+    return g;
+}
+
+function logicFlipFlopOutputPinIndices(type) {
+    return type === "logic_dff" ? [2, 3] : [3, 4];
+}
+
+function logicFlipFlopLocalPoints(type) {
+    const g = GRID_SIZE;
+    const bw = LOGIC_FF_W;
+    const lead = LOGIC_FF_LEAD;
+    if (type === "logic_dff") {
+        return [
+            [-lead, g],
+            [-lead, 3 * g],
+            [bw + lead, 2 * g],
+            [bw + lead, 3 * g],
+        ];
+    }
+    return [
+        [-lead, g],
+        [-lead, 2 * g],
+        [-lead, 3 * g],
+        [bw + lead, g],
+        [bw + lead, 3 * g],
+    ];
+}
+
+function logicFlipFlopJunctionsWorld(c) {
+    const bh = logicFlipFlopBaseH(c.type);
+    return junctionsFromLocalBase(c, logicFlipFlopLocalPoints(c.type), LOGIC_FF_W, bh);
+}
+
+function snapLogicFlipFlopDropWorld(wx, wy, type, orient, mirrorX = false, mirrorY = false) {
+    const g = GRID_SIZE;
+    const lead = LOGIC_FF_LEAD;
+    return snapByLocalJunction(type, wx, wy, orient, -lead, g, LOGIC_FF_W, LOGIC_FF_H, mirrorX, mirrorY);
+}
+
+function snapLogicFlipFlopComponent(comp) {
+    const g = GRID_SIZE;
+    const jb = localBaseToWorld(comp, -LOGIC_FF_LEAD, g, LOGIC_FF_W, LOGIC_FF_H);
+    const p = snapLogicFlipFlopDropWorld(
+        jb.x,
+        jb.y,
+        comp.type,
+        getCompOrient(comp),
+        !!comp.mirrorX,
+        !!comp.mirrorY
+    );
+    comp.x = p.x;
+    comp.y = p.y;
+}
+
+function ic74ls00PinY(pinIndex) {
+    const g = GRID_SIZE;
+    if (pinIndex <= 6) return g * (pinIndex + 0.5);
+    return g * (13 - pinIndex + 0.5);
+}
+
+function ic74ls00PinX(pinIndex) {
+    return pinIndex <= 6 ? 0 : IC74LS00_W;
+}
+
+function ic74ls00LocalPoints() {
+    const lead = IC74LS00_LEAD;
+    const bw = IC74LS00_W;
+    const pts = [];
+    for (let i = 0; i < 14; i++) {
+        const py = ic74ls00PinY(i);
+        const left = ic74ls00PinX(i) <= 0;
+        pts.push([left ? -lead : bw + lead, py]);
+    }
+    return pts;
+}
+
+function ic74ls00DimsFromOrient(orient) {
+    const o = ((orient % 4) + 4) % 4;
+    const wide = o === 0 || o === 2;
+    return { w: wide ? IC74LS00_W : IC74LS00_H, h: wide ? IC74LS00_H : IC74LS00_W };
+}
+
+function ic74ls00JunctionsWorld(c) {
+    return junctionsFromLocalBase(c, ic74ls00LocalPoints(), IC74LS00_W, IC74LS00_H);
+}
+
+function snapIc74ls00DropWorld(wx, wy, orient, mirrorX = false, mirrorY = false) {
+    return snapByLocalJunction(
+        "ic_74ls00",
+        wx,
+        wy,
+        orient,
+        -IC74LS00_LEAD,
+        ic74ls00PinY(0),
+        IC74LS00_W,
+        IC74LS00_H,
+        mirrorX,
+        mirrorY
+    );
+}
+
+function snapIc74ls00Component(comp) {
+    const jb = localBaseToWorld(comp, -IC74LS00_LEAD, ic74ls00PinY(0), IC74LS00_W, IC74LS00_H);
+    const p = snapIc74ls00DropWorld(jb.x, jb.y, getCompOrient(comp), !!comp.mirrorX, !!comp.mirrorY);
+    comp.x = p.x;
+    comp.y = p.y;
+}
+
+function seg7DimsFromOrient(orient) {
+    const o = ((orient % 4) + 4) % 4;
+    const wide = o === 0 || o === 2;
+    return { w: wide ? SEG7_BASE_W : SEG7_BASE_H, h: wide ? SEG7_BASE_H : SEG7_BASE_W };
+}
+
+function seg7FrameBoxLocal() {
+    const g = GRID_SIZE;
+    const pinTop = SEG7_PIN_A_Y;
+    const pinBot = SEG7_PIN_A_Y + 6 * g;
+    return {
+        x: g,
+        y: pinTop - g,
+        w: g * 4,
+        h: pinBot - pinTop + 2 * g,
+    };
+}
+
+function seg7PinY(i) {
+    return SEG7_PIN_A_Y + i * GRID_SIZE;
+}
+
+function seg7CommonXLocal() {
+    return SEG7_CATHODE_X;
+}
+
+function seg7CommonYLocal() {
+    const frame = seg7FrameBoxLocal();
+    return frame.y + frame.h + GRID_SIZE;
+}
+
+function seg7InnerBoxLocal() {
+    const outer = seg7FrameBoxLocal();
+    const g = GRID_SIZE;
+    const padX = g * 0.42;
+    const digitW = SEG7_DIGIT_REF_FRAME_W - 2 * padX;
+    const digitH = outer.h * 0.62;
+    return {
+        x: outer.x + (outer.w - digitW) / 2,
+        y: outer.y + (outer.h - digitH) / 2,
+        w: digitW,
+        h: digitH,
+    };
+}
+
+function seg7PinLocalPoints() {
+    const pts = [];
+    for (let i = 0; i < 7; i++) pts.push([0, seg7PinY(i)]);
+    pts.push([seg7CommonXLocal(), seg7CommonYLocal()]);
+    return pts;
+}
+
+function seg7JunctionsWorld(c) {
+    return junctionsFromLocalBase(c, seg7PinLocalPoints(), SEG7_BASE_W, SEG7_BASE_H);
+}
+
+function snapSeg7DropWorld(wx, wy, orient, mirrorX = false, mirrorY = false) {
+    return snapByLocalJunction(
+        "seg7",
+        wx,
+        wy,
+        orient,
+        0,
+        seg7PinY(0),
+        SEG7_BASE_W,
+        SEG7_BASE_H,
+        mirrorX,
+        mirrorY
+    );
+}
+
+function snapSeg7Component(comp) {
+    const jb = localBaseToWorld(comp, 0, seg7PinY(0), SEG7_BASE_W, SEG7_BASE_H);
+    const p = snapSeg7DropWorld(jb.x, jb.y, getCompOrient(comp), !!comp.mirrorX, !!comp.mirrorY);
+    comp.x = p.x;
+    comp.y = p.y;
 }
 
 function singleTerminalDimsFromOrient(orient) {
@@ -256,7 +707,11 @@ function npnDimsFromOrient(orient) {
 }
 
 function componentDims(c) {
+    if (isSeg7Type(c.type)) return seg7DimsFromOrient(getCompOrient(c));
     if (isOpampType(c.type)) return opampDimsFromOrient(getCompOrient(c));
+    if (isLogicGateType(c.type)) return logicGateDimsFromOrient(getCompOrient(c), c.type);
+    if (isLogicFlipFlopType(c.type)) return logicFlipFlopDimsFromOrient(getCompOrient(c), c.type);
+    if (isLogicIcType(c.type)) return ic74ls00DimsFromOrient(getCompOrient(c));
     if (isNpnType(c.type)) return npnDimsFromOrient(getCompOrient(c));
     if (isSingleTerminalRefType(c.type)) return singleTerminalDimsFromOrient(getCompOrient(c));
     if (isTwoTerminalType(c.type)) return twoTerminalDimsFromOrient(getCompOrient(c));
@@ -366,6 +821,10 @@ function junctionEndpointsForComponent(c) {
     }
     if (isNpnType(c.type)) return npnJunctionsWorld(c);
     if (isOpampType(c.type)) return opampJunctionsWorld(c);
+    if (isLogicGateType(c.type)) return logicGateJunctionsWorld(c);
+    if (isLogicFlipFlopType(c.type)) return logicFlipFlopJunctionsWorld(c);
+    if (isLogicIcType(c.type)) return ic74ls00JunctionsWorld(c);
+    if (isSeg7Type(c.type)) return seg7JunctionsWorld(c);
     if (isSingleTerminalRefType(c.type)) return singleTerminalJunctionsWorld(c);
     return twoTerminalJunctionsWorld(c);
 }
@@ -582,6 +1041,10 @@ function snapAreaSelectionAfterMove() {
         else if (isSignalGeneratorType(c.type)) snapSignalGeneratorComponent(c);
         else if (isNpnType(c.type)) snapNpnComponent(c);
         else if (isOpampType(c.type)) snapOpampComponent(c);
+        else if (isLogicGateType(c.type)) snapLogicGateComponent(c);
+        else if (isLogicFlipFlopType(c.type)) snapLogicFlipFlopComponent(c);
+        else if (isLogicIcType(c.type)) snapIc74ls00Component(c);
+        else if (isSeg7Type(c.type)) snapSeg7Component(c);
         else if (isSingleTerminalRefType(c.type)) snapSingleTerminalComponent(c);
         else if (isTwoTerminalType(c.type)) snapTwoTerminalComponent(c);
         else {
@@ -660,6 +1123,8 @@ function findTopComponentAtWorld(wx, wy) {
             !isTwoTerminalType(c.type) &&
             !isNpnType(c.type) &&
             !isOpampType(c.type) &&
+            !isLogicFamilyType(c.type) &&
+            !isSeg7Type(c.type) &&
             !isSingleTerminalRefType(c.type)
         )
             continue;
@@ -1246,7 +1711,9 @@ function drawWiresLayer() {
 function init() {
     loadEditorDisplayPrefs();
     applyEditorThemeToPage();
+    closeLedColorEditor();
     updateGridToggleLabel();
+    resetPaletteDragState();
 
     window.addEventListener('resize', resize);
     canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -1257,11 +1724,13 @@ function init() {
     canvas.addEventListener('dragleave', handleCanvasDragLeave);
     canvas.addEventListener('drop', handleDrop);
     window.addEventListener('dragend', handleWindowDragEnd);
+    initLogicSubmenuClicks();
     
     // Souris / pointeur
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('dblclick', handleCanvasDblClick);
     initValueEditor();
+    initLedColorEditor();
     window.addEventListener('mousemove', handleMouseMove);
     /* pointerup seul (évite double fin si mouseup + pointerup). */
     window.addEventListener('pointerup', handlePointerUp);
@@ -1926,6 +2395,139 @@ function menuOpenOscilloscope() {
 }
 window.menuOpenOscilloscope = menuOpenOscilloscope;
 
+/** Récapitulatif des raccourcis (menu Commandes). */
+const APP_COMMANDS_SECTIONS = [
+    {
+        title: "Édition",
+        rows: [
+            { keys: "Ctrl+Z", desc: "Annuler la dernière action." },
+            { keys: "Ctrl+Y", desc: "Rétablir l\u2019action annulée." },
+            { keys: "Ctrl+C", desc: "Copier le composant sélectionné ou la sélection (Shift)." },
+            { keys: "Ctrl+V", desc: "Coller à la position du curseur (grille)." },
+            { keys: "Suppr", desc: "Supprimer le composant, le fil sélectionné ou la sélection multiple." },
+        ],
+    },
+    {
+        title: "Composants",
+        rows: [
+            { keys: "R", desc: "Tourner le composant (90\u00B0) : résistances, diodes, portes logiques, NPN, AOP, etc." },
+            { keys: "X", desc: "Miroir horizontal : NPN, AOP, portes logiques, générateurs, oscilloscope." },
+            { keys: "Y", desc: "Miroir vertical : NPN, AOP, portes logiques." },
+            {
+                keys: "Double-clic",
+                desc: "Modifier une valeur (R, C, pile, borne\u2026), choisir le rail 3,3 V / 5 V (état logique ou porte), ouvrir l\u2019inspecteur (générateur, AOP) ou la couleur LED.",
+            },
+            {
+                keys: "Clic",
+                desc: "État logique : basculer 0 / 1 (sans déplacer le composant).",
+            },
+        ],
+    },
+    {
+        title: "Fils et schéma",
+        rows: [
+            { keys: "Clic borne", desc: "Commencer ou terminer un fil entre deux jonctions." },
+            { keys: "Échap", desc: "Figé l\u2019extrémité du fil en cours ; fermer une fenêtre ou annuler la sélection." },
+            { keys: "Shift + glisser", desc: "Sélection rectangulaire (composants et fils) ; déplacer la sélection." },
+            { keys: "Glisser (corps)", desc: "Déplacer un composant sur la grille." },
+        ],
+    },
+    {
+        title: "Vue",
+        rows: [
+            { keys: "Molette", desc: "Zoom avant / arrière sur le schéma." },
+            { keys: "Clic droit + glisser", desc: "Déplacer la vue (panoramique)." },
+        ],
+    },
+    {
+        title: "Simulation",
+        rows: [
+            { keys: "▶ Simulation", desc: "Lancer ngspice en direct ; résultats dans le panneau à droite." },
+            { keys: "■ Arrêter", desc: "Interrompre la simulation en cours." },
+        ],
+    },
+];
+
+let commandsHelpOverlayEl = null;
+
+function closeCommandsHelp() {
+    if (commandsHelpOverlayEl) {
+        commandsHelpOverlayEl.remove();
+        commandsHelpOverlayEl = null;
+    }
+}
+
+function menuOpenCommandsHelp() {
+    closeCommandsHelp();
+
+    const wrap = document.createElement("div");
+    wrap.className = "cmd-help-overlay";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-modal", "true");
+    wrap.setAttribute("aria-label", "Commandes du simulateur");
+
+    const panel = document.createElement("div");
+    panel.className = "cmd-help-panel";
+
+    const header = document.createElement("header");
+    header.className = "cmd-help-header";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Commandes";
+    header.appendChild(h2);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "cmd-help-close";
+    closeBtn.textContent = "\u2715";
+    closeBtn.title = "Fermer (Échap)";
+    closeBtn.addEventListener("click", () => closeCommandsHelp());
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "cmd-help-body";
+    for (const section of APP_COMMANDS_SECTIONS) {
+        const sec = document.createElement("section");
+        sec.className = "cmd-help-section";
+        const h3 = document.createElement("h3");
+        h3.textContent = section.title;
+        sec.appendChild(h3);
+        const table = document.createElement("table");
+        table.className = "cmd-help-table";
+        const tbody = document.createElement("tbody");
+        for (const row of section.rows) {
+            const tr = document.createElement("tr");
+            const tdK = document.createElement("td");
+            tdK.className = "cmd-help-keys";
+            const kbd = document.createElement("kbd");
+            kbd.textContent = row.keys;
+            tdK.appendChild(kbd);
+            const tdD = document.createElement("td");
+            tdD.className = "cmd-help-desc";
+            tdD.textContent = row.desc;
+            tr.appendChild(tdK);
+            tr.appendChild(tdD);
+            tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        sec.appendChild(table);
+        body.appendChild(sec);
+    }
+    panel.appendChild(body);
+    wrap.appendChild(panel);
+
+    wrap.addEventListener("click", e => {
+        if (e.target === wrap) closeCommandsHelp();
+    });
+    panel.addEventListener("click", e => e.stopPropagation());
+
+    document.body.appendChild(wrap);
+    commandsHelpOverlayEl = wrap;
+    closeBtn.focus({ preventScroll: true });
+}
+
+window.menuOpenCommandsHelp = menuOpenCommandsHelp;
+window.closeCommandsHelp = closeCommandsHelp;
+
 function closeSimPanel() {
     const root = document.getElementById("editor-container");
     if (root) root.classList.add("sim-panel-hidden");
@@ -1978,6 +2580,20 @@ function scheduleLiveSimRefresh() {
 
 function stopLiveSimulation() {
     liveSimActive = false;
+    lastLedTranPlots = {};
+    ledTranAnimStartMs = 0;
+    for (const c of components) {
+        if (isLedType(c.type)) {
+            c.ledOn = false;
+            c.ledSmoke = false;
+            c.ledCurrent = 0;
+            c.ledReverseBias = false;
+        }
+        if (isSeg7Type(c.type)) {
+            ensureSeg7Fields(c);
+            c.seg7On = Array(7).fill(false);
+        }
+    }
     liveSimSeq++;
     if (liveSimDebounceTimer) {
         clearTimeout(liveSimDebounceTimer);
@@ -2033,7 +2649,13 @@ function refreshOscilloscopePlots(scopePlots) {
 }
 
 function applySimulationResults(data, res, rawBody) {
+    lastLedTranPlots =
+        data?.ledTranPlots && typeof data.ledTranPlots === "object" ? data.ledTranPlots : {};
+    if (Object.keys(lastLedTranPlots).length > 0) ledTranAnimStartMs = performance.now();
+    applyLedSimulationState(buildLedValuesFromSimData(data));
+    applySeg7SimulationState(buildSeg7StateFromSimData(data));
     updateSimPanelResults(buildSimulationResultsHtml(data, res, rawBody));
+    draw();
     const scopePlots = data.scopePlots || {};
     const hasScope = data.ok !== false && Object.keys(scopePlots).length > 0;
     if (hasScope) {
@@ -2731,11 +3353,38 @@ function cancelCanvasInteractionState() {
 function resetPaletteDragState() {
     activeDragType = null;
     activeDragModel = null;
+    paletteDragType = null;
     dragPreview = null;
+    document.body.classList.remove("palette-drag-active");
     document.querySelectorAll(".menu-item.dropdown-pinned").forEach(el => {
         el.classList.remove("dropdown-pinned");
     });
+    document.querySelectorAll(".menu-item-has-submenu.submenu-drag-open").forEach(el => {
+        el.classList.remove("submenu-drag-open");
+    });
+    document.querySelectorAll(".menu-item-has-submenu.submenu-open").forEach(el => {
+        el.classList.remove("submenu-open");
+    });
     removePaletteDragCanvas();
+}
+
+/** Lit data-comp-type sur un bouton de palette (dataset + attribut). */
+function paletteCompTypeFromElement(el) {
+    if (!el) return "";
+    const row = el.closest?.("[data-comp-type]") || (el.matches?.("[data-comp-type]") ? el : null);
+    if (!row) return "";
+    return row.getAttribute("data-comp-type") || row.dataset?.compType || "";
+}
+
+/** Normalise le type composant (guillemets typographiques, espaces). */
+function normalizePaletteCompType(t) {
+    const s = String(t || "")
+        .trim()
+        .replace(/\u2018|\u2019/g, "'");
+    const low = s.toLowerCase();
+    if (low === "logic_jk" || low === "logic_j k") return "logic_jk";
+    if (low === "logic_dff" || low === "logic_dbas") return "logic_dff";
+    return s;
 }
 
 function beginCanvasPointerCapture(e) {
@@ -2785,7 +3434,13 @@ function validateCircuitBeforeSimulate(compList) {
         };
     }
     const hasPower = list.some(
-        c => c && (c.type === "vsource" || c.type === "vsin" || c.type === "vsquare" || c.type === "vterm")
+        c =>
+            c &&
+            (c.type === "vsource" ||
+                c.type === "vsin" ||
+                c.type === "vsquare" ||
+                c.type === "vterm" ||
+                c.type === "logic_state")
     );
     const hasGround = list.some(c => c && c.type === "ground");
     const hasOhm = list.some(c => c && c.type === "ohmmeter");
@@ -2802,7 +3457,7 @@ function validateCircuitBeforeSimulate(compList) {
         return {
             ok: false,
             errors: [
-                "Voltmètre, ampèremètre ou oscilloscope : ajoutez une source (pile, borne, sinus ou carré).",
+                "Voltmètre, ampèremètre ou oscilloscope : ajoutez une source (pile, borne, état logique, sinus ou carré).",
             ],
         };
     }
@@ -2811,7 +3466,7 @@ function validateCircuitBeforeSimulate(compList) {
             ok: false,
             errors: [
                 "Pour mesurer des résistances sans pile : placez un ohmmètre (Ω) entre les deux points du réseau, avec des fils sur ses deux bornes.",
-                "Sinon : ajoutez une pile DC, une borne ou une masse pour définir le circuit.",
+                "Sinon : ajoutez une pile DC, une borne, un état logique ou une masse pour définir le circuit.",
             ],
         };
     }
@@ -2898,6 +3553,12 @@ function buildSimulationResultsHtml(data, res, rawBody) {
     const omMeta = Array.isArray(data.ohmmeterNodes) ? data.ohmmeterNodes : [];
     const omMetaById = Object.fromEntries(omMeta.map(x => [x.id, x]));
     const omKeys = Object.keys(om);
+    const led = data.ledValues || {};
+    const ledIds = Array.isArray(data.ledIds) ? data.ledIds : Object.keys(led);
+    const ledKeys = Object.keys(led);
+    const lg = data.logicValues || {};
+    const lgIds = Array.isArray(data.logicIds) ? data.logicIds : Object.keys(lg);
+    const lgKeys = Object.keys(lg);
     let html = "";
     const sc = data.oscilloscopeValues || {};
     const scIds = Array.isArray(data.oscilloscopeIds) ? data.oscilloscopeIds : Object.keys(sc);
@@ -2908,6 +3569,8 @@ function buildSimulationResultsHtml(data, res, rawBody) {
         vmRmsIds.length === 0 &&
         amRmsIds.length === 0 &&
         omIds.length === 0 &&
+        ledIds.length === 0 &&
+        lgIds.length === 0 &&
         scIds.length === 0
     ) {
         html += "<p class=\"sim-muted\">Aucun appareil de mesure.</p>";
@@ -2960,6 +3623,32 @@ function buildSimulationResultsHtml(data, res, rawBody) {
             }
             html += "</tbody></table>";
         }
+        if (ledIds.length > 0 && ledKeys.length > 0) {
+            html += "<h4 class=\"sim-subtitle\">LED</h4><table class=\"sim-table\"><thead><tr><th>Id</th><th>Courant</th><th>État</th></tr></thead><tbody>";
+            for (const id of ledIds) {
+                const row = led[id];
+                const i = row && typeof row.current === "number" ? row.current : NaN;
+                const txt = Number.isFinite(i) ? formatValueWithUnit(i, "A") : "—";
+                const comp = components.find(c => c.id === id);
+                let etat = "éteinte";
+                if (comp && comp.ledSmoke) etat = "⚠ surintensité (fumée)";
+                else if (comp && comp.ledReverseBias) etat = "⚠ polarité (anode → +)";
+                else if (comp && comp.ledOn) etat = "allumée";
+                html += `<tr><td>${escapeHtmlSim(id)}</td><td>${escapeHtmlSim(txt)}</td><td>${escapeHtmlSim(etat)}</td></tr>`;
+            }
+            html += "</tbody></table>";
+        }
+        if (lgIds.length > 0 && lgKeys.length > 0) {
+            html += "<h4 class=\"sim-subtitle\">Portes logiques</h4><table class=\"sim-table\"><thead><tr><th>Id</th><th>Sortie</th><th>Niveau</th></tr></thead><tbody>";
+            for (const id of lgIds) {
+                const row = lg[id];
+                const v = row && typeof row.voltage === "number" ? row.voltage : NaN;
+                const vTxt = Number.isFinite(v) ? formatValueWithUnit(v, "V") : "—";
+                const lvl = row?.logic === "1" ? "1 (HAUT)" : row?.logic === "0" ? "0 (BAS)" : "—";
+                html += `<tr><td>${escapeHtmlSim(id)}</td><td>${escapeHtmlSim(vTxt)}</td><td>${escapeHtmlSim(lvl)}</td></tr>`;
+            }
+            html += "</tbody></table>";
+        }
         if (omIds.length > 0 && omKeys.length > 0) {
             html += "<h4 class=\"sim-subtitle\">Ohmmètres</h4><table class=\"sim-table\"><thead><tr><th>Id</th><th>Nœuds</th><th>R</th></tr></thead><tbody>";
             for (const id of omIds) {
@@ -3008,6 +3697,7 @@ function isTwoTerminalType(t) {
         t === "capacitor" ||
         t === "inductor" ||
         t === "diode" ||
+        isOptoTwoTerminalType(t) ||
         t === "vsource" ||
         t === "voltmeter" ||
         t === "ammeter" ||
@@ -3040,7 +3730,11 @@ function isThreeTerminalActiveType(t) {
 function isSchematicTerminalType(t) {
     return (
         isTwoTerminalType(t) ||
+        isSeg7Type(t) ||
         isThreeTerminalActiveType(t) ||
+        isLogicGateType(t) ||
+        isLogicFlipFlopType(t) ||
+        isLogicIcType(t) ||
         isSignalGeneratorType(t) ||
         isOscilloscopeType(t) ||
         isSingleTerminalRefType(t)
@@ -3102,6 +3796,91 @@ function drawGroundSymbol(ctx, w, h) {
     ctx.textBaseline = "alphabetic";
 }
 
+/** Centre du carré 0/1 (repère symbole borne logique, orientation 0). */
+function logicStateLabelLocal() {
+    const cx = GND_BASE_W / 2;
+    const tipY = GND_BASE_H - GRID_SIZE * 0.35;
+    const baseY = tipY - GRID_SIZE * 0.55;
+    const boxH = GRID_SIZE * 1.2;
+    const boxTop = baseY - boxH - GRID_SIZE * 0.06;
+    return { x: cx, y: boxTop + boxH / 2 };
+}
+
+/** Borne d’état logique (0 ou rail 3,3 V / 5 V) — connexion en bas comme la borne tension. */
+function drawLogicStateSymbol(ctx, w, h, valueText, drawDigit = true) {
+    const state = normalizeLogicStateDisplay(valueText);
+    const cx = w / 2;
+    const tipY = h - GRID_SIZE * 0.35;
+    const baseY = tipY - GRID_SIZE * 0.55;
+    const boxW = GRID_SIZE * 1.2;
+    const boxH = GRID_SIZE * 1.2;
+    const boxTop = baseY - boxH - GRID_SIZE * 0.06;
+    const boxLeft = cx - boxW / 2;
+    const stroke0 = ctx.strokeStyle;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(cx, baseY);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.fillStyle = state === "1" ? "rgba(102, 187, 106, 0.28)" : "rgba(144, 164, 174, 0.22)";
+    ctx.strokeStyle = state === "1" ? "#43A047" : "#78909C";
+    ctx.beginPath();
+    ctx.rect(boxLeft, boxTop, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+    if (drawDigit) {
+        const fs = Math.max(14, 18 / Math.max(scale, 0.2));
+        ctx.font = `700 ${fs}px Segoe UI`;
+        ctx.fillStyle = state === "1" ? "#2E7D32" : "#455A64";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(state, cx, boxTop + boxH / 2);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+    }
+    ctx.restore();
+    ctx.strokeStyle = stroke0;
+}
+
+function drawLogicStateLabelUpright(ctx, c) {
+    const state = normalizeLogicStateDisplay(c.value);
+    const ll = logicStateLabelLocal();
+    const pt = localBaseToWorld(c, ll.x, ll.y, GND_BASE_W, GND_BASE_H);
+    const fs = Math.max(14, 18 / Math.max(scale, 0.2));
+    ctx.save();
+    ctx.font = `700 ${fs}px Segoe UI`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = state === "1" ? "#2E7D32" : "#455A64";
+    ctx.fillText(state, pt.x - c.x, pt.y - c.y);
+    ctx.restore();
+}
+
+function logicStateRailLabelLocal() {
+    const cx = GND_BASE_W / 2;
+    const tipY = GND_BASE_H - GRID_SIZE * 0.35;
+    const baseY = tipY - GRID_SIZE * 0.55;
+    const boxH = GRID_SIZE * 1.2;
+    const boxTop = baseY - boxH - GRID_SIZE * 0.06;
+    return { x: cx, y: boxTop - GRID_SIZE * 0.22 };
+}
+
+function drawLogicStateRailLabelUpright(ctx, c) {
+    ensureLogicRailField(c);
+    const rl = logicStateRailLabelLocal();
+    const pt = localBaseToWorld(c, rl.x, rl.y, GND_BASE_W, GND_BASE_H);
+    const fs = Math.max(9, 11 / Math.max(scale, 0.2));
+    ctx.save();
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#5C6BC0";
+    ctx.fillText(formatLogicRailShort(c.logicRail), pt.x - c.x, pt.y - c.y);
+    ctx.restore();
+}
+
 /** Borne tension (orientation 0 : connexion en bas, triangle vers le haut). */
 function drawVtermSymbol(ctx, w, h, valueText) {
     const cx = w / 2;
@@ -3161,6 +3940,935 @@ function drawDiodeSymbol(ctx, w, h, orient) {
     ctx.translate(-DIODE_BASE_W / 2, -DIODE_BASE_H / 2);
     drawDiodeSymbolLR(ctx, DIODE_BASE_W, DIODE_BASE_H);
     ctx.restore();
+}
+
+function hexToRgb(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length === 3) {
+        return {
+            r: parseInt(h[0] + h[0], 16),
+            g: parseInt(h[1] + h[1], 16),
+            b: parseInt(h[2] + h[2], 16),
+        };
+    }
+    if (h.length !== 6) return { r: 229, g: 57, b: 53 };
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+
+function normalizeLedColor(raw) {
+    const presets = {
+        red: "#e53935",
+        rouge: "#e53935",
+        green: "#43a047",
+        vert: "#43a047",
+        blue: "#1e88e5",
+        bleu: "#1e88e5",
+        yellow: "#fdd835",
+        jaune: "#fdd835",
+        orange: "#fb8c00",
+        white: "#eeeeee",
+        blanc: "#eeeeee",
+    };
+    const t = String(raw || "").trim().toLowerCase();
+    if (presets[t]) return presets[t];
+    if (/^#[0-9a-f]{6}$/i.test(t)) return t;
+    if (/^#[0-9a-f]{3}$/i.test(t)) {
+        return `#${t[1]}${t[1]}${t[2]}${t[2]}${t[3]}${t[3]}`;
+    }
+    return LED_DEFAULT_COLOR;
+}
+
+function ensureLedFields(c) {
+    if (!c || !isLedType(c.type)) return;
+    if (!c.ledColor) c.ledColor = normalizeLedColor(c.value);
+    if (c.iMax == null || !(c.iMax > 0)) c.iMax = LED_DEFAULT_IMAX_A;
+    c.ledOn = !!c.ledOn;
+    c.ledSmoke = !!c.ledSmoke;
+    c.ledReverseBias = !!c.ledReverseBias;
+    c.ledCurrent = Number.isFinite(c.ledCurrent) ? c.ledCurrent : 0;
+}
+
+function getLedColor(c) {
+    ensureLedFields(c);
+    return c.ledColor || LED_DEFAULT_COLOR;
+}
+
+function getLedImax(c) {
+    ensureLedFields(c);
+    return c.iMax > 0 ? c.iMax : LED_DEFAULT_IMAX_A;
+}
+
+function ledSpiceBranchName(id) {
+    const safe = String(id).replace(/[^a-zA-Z0-9_]/g, "_");
+    return `vil_${safe}`.toLowerCase();
+}
+
+/** Parse les courants de branches depuis le journal ngspice (secours si ledValues vide). */
+function collectBranchCurrentsFromLogClient(log) {
+    const map = Object.create(null);
+    if (!log || typeof log !== "string") return map;
+    const touch = (branch, i) => {
+        const b = String(branch || "").trim().toLowerCase();
+        if (b && Number.isFinite(i)) map[b] = i;
+    };
+    let m;
+    const reEq = /\bi\s*\(\s*([^)]+?)\s*\)\s*=\s*([-+eE0-9.]+)/gi;
+    while ((m = reEq.exec(log)) !== null) touch(m[1], parseFloat(m[2]));
+    const reSp = /\bi\s*\(\s*([^)]+?)\s*\)\s+([-+eE0-9.]+)/gi;
+    while ((m = reSp.exec(log)) !== null) touch(m[1], parseFloat(m[2]));
+    const reRev = /\b([-+eE0-9.]+)\s*=\s*i\s*\(\s*([^)]+?)\s*\)/gi;
+    while ((m = reRev.exec(log)) !== null) touch(m[2], parseFloat(m[1]));
+    const reDev = /\b((?:vil|vi|d)_[a-z0-9_]+)(?:#branchcurrent)?\s*[:=]?\s+([-+eE0-9.]+)/gi;
+    while ((m = reDev.exec(log)) !== null) touch(m[1], parseFloat(m[2]));
+    const blocks = log.split(/@@LD:([A-Za-z0-9_]+)@@/gi);
+    for (let i = 1; i < blocks.length; i += 2) {
+        const id = blocks[i];
+        const chunk = blocks[i + 1] || "";
+        const safe = String(id).replace(/[^a-zA-Z0-9_]/g, "_");
+        const reLd = /\bi\s*\(\s*vil_([^)]+?)\s*\)\s*=\s*([-+eE0-9.]+)/i;
+        const hit = reLd.exec(chunk);
+        if (hit) touch(`vil_${hit[1]}`, parseFloat(hit[2]));
+        else {
+            const reLd2 = /\bi\s*\(\s*([^)]+?)\s*\)\s*=\s*([-+eE0-9.]+)/i;
+            const hit2 = reLd2.exec(chunk);
+            if (hit2) touch(hit2[1], parseFloat(hit2[2]));
+        }
+        if (id && map[`vil_${safe}`.toLowerCase()] == null) {
+            const reAny = /\bi\s*\(\s*[^)]+\s*\)\s*=\s*([-+eE0-9.]+)/i.exec(chunk);
+            if (reAny) touch(`vil_${safe}`.toLowerCase(), parseFloat(reAny[1]));
+        }
+    }
+    return map;
+}
+
+function collectNodeVoltagesFromLogClient(log) {
+    const map = Object.create(null);
+    if (!log || typeof log !== "string") return map;
+    const re = /\bv\s*\(\s*([^)]+?)\s*\)\s*=\s*([-+eE0-9.]+)/gi;
+    let m;
+    while ((m = re.exec(log)) !== null) {
+        const n = String(m[1]).trim().toLowerCase();
+        const v = parseFloat(m[2]);
+        if (n && Number.isFinite(v)) map[n] = v;
+    }
+    return map;
+}
+
+function nodeVFromLogMap(name, vmap) {
+    const n = String(name || "").trim().toLowerCase();
+    if (n === "0" || n === "gnd") return 0;
+    const v = vmap[n];
+    return v != null && Number.isFinite(v) ? v : null;
+}
+
+/** Courant direct : V(anode) > V(cathode) si tensions connues, sinon i>0 (convention SPICE). */
+function ledForwardCurrentFromRow(row, meta, vmap) {
+    if (!row || typeof row.current !== "number" || !Number.isFinite(row.current)) return 0;
+    const i = row.current;
+    const np = meta?.nodePlus;
+    const nm = meta?.nodeMinus;
+    if (np && nm && vmap && Object.keys(vmap).length > 0) {
+        const vp = nodeVFromLogMap(np, vmap);
+        const vm = nodeVFromLogMap(nm, vmap);
+        if (vp != null && vm != null) {
+            if (vp <= vm + 0.15) return 0;
+            return Math.abs(i);
+        }
+    }
+    return i > 0 ? i : 0;
+}
+
+function ledCurrentFromTranPlot(plot, tWallSec) {
+    const times = plot?.time;
+    const currents = plot?.current;
+    if (!times?.length || !currents?.length) return 0;
+    const t0 = times[0];
+    const t1 = times[times.length - 1];
+    const span = t1 - t0;
+    if (!(span > 0)) return currents[currents.length - 1] ?? 0;
+    const tx = t0 + ((((tWallSec % span) + span) % span));
+    if (tx <= times[0]) return currents[0] ?? 0;
+    if (tx >= times[times.length - 1]) return currents[currents.length - 1] ?? 0;
+    for (let k = 0; k < times.length - 1; k++) {
+        if (tx >= times[k] && tx <= times[k + 1]) {
+            const dt = times[k + 1] - times[k];
+            const u = dt > 0 ? (tx - times[k]) / dt : 0;
+            const i0 = currents[k] ?? 0;
+            const i1 = currents[k + 1] ?? 0;
+            return i0 + u * (i1 - i0);
+        }
+    }
+    return currents[currents.length - 1] ?? 0;
+}
+
+function buildLedValuesFromSimData(data) {
+    const tranPlots = data?.ledTranPlots;
+    if (data?.analysisTran && tranPlots && typeof tranPlots === "object" && Object.keys(tranPlots).length > 0) {
+        const out = {};
+        for (const c of components) {
+            if (!isLedType(c.type)) continue;
+            const plot = tranPlots[c.id];
+            if (!plot?.current?.length) {
+                out[c.id] = { current: 0, reverseBias: true };
+                continue;
+            }
+            let peak = 0;
+            for (const i of plot.current) {
+                if (Number.isFinite(i) && i > peak) peak = i;
+            }
+            out[c.id] = {
+                current: peak,
+                branch: plot.branch,
+                nodePlus: plot.nodePlus,
+                nodeMinus: plot.nodeMinus,
+                reverseBias: peak < LED_ON_CURRENT_A,
+            };
+        }
+        return out;
+    }
+
+    const out = { ...(data?.ledValues || {}) };
+    const log = data?.log || "";
+    const metaList = Array.isArray(data?.ledBranches) ? data.ledBranches : [];
+    const metaById = Object.fromEntries(metaList.map(m => [m.id, m]));
+    const branchMap = collectBranchCurrentsFromLogClient(log);
+    const vmap = collectNodeVoltagesFromLogClient(log);
+
+    for (const c of components) {
+        if (!isLedType(c.type)) continue;
+        const meta = metaById[c.id] || {
+            id: c.id,
+            branch: ledSpiceBranchName(c.id),
+            nodePlus: null,
+            nodeMinus: null,
+        };
+        const branch = String(meta.branch || ledSpiceBranchName(c.id)).toLowerCase();
+        let iRaw = out[c.id]?.current;
+        if (iRaw == null) {
+            iRaw = branchMap[branch];
+            if (iRaw == null) iRaw = branchMap[ledSpiceBranchName(c.id)];
+            if (iRaw == null) iRaw = branchMap[`d${c.id}`.toLowerCase()];
+        }
+        if (iRaw == null || !Number.isFinite(iRaw)) {
+            out[c.id] = { current: 0, branch, nodePlus: meta.nodePlus, nodeMinus: meta.nodeMinus };
+            continue;
+        }
+        const iFwd = ledForwardCurrentFromRow({ current: iRaw }, meta, vmap);
+        const vp = nodeVFromLogMap(meta.nodePlus, vmap);
+        const vm = nodeVFromLogMap(meta.nodeMinus, vmap);
+        const reverseBias = vp != null && vm != null && vp <= vm + 0.15;
+        out[c.id] = {
+            current: iFwd,
+            branch,
+            nodePlus: meta.nodePlus,
+            nodeMinus: meta.nodeMinus,
+            reverseBias,
+        };
+    }
+    return out;
+}
+
+/** État visuel dérivé du courant (source unique pour le dessin). */
+function getLedVisualState(c) {
+    if (!c || !isLedType(c.type)) return { intensity: 0, on: false, smoke: false, i: 0 };
+    let i = Number(c.ledCurrent);
+    const plot = lastLedTranPlots[c.id];
+    if (plot?.time?.length > 1) {
+        if (!ledTranAnimStartMs) ledTranAnimStartMs = performance.now();
+        const tWall = (performance.now() - ledTranAnimStartMs) / 1000;
+        i = ledCurrentFromTranPlot(plot, tWall);
+    }
+    if (!Number.isFinite(i) || i <= 0) return { intensity: 0, on: false, smoke: false, i: 0 };
+    const iMax = getLedImax(c);
+    if (i > iMax) return { intensity: 1, on: true, smoke: true, i };
+    if (i <= LED_ON_CURRENT_A) return { intensity: 0, on: false, smoke: false, i };
+    const intensity = Math.min(1, i / iMax);
+    return { intensity, on: true, smoke: false, i };
+}
+
+function getLedIntensity(c) {
+    return getLedVisualState(c).intensity;
+}
+
+function applyLedSimulationState(ledValues) {
+    for (const c of components) {
+        if (!isLedType(c.type)) continue;
+        ensureLedFields(c);
+        const row = ledValues[c.id];
+        if (!row || typeof row.current !== "number" || !Number.isFinite(row.current)) {
+            c.ledCurrent = 0;
+            c.ledReverseBias = !!(row && row.reverseBias);
+        } else {
+            c.ledCurrent = row.current;
+            c.ledReverseBias = !!row.reverseBias;
+        }
+        const vs = getLedVisualState(c);
+        c.ledOn = vs.on;
+        c.ledSmoke = vs.smoke;
+    }
+    updateLedAnimationLoop();
+}
+
+function ledNeedsAnimation() {
+    if (components.some(c => isLedType(c.type) && c.ledSmoke)) return true;
+    if (Object.keys(lastLedTranPlots).length > 0) return true;
+    if (
+        liveSimActive &&
+        components.some(c => isLedType(c.type) && getLedVisualState(c).intensity > 0)
+    )
+        return true;
+    return false;
+}
+
+function updateLedAnimationLoop() {
+    if (ledNeedsAnimation()) {
+        if (ledAnimRaf == null) startLedAnimationLoop();
+    } else if (ledAnimRaf != null) {
+        cancelAnimationFrame(ledAnimRaf);
+        ledAnimRaf = null;
+    }
+}
+
+function startLedAnimationLoop() {
+    const step = () => {
+        ledAnimRaf = null;
+        if (!ledNeedsAnimation()) return;
+        draw();
+        ledAnimRaf = requestAnimationFrame(step);
+    };
+    ledAnimRaf = requestAnimationFrame(step);
+}
+
+function drawLedSmoke(ctx, cx, cy, bw, bh) {
+    const t = performance.now();
+    ctx.save();
+    for (let i = 0; i < 9; i++) {
+        const phase = t * 0.0022 + i * 0.9;
+        const px = cx + Math.sin(phase * 2.3) * bw * 0.28;
+        const py = cy - bh * 0.55 - ((t * 0.05 + i * 18) % (bh * 1.4));
+        const r = GRID_SIZE * (0.22 + 0.08 * (i % 3));
+        const a = 0.18 + 0.12 * (0.5 + 0.5 * Math.sin(phase));
+        ctx.fillStyle = `rgba(70, 70, 72, ${a})`;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function drawLedArrows(ctx, ax, cy, bw, intensity) {
+    const ay = cy - GRID_SIZE * 0.42;
+    ctx.save();
+    ctx.lineWidth = Math.max(1.2, (1.4 + intensity * 1.6) / scale);
+    ctx.strokeStyle = `rgba(255, 215, 80, ${0.55 + 0.35 * intensity})`;
+    for (const dy of [0, GRID_SIZE * 0.36]) {
+        ctx.beginPath();
+        ctx.moveTo(ax, ay - dy);
+        ctx.lineTo(ax + GRID_SIZE * 0.26, ay - dy - GRID_SIZE * 0.22);
+        ctx.moveTo(ax + GRID_SIZE * 0.18, ay - dy - GRID_SIZE * 0.04);
+        ctx.lineTo(ax + GRID_SIZE * 0.26, ay - dy - GRID_SIZE * 0.22);
+        ctx.moveTo(ax + GRID_SIZE * 0.10, ay - dy - GRID_SIZE * 0.18);
+        ctx.lineTo(ax + GRID_SIZE * 0.26, ay - dy - GRID_SIZE * 0.22);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+/** Halo + fumée en coordonnées monde (après les composants). */
+function drawLedEffectsOverlay() {
+    for (const c of components) {
+        if (!isLedType(c.type)) continue;
+        const vs = getLedVisualState(c);
+        if (!vs.on && !vs.smoke) continue;
+        const { w, h } = componentDims(c);
+        const cx = c.x + w / 2;
+        const cy = c.y + h / 2;
+        const color = getLedColor(c);
+        const rgb = hexToRgb(color);
+
+        if (vs.smoke) {
+            drawLedSmoke(ctx, cx, cy - h * 0.15, w * 1.6, h * 1.8);
+        }
+
+        if (vs.on && vs.intensity > 0) {
+            const haloR = Math.max(w, h) * (0.45 + 0.45 * vs.intensity);
+            ctx.save();
+            ctx.shadowColor = color;
+            ctx.shadowBlur = (10 + 22 * vs.intensity) / Math.max(scale, 0.2);
+            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, haloR);
+            grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.28 * vs.intensity})`);
+            grad.addColorStop(0.45, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.1 * vs.intensity})`);
+            grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+}
+
+/** Trait oblique CEI au coin corps / fil de sortie (collé au rectangle et au fil). */
+function drawLogicInversionSlash(ctx, cornerX, cornerY) {
+    const s = GRID_SIZE * 0.28;
+    const lw = Math.max(1.4, 1.8 / Math.max(scale, 0.2));
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cornerX, cornerY - s);
+    ctx.lineTo(cornerX + s, cornerY);
+    ctx.stroke();
+    ctx.restore();
+}
+
+/** Symbole rectangulaire CEI 60617-12 (orientation 0 : entrées à gauche, sortie à droite). */
+function drawLogicGateSymbolLR(ctx, bw, bh, gateType) {
+    const kind = logicGateKind(gateType);
+    const g = GRID_SIZE;
+    const lead = LOGIC_GATE_LEAD;
+    const outY = kind.inputs === 1 ? bh / 2 : 2 * g;
+
+    ctx.beginPath();
+    ctx.rect(0, 0, bw, bh);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(bw, outY);
+    ctx.lineTo(bw + lead, outY);
+    ctx.stroke();
+    if (kind.invert) drawLogicInversionSlash(ctx, bw, outY);
+
+    if (kind.inputs === 1) {
+        ctx.beginPath();
+        ctx.moveTo(-lead, outY);
+        ctx.lineTo(0, outY);
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(-lead, g);
+        ctx.lineTo(0, g);
+        ctx.moveTo(-lead, 3 * g);
+        ctx.lineTo(0, 3 * g);
+        ctx.stroke();
+    }
+}
+
+/** Libellé CEI toujours lisible (non affecté par la rotation du symbole). */
+function drawLogicGateIecLabelUpright(ctx, c) {
+    const bh = logicGateBaseH(c.type);
+    const bw = LOGIC_GATE_W;
+    const kind = logicGateKind(c.type);
+    const g = GRID_SIZE;
+    const labelY = kind.inputs === 1 ? bh / 2 : 2 * g;
+    const pt = localBaseToWorld(c, bw / 2, labelY, bw, bh);
+    const fs = Math.max(11, Math.min(bh * 0.42, bw * 0.38) / Math.max(scale, 0.2));
+    ctx.save();
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fillText(kind.iec, pt.x - c.x, pt.y - c.y);
+    ctx.restore();
+}
+
+function drawLogicGateSymbolOriented(ctx, c) {
+    const o = getCompOrient(c);
+    const bh = logicGateBaseH(c.type);
+    const { w, h } = logicGateDimsFromOrient(o, c.type);
+    const sx = c.mirrorX ? -1 : 1;
+    const sy = c.mirrorY ? -1 : 1;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
+    ctx.translate(-LOGIC_GATE_W / 2, -bh / 2);
+    drawLogicGateSymbolLR(ctx, LOGIC_GATE_W, bh, c.type);
+    ctx.restore();
+}
+
+function drawClockInputTriangle(ctx, y) {
+    const s = GRID_SIZE * 0.24;
+    ctx.save();
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    ctx.moveTo(0, y - s);
+    ctx.lineTo(s * 1.15, y);
+    ctx.lineTo(0, y + s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+}
+
+function componentPinLabelFontSize() {
+    return Math.max(12, 16 / Math.max(scale, 0.2));
+}
+
+function drawLogicFlipFlopSymbolLR(ctx, bw, bh, type) {
+    const g = GRID_SIZE;
+    const lead = LOGIC_FF_LEAD;
+    ctx.beginPath();
+    ctx.rect(0, 0, bw, bh);
+    ctx.stroke();
+    const clkY = type === "logic_dff" ? 3 * g : 2 * g;
+    const inputYs = type === "logic_dff" ? [g, clkY] : [g, clkY, 3 * g];
+    const outputYs = type === "logic_dff" ? [2 * g, 3 * g] : [g, 3 * g];
+    for (const py of inputYs) {
+        ctx.beginPath();
+        ctx.moveTo(-lead, py);
+        ctx.lineTo(0, py);
+        ctx.stroke();
+    }
+    drawClockInputTriangle(ctx, clkY);
+    for (const py of outputYs) {
+        ctx.beginPath();
+        ctx.moveTo(bw, py);
+        ctx.lineTo(bw + lead, py);
+        ctx.stroke();
+    }
+}
+
+function drawLogicFlipFlopPinLabelsUpright(ctx, c) {
+    const g = GRID_SIZE;
+    const fs = componentPinLabelFontSize();
+    const labels =
+        c.type === "logic_dff"
+            ? [
+                  [0, "D"],
+                  [1, "Clk"],
+                  [2, "Q"],
+                  [3, "/Q"],
+              ]
+            : [
+                  [0, "J"],
+                  [1, "Clk"],
+                  [2, "K"],
+                  [3, "Q"],
+                  [4, "/Q"],
+              ];
+    const outPins = logicFlipFlopOutputPinIndices(c.type);
+    ctx.save();
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.fillStyle = ctx.strokeStyle;
+    for (const [idx, lbl] of labels) {
+        const py = logicFlipFlopPinLocalY(c.type, idx);
+        const isOut = outPins.includes(idx);
+        const lx = isOut ? LOGIC_FF_W + LOGIC_FF_LEAD * 0.5 : -LOGIC_FF_LEAD * 0.5;
+        const pt = localBaseToWorld(c, lx, py - g * 0.38, LOGIC_FF_W, LOGIC_FF_H);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(lbl, pt.x - c.x, pt.y - c.y);
+    }
+    ctx.restore();
+}
+
+function drawLogicFlipFlopSymbolOriented(ctx, c) {
+    const o = getCompOrient(c);
+    const bh = LOGIC_FF_H;
+    const { w, h } = logicFlipFlopDimsFromOrient(o, c.type);
+    const sx = c.mirrorX ? -1 : 1;
+    const sy = c.mirrorY ? -1 : 1;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
+    ctx.translate(-LOGIC_FF_W / 2, -bh / 2);
+    drawLogicFlipFlopSymbolLR(ctx, LOGIC_FF_W, bh, c.type);
+    ctx.restore();
+}
+
+const IC74LS00_PIN_LABELS = ["1A", "1B", "1Y", "2A", "2B", "2Y", "GND", "3Y", "3A", "3B", "4Y", "4A", "4B", "VCC"];
+const IC74LS74_PIN_LABELS = [
+    "1CLR",
+    "1D",
+    "1CLK",
+    "1PRE",
+    "1Q",
+    "1QB",
+    "GND",
+    "2Q",
+    "2QB",
+    "2PRE",
+    "2CLK",
+    "2D",
+    "2CLR",
+    "VCC",
+];
+
+function icLogicDipCenterLabel(type) {
+    if (isIc74ls74Type(type)) return "74LS74";
+    return "74HC00";
+}
+
+function icLogicDipPinLabels(type) {
+    return isIc74ls74Type(type) ? IC74LS74_PIN_LABELS : IC74LS00_PIN_LABELS;
+}
+
+function drawIcLogicDipSymbolLR(ctx, bw, bh, centerLabel) {
+    const lead = IC74LS00_LEAD;
+    ctx.beginPath();
+    ctx.rect(0, 0, bw, bh);
+    ctx.stroke();
+    for (let i = 0; i < 14; i++) {
+        const px = ic74ls00PinX(i);
+        const py = ic74ls00PinY(i);
+        const out = px <= 0;
+        ctx.beginPath();
+        if (out) {
+            ctx.moveTo(-lead, py);
+            ctx.lineTo(0, py);
+        } else {
+            ctx.moveTo(bw, py);
+            ctx.lineTo(bw + lead, py);
+        }
+        ctx.stroke();
+    }
+    const fs = Math.max(10, GRID_SIZE * 0.32);
+    ctx.save();
+    ctx.font = `700 ${fs}px Segoe UI`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fillText(centerLabel, bw / 2, bh / 2);
+    ctx.restore();
+}
+
+function drawIc74ls00SymbolLR(ctx, bw, bh) {
+    drawIcLogicDipSymbolLR(ctx, bw, bh, "74HC00");
+}
+
+function drawIc74PinLabelsUpright(ctx, c) {
+    const g = GRID_SIZE;
+    const lead = IC74LS00_LEAD;
+    const fs = componentPinLabelFontSize();
+    const pinLabels = icLogicDipPinLabels(c.type);
+    ctx.save();
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    for (let i = 0; i < 14; i++) {
+        const py = ic74ls00PinY(i);
+        const left = ic74ls00PinX(i) <= 0;
+        const lx = left ? -lead * 0.5 : IC74LS00_W + lead * 0.5;
+        const pt = localBaseToWorld(c, lx, py - g * 0.32, IC74LS00_W, IC74LS00_H);
+        ctx.fillText(pinLabels[i], pt.x - c.x, pt.y - c.y);
+    }
+    ctx.restore();
+}
+
+function drawIc74ls00SymbolOriented(ctx, c) {
+    const o = getCompOrient(c);
+    const { w, h } = ic74ls00DimsFromOrient(o);
+    const sx = c.mirrorX ? -1 : 1;
+    const sy = c.mirrorY ? -1 : 1;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
+    ctx.translate(-IC74LS00_W / 2, -IC74LS00_H / 2);
+    drawIcLogicDipSymbolLR(ctx, IC74LS00_W, IC74LS00_H, icLogicDipCenterLabel(c.type));
+    ctx.restore();
+}
+
+/** LED : symbole miroir de la diode (dessin seul ; #0 gauche, #1 droite inchangés). */
+function drawLedSymbol(ctx, w, h, orient, comp, ghost) {
+    const o = ((orient % 4) + 4) % 4;
+    const color = getLedColor(comp);
+    const rgb = hexToRgb(color);
+    const vs = ghost ? { intensity: 0, on: false, smoke: false, i: 0 } : getLedVisualState(comp);
+
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    ctx.translate(-DIODE_BASE_W / 2, -DIODE_BASE_H / 2);
+    const bw = DIODE_BASE_W;
+    const bh = DIODE_BASE_H;
+    ctx.translate(bw, 0);
+    ctx.scale(-1, 1);
+    const outline = ghost ? ctx.strokeStyle : vs.on ? color : "#78909c";
+    ctx.strokeStyle = outline;
+    drawDiodeSymbolLR(ctx, bw, bh);
+    const midY = bh / 2;
+    const halfCross = bh * 0.46;
+    const cx = bw / 2;
+    const xTriBase = cx - bw * 0.18;
+    const fillAlpha = 0.22 + 0.78 * vs.intensity;
+    ctx.beginPath();
+    ctx.moveTo(xTriBase, midY - halfCross);
+    ctx.lineTo(cx + bw * 0.18, midY);
+    ctx.lineTo(xTriBase, midY + halfCross);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${fillAlpha})`;
+    ctx.fill();
+    if (vs.on) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (1.5 + vs.intensity) / scale;
+        ctx.stroke();
+    }
+    if (vs.on && vs.intensity > 0.12) {
+        ctx.beginPath();
+        ctx.arc(xTriBase + bw * 0.12, midY - halfCross * 0.35, bw * 0.05, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.25 + 0.55 * vs.intensity})`;
+        ctx.fill();
+    }
+    if (vs.on && vs.intensity > 0.04) drawLedArrows(ctx, cx + bw * 0.1, midY, bw, vs.intensity);
+    ctx.restore();
+}
+
+function drawOptoPlaceholderSymbol(ctx, w, h, orient, label) {
+    const o = ((orient % 4) + 4) % 4;
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    ctx.translate(-DIODE_BASE_W / 2, -DIODE_BASE_H / 2);
+    const bw = DIODE_BASE_W;
+    const bh = DIODE_BASE_H;
+    const midY = bh / 2;
+    ctx.setLineDash([5 / scale, 4 / scale]);
+    ctx.strokeRect(bw * 0.2, bh * 0.2, bw * 0.6, bh * 0.6);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(0, midY);
+    ctx.lineTo(bw * 0.2, midY);
+    ctx.moveTo(bw * 0.8, midY);
+    ctx.lineTo(bw, midY);
+    ctx.stroke();
+    const fs = Math.max(9, 11 / Math.max(scale, 0.2));
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, bw / 2, bh / 2);
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+    ctx.restore();
+}
+
+function drawSeg7Bar(ctx, x1, y1, x2, y2, lit) {
+    ctx.save();
+    ctx.strokeStyle = lit ? SEG7_ON_COLOR : SEG7_OFF_COLOR;
+    ctx.lineWidth = Math.max(3.5, GRID_SIZE * 0.18) / scale;
+    ctx.lineCap = "round";
+    if (lit) {
+        ctx.shadowColor = SEG7_ON_COLOR;
+        ctx.shadowBlur = 10 / Math.max(scale, 0.2);
+    }
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawSeg7SegmentsInner(ctx, box, segOn) {
+    const mx = box.x + box.w / 2;
+    const my = box.y + box.h / 2;
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.transform(1, 0, SEG7_ITALIC_SKEW, 1, 0, 0);
+    ctx.translate(-mx, -my);
+
+    const { x, y, w, h } = box;
+    const t = GRID_SIZE * 0.12;
+    const mx2 = x + w / 2;
+    const my2 = y + h / 2;
+    const hw = w * 0.42;
+    const gap = GRID_SIZE * 0.14;
+    drawSeg7Bar(ctx, mx2 - hw, y + t, mx2 + hw, y + t, segOn[0]);
+    drawSeg7Bar(ctx, x + w - t, y + t + gap, x + w - t, my2 - gap, segOn[1]);
+    drawSeg7Bar(ctx, x + w - t, my2 + gap, x + w - t, y + h - t - gap, segOn[2]);
+    drawSeg7Bar(ctx, mx2 - hw, y + h - t, mx2 + hw, y + h - t, segOn[3]);
+    drawSeg7Bar(ctx, x + t, my2 + gap, x + t, y + h - t - gap, segOn[4]);
+    drawSeg7Bar(ctx, x + t, y + t + gap, x + t, my2 - gap, segOn[5]);
+    drawSeg7Bar(ctx, mx2 - hw, my2, mx2 + hw, my2, segOn[6]);
+    ctx.restore();
+}
+
+function getSeg7SegmentStates(c) {
+    if (!c || !isSeg7Type(c.type)) return Array(7).fill(false);
+    if (Array.isArray(c.seg7On) && c.seg7On.length === 7) return c.seg7On;
+    return Array(7).fill(false);
+}
+
+function ensureSeg7Fields(c) {
+    if (!c || !isSeg7Type(c.type)) return;
+    if (!Array.isArray(c.seg7On) || c.seg7On.length !== 7) c.seg7On = Array(7).fill(false);
+}
+
+function seg7ThresholdFromDelta(maxDelta) {
+    if (!Number.isFinite(maxDelta) || maxDelta < 0.5) return 2.5;
+    if (maxDelta > 4.2) return 2.5;
+    if (maxDelta > 2.8) return 1.65;
+    return maxDelta * 0.45;
+}
+
+function buildSeg7StateFromSimData(data) {
+    const vmap = collectNodeVoltagesFromLogClient(data?.log || "");
+    const metaList = Array.isArray(data?.seg7Displays) ? data.seg7Displays : [];
+    const out = Object.create(null);
+    for (const meta of metaList) {
+        if (!meta || !meta.id) continue;
+        const vCom = nodeVFromLogMap(meta.commonNode, vmap);
+        const vComN = vCom != null && Number.isFinite(vCom) ? vCom : 0;
+        let maxDelta = 0;
+        const deltas = (meta.segmentNodes || []).map(n => {
+            const v = nodeVFromLogMap(n, vmap);
+            const d = v != null && Number.isFinite(v) ? v - vComN : 0;
+            if (d > maxDelta) maxDelta = d;
+            return d;
+        });
+        const vth = seg7ThresholdFromDelta(maxDelta);
+        out[meta.id] = deltas.map(d => d >= vth - 0.08);
+    }
+    return out;
+}
+
+function applySeg7SimulationState(seg7States) {
+    for (const c of components) {
+        if (!isSeg7Type(c.type)) continue;
+        ensureSeg7Fields(c);
+        const row = seg7States && seg7States[c.id];
+        c.seg7On = row && row.length === 7 ? row.slice() : Array(7).fill(false);
+    }
+    updateSeg7AnimationLoop();
+}
+
+function seg7NeedsAnimation() {
+    return liveSimActive && components.some(c => isSeg7Type(c.type) && getSeg7SegmentStates(c).some(Boolean));
+}
+
+function updateSeg7AnimationLoop() {
+    if (seg7NeedsAnimation()) {
+        if (seg7AnimRaf == null) startSeg7AnimationLoop();
+    } else if (seg7AnimRaf != null) {
+        cancelAnimationFrame(seg7AnimRaf);
+        seg7AnimRaf = null;
+    }
+}
+
+let seg7AnimRaf = null;
+
+function startSeg7AnimationLoop() {
+    const step = () => {
+        seg7AnimRaf = null;
+        if (!seg7NeedsAnimation()) return;
+        draw();
+        seg7AnimRaf = requestAnimationFrame(step);
+    };
+    seg7AnimRaf = requestAnimationFrame(step);
+}
+
+function drawSeg7PinLabelsUpright(ctx, c) {
+    const g = GRID_SIZE;
+    const fs = componentPinLabelFontSize();
+    ctx.save();
+    ctx.font = `600 ${fs}px Segoe UI`;
+    ctx.fillStyle = ctx.strokeStyle;
+    for (let i = 0; i < 7; i++) {
+        const pt = localBaseToWorld(c, 0, seg7PinY(i) - g * 0.42, SEG7_BASE_W, SEG7_BASE_H);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(SEG7_SEGMENT_NAMES[i], pt.x - c.x, pt.y - c.y);
+    }
+    const comPt = localBaseToWorld(
+        c,
+        seg7CommonXLocal() + g * 0.62,
+        seg7CommonYLocal() + g * 0.06,
+        SEG7_BASE_W,
+        SEG7_BASE_H
+    );
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("C", comPt.x - c.x, comPt.y - c.y);
+    ctx.restore();
+}
+
+/** Afficheur 7 segments cathode commune (orientation 0 : broches a–g à gauche, C en bas). */
+function drawSeg7Symbol(ctx, w, h, orient, comp, ghost) {
+    const o = ((orient % 4) + 4) % 4;
+    const segOn = ghost ? Array(7).fill(false) : getSeg7SegmentStates(comp);
+    const frame = seg7FrameBoxLocal();
+    const inner = seg7InnerBoxLocal();
+    const comX = seg7CommonXLocal();
+    const comY = seg7CommonYLocal();
+
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-o * Math.PI) / 2);
+    ctx.translate(-SEG7_BASE_W / 2, -SEG7_BASE_H / 2);
+
+    ctx.strokeRect(frame.x, frame.y, frame.w, frame.h);
+
+    for (let i = 0; i < 7; i++) {
+        const py = seg7PinY(i);
+        ctx.beginPath();
+        ctx.moveTo(0, py);
+        ctx.lineTo(frame.x, py);
+        ctx.stroke();
+    }
+
+    const cathodeAttachX = comX;
+    ctx.beginPath();
+    ctx.moveTo(cathodeAttachX, frame.y + frame.h);
+    ctx.lineTo(comX, comY);
+    ctx.stroke();
+
+    drawSeg7SegmentsInner(ctx, inner, segOn);
+    ctx.restore();
+}
+
+function closeLedColorEditor() {
+    const editor = document.getElementById("led-color-editor");
+    const input = document.getElementById("led-color-input");
+    ledColorEditorCompId = null;
+    if (editor) editor.hidden = true;
+    if (input) {
+        input.oninput = null;
+        input.onchange = null;
+    }
+}
+
+function positionLedColorEditorForComponent(comp) {
+    const editor = document.getElementById("led-color-editor");
+    if (!editor || !comp) return;
+    const { w, h } = componentDims(comp);
+    const wx = comp.x + w / 2;
+    const wy = comp.y + h + 24;
+    const pt = worldToScreen(wx, wy);
+    editor.style.left = `${pt.x}px`;
+    editor.style.top = `${pt.y}px`;
+}
+
+/** Panneau couleur sous la LED (reste ouvert jusqu’à clic ailleurs ou Échap). */
+function openLedColorEditor(comp) {
+    if (!comp || !isLedType(comp.type)) return;
+    const editor = document.getElementById("led-color-editor");
+    const input = document.getElementById("led-color-input");
+    if (!editor || !input) return;
+    closeValueEditor();
+    closeLedColorEditor();
+    isMovingComponent = false;
+    dragStartClient = null;
+    ensureLedFields(comp);
+    selectedId = comp.id;
+    ledColorEditorCompId = comp.id;
+    input.value = getLedColor(comp);
+    positionLedColorEditorForComponent(comp);
+    editor.hidden = false;
+    input.oninput = () => {
+        comp.ledColor = normalizeLedColor(input.value);
+        draw();
+    };
+    input.onchange = () => {
+        comp.ledColor = normalizeLedColor(input.value);
+        saveState();
+    };
+    window.requestAnimationFrame(() => {
+        if (ledColorEditorCompId !== comp.id) return;
+        input.focus({ preventScroll: true });
+    });
 }
 
 /** AOP 4×2 carreaux : triangle 3 carr. de haut (+/− à l'intérieur). */
@@ -3505,6 +5213,7 @@ function defaultValueForComponentType(type) {
     if (type === "diode") return "1N4148";
     if (type === "npn") return "2N2222";
     if (type === "opamp") return "LM741";
+    if (type === "logic_state") return "1";
     return "5V";
 }
 
@@ -3644,6 +5353,14 @@ function commitValueEditor() {
 function initValueEditor() {
     const input = document.getElementById("comp-value-input");
     if (!input) return;
+    input.addEventListener("mousedown", e => e.stopPropagation());
+}
+
+function initLedColorEditor() {
+    const editor = document.getElementById("led-color-editor");
+    const input = document.getElementById("led-color-input");
+    if (!editor || !input) return;
+    editor.addEventListener("mousedown", e => e.stopPropagation());
     input.addEventListener("mousedown", e => e.stopPropagation());
 }
 
@@ -3912,6 +5629,34 @@ function createPaletteDragImage(type) {
     } else if (type === "diode") {
         g.strokeStyle = "#EC407A";
         drawDiodeSymbol(g, 126, 48, 0);
+    } else if (type === "led") {
+        drawLedSymbol(
+            g,
+            126,
+            48,
+            0,
+            {
+                type: "led",
+                ledColor: LED_DEFAULT_COLOR,
+                ledOn: true,
+                ledSmoke: false,
+                ledCurrent: LED_DEFAULT_IMAX_A * 0.8,
+                iMax: LED_DEFAULT_IMAX_A,
+            },
+            false
+        );
+    } else if (type === "lamp") {
+        g.strokeStyle = "#FFB74D";
+        drawOptoPlaceholderSymbol(g, 126, 48, 0, "LAMPE");
+    } else if (type === "seg7") {
+        g.strokeStyle = "#4DD0E1";
+        g.save();
+        g.translate(8, 4);
+        drawSeg7Symbol(g, SEG7_BASE_W, SEG7_BASE_H, 0, null, true);
+        g.restore();
+    } else if (type === "lcd") {
+        g.strokeStyle = "#81C784";
+        drawOptoPlaceholderSymbol(g, 126, 48, 0, "LCD");
     } else if (type === "npn") {
         g.strokeStyle = "#FFA726";
         g.save();
@@ -3923,6 +5668,26 @@ function createPaletteDragImage(type) {
         g.save();
         g.translate(12, 10);
         drawOpAmpSymbol(g, OPAMP_BASE_W, OPAMP_BASE_H);
+        g.restore();
+    } else if (isLogicGateType(type)) {
+        g.strokeStyle = "#7986CB";
+        g.save();
+        g.translate(8, isLogicNotType(type) ? 14 : 4);
+        drawLogicGateSymbolLR(g, LOGIC_GATE_W, logicGateBaseH(type), type);
+        g.restore();
+    } else if (isLogicFlipFlopType(type)) {
+        g.strokeStyle = "#7986CB";
+        g.save();
+        const sc = Math.min(108 / LOGIC_FF_W, 40 / LOGIC_FF_H);
+        g.translate(12, 4);
+        g.scale(sc, sc);
+        drawLogicFlipFlopSymbolLR(g, LOGIC_FF_W, LOGIC_FF_H, type);
+        g.restore();
+    } else if (isLogicIcType(type)) {
+        g.strokeStyle = "#7986CB";
+        g.save();
+        g.translate(6, 2);
+        drawIcLogicDipSymbolLR(g, IC74LS00_W, IC74LS00_H, icLogicDipCenterLabel(type));
         g.restore();
     } else if (
         type === "voltmeter" ||
@@ -4002,27 +5767,61 @@ function createPaletteDragImage(type) {
         g.translate(50, 6);
         drawVtermSymbol(g, GND_BASE_W, GND_BASE_H, "5V");
         g.restore();
+    } else if (type === "logic_state") {
+        g.strokeStyle = "#5C6BC0";
+        g.save();
+        g.translate(50, 6);
+        drawLogicStateSymbol(g, GND_BASE_W, GND_BASE_H, "1");
+        g.restore();
     }
     document.body.appendChild(c);
     return { canvas: c, hx: 66, hy: 24 };
 }
 
+/** Clic sur « Portes ▸ », « Bascule ▸ », etc. : ouvre le sous-menu (menu Logique). */
+function initLogicSubmenuClicks() {
+    document.querySelectorAll(".menu-item-has-submenu > .submenu-label").forEach((label) => {
+        label.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const row = label.parentElement;
+            if (!row) return;
+            const open = row.classList.contains("submenu-open");
+            document.querySelectorAll(".menu-item-has-submenu.submenu-open").forEach((el) => {
+                el.classList.remove("submenu-open");
+            });
+            if (!open) row.classList.add("submenu-open");
+        });
+    });
+}
+
 // --- DRAG & DROP INITIAL ---
 function handleDragStart(e, type, model) {
     e.stopPropagation();
+    const fromEl = e.currentTarget instanceof Element ? e.currentTarget : e.target;
+    const resolvedType = normalizePaletteCompType(
+        type || paletteCompTypeFromElement(fromEl) || ""
+    );
+    if (!resolvedType) return;
+
+    document.body.classList.add("palette-drag-active");
     const menuItem = e.target.closest(".menu-item");
     if (menuItem) menuItem.classList.add("dropdown-pinned");
+    const subMenu = fromEl?.closest?.(".menu-item-has-submenu");
+    if (subMenu) subMenu.classList.add("submenu-drag-open");
 
-    const m = model || e.target?.dataset?.compModel || "";
-    activeDragType = type;
+    const m = model || fromEl?.dataset?.compModel || fromEl?.getAttribute?.("data-comp-model") || "";
+    paletteDragType = resolvedType;
+    activeDragType = resolvedType;
     activeDragModel = m || null;
-    e.dataTransfer.setData("compType", type);
+    e.dataTransfer.setData("compType", resolvedType);
+    e.dataTransfer.setData("text/plain", resolvedType);
     if (m) e.dataTransfer.setData("compModel", m);
     e.dataTransfer.effectAllowed = "copy";
 
-    const { canvas: dragImg, hx, hy } = createPaletteDragImage(type);
+    const { canvas: dragImg, hx, hy } = createPaletteDragImage(resolvedType);
     e.dataTransfer.setDragImage(dragImg, hx, hy);
 }
+window.handleDragStart = handleDragStart;
 
 function handleWindowDragEnd() {
     resetPaletteDragState();
@@ -4033,6 +5832,8 @@ function handleCanvasDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
     const worldPos = screenToWorld(e.clientX, e.clientY);
+    if (!activeDragType && paletteDragType) activeDragType = paletteDragType;
+    if (!activeDragType) return;
     if (isOscilloscopeType(activeDragType)) {
         const snapped = snapOscilloscopeDropWorld(worldPos.x, worldPos.y, false);
         dragPreview = {
@@ -4079,6 +5880,44 @@ function handleCanvasDragOver(e) {
             orient: 0,
             vertical: false,
         };
+    } else if (isLogicFlipFlopType(activeDragType)) {
+        const snapped = snapLogicFlipFlopDropWorld(worldPos.x, worldPos.y, activeDragType, 0);
+        dragPreview = {
+            type: activeDragType,
+            x: snapped.x,
+            y: snapped.y,
+            orient: 0,
+            vertical: false,
+        };
+    } else if (isLogicIcType(activeDragType)) {
+        const snapped = snapIc74ls00DropWorld(worldPos.x, worldPos.y, 0);
+        dragPreview = {
+            type: activeDragType,
+            x: snapped.x,
+            y: snapped.y,
+            orient: 0,
+            vertical: false,
+        };
+    } else if (isLogicGateType(activeDragType)) {
+        const snapped = snapLogicGateDropWorld(worldPos.x, worldPos.y, activeDragType, 0);
+        dragPreview = {
+            type: activeDragType,
+            x: snapped.x,
+            y: snapped.y,
+            value: "",
+            orient: 0,
+            vertical: false,
+        };
+    } else if (isSeg7Type(activeDragType)) {
+        const snapped = snapSeg7DropWorld(worldPos.x, worldPos.y, 0);
+        dragPreview = {
+            type: activeDragType,
+            x: snapped.x,
+            y: snapped.y,
+            value: "",
+            orient: 0,
+            vertical: false,
+        };
     } else if (isGroundType(activeDragType)) {
         const snapped = snapSingleTerminalDropWorld(worldPos.x, worldPos.y, "ground", 0);
         dragPreview = { type: "ground", x: snapped.x, y: snapped.y, orient: 0, vertical: false };
@@ -4089,6 +5928,17 @@ function handleCanvasDragOver(e) {
             x: snapped.x,
             y: snapped.y,
             value: "5V",
+            orient: 0,
+            vertical: false,
+        };
+    } else if (isLogicStateType(activeDragType)) {
+        const snapped = snapSingleTerminalDropWorld(worldPos.x, worldPos.y, "logic_state", 0);
+        dragPreview = {
+            type: "logic_state",
+            x: snapped.x,
+            y: snapped.y,
+            value: "1",
+            logicRail: 5,
             orient: 0,
             vertical: false,
         };
@@ -4120,11 +5970,23 @@ function snapNpnComponent(comp) {
 
 function handleDrop(e) {
     e.preventDefault();
-    const type = e.dataTransfer.getData("compType") || activeDragType;
+    const type = normalizePaletteCompType(
+        e.dataTransfer.getData("compType") ||
+            e.dataTransfer.getData("text/plain") ||
+            paletteDragType ||
+            activeDragType ||
+            ""
+    );
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+    if (!type) {
+        resetPaletteDragState();
+        draw();
+        return;
+    }
     dragPreview = null;
     activeDragType = null;
     activeDragModel = null;
-    const worldPos = screenToWorld(e.clientX, e.clientY);
+    paletteDragType = null;
 
     if (type === "oscilloscope") {
         const snapped = snapOscilloscopeDropWorld(worldPos.x, worldPos.y, false);
@@ -4167,6 +6029,23 @@ function handleDrop(e) {
             x: snapped.x,
             y: snapped.y,
             value: "",
+            orient: 0,
+            vertical: false,
+        };
+        components.push(comp);
+        snapSingleTerminalComponent(comp);
+        selectPlacedComponent(comp);
+        saveState();
+        draw();
+    } else if (type === "logic_state") {
+        const snapped = snapSingleTerminalDropWorld(worldPos.x, worldPos.y, "logic_state", 0);
+        const comp = {
+            id: `LS${++logicStateCount}`,
+            type: "logic_state",
+            x: snapped.x,
+            y: snapped.y,
+            value: "1",
+            logicRail: 5,
             orient: 0,
             vertical: false,
         };
@@ -4228,11 +6107,97 @@ function handleDrop(e) {
         selectPlacedComponent(comp);
         saveState();
         draw();
+    } else if (isLogicFlipFlopType(type)) {
+        const snapped = snapLogicFlipFlopDropWorld(worldPos.x, worldPos.y, type, 0);
+        const id = type === "logic_dff" ? `Dbas${++logicDbasCount}` : `JKff${++logicJkCount}`;
+        const comp = {
+            id,
+            type,
+            x: snapped.x,
+            y: snapped.y,
+            value: "",
+            orient: 0,
+            vertical: false,
+        };
+        components.push(comp);
+        snapLogicFlipFlopComponent(comp);
+        selectPlacedComponent(comp);
+        saveState();
+        draw();
+    } else if (isLogicGateType(type)) {
+        const snapped = snapLogicGateDropWorld(worldPos.x, worldPos.y, type, 0);
+        let id;
+        if (type === "logic_not") id = `NOT${++logicNotCount}`;
+        else if (type === "logic_and") id = `AND${++logicAndCount}`;
+        else if (type === "logic_or") id = `OR${++logicOrCount}`;
+        else if (type === "logic_nand") id = `NAND${++logicNandCount}`;
+        else if (type === "logic_nor") id = `NOR${++logicNorCount}`;
+        else if (type === "logic_xor") id = `XOR${++logicXorCount}`;
+        else id = `XNOR${++logicXnorCount}`;
+        const comp = {
+            id,
+            type,
+            x: snapped.x,
+            y: snapped.y,
+            value: "",
+            orient: 0,
+            vertical: false,
+        };
+        components.push(comp);
+        snapLogicGateComponent(comp);
+        selectPlacedComponent(comp);
+        saveState();
+        draw();
+    } else if (isLogicIcType(type)) {
+        const snapped = snapIc74ls00DropWorld(worldPos.x, worldPos.y, 0);
+        let id;
+        let value;
+        if (isIc74ls74Type(type)) {
+            id = `U7474${++ic74ls74Count}`;
+            value = "74LS74";
+        } else {
+            id = `U74${++ic74ls00Count}`;
+            value = "74HC00";
+        }
+        const comp = {
+            id,
+            type,
+            x: snapped.x,
+            y: snapped.y,
+            value,
+            orient: 0,
+            vertical: false,
+        };
+        components.push(comp);
+        snapIc74ls00Component(comp);
+        selectPlacedComponent(comp);
+        saveState();
+        draw();
+    } else if (type === "seg7") {
+        const snapped = snapSeg7DropWorld(worldPos.x, worldPos.y, 0);
+        const comp = {
+            id: `S7${++seg7Count}`,
+            type: "seg7",
+            x: snapped.x,
+            y: snapped.y,
+            value: "",
+            orient: 0,
+            vertical: false,
+            seg7On: Array(7).fill(false),
+        };
+        components.push(comp);
+        snapSeg7Component(comp);
+        selectPlacedComponent(comp);
+        saveState();
+        draw();
     } else if (
         type === "resistor" ||
         type === "capacitor" ||
         type === "inductor" ||
         type === "diode" ||
+        type === "led" ||
+        type === "lamp" ||
+        type === "lcd" ||
         type === "vsource" ||
         type === "voltmeter" ||
         type === "ammeter" ||
@@ -4255,6 +6220,15 @@ function handleDrop(e) {
         } else if (type === "diode") {
             id = `D${++diodeCount}`;
             value = "1N4148";
+        } else if (type === "led") {
+            id = `LD${++ledCount}`;
+            value = "";
+        } else if (type === "lamp") {
+            id = `LP${++lampCount}`;
+            value = "";
+        } else if (type === "lcd") {
+            id = `LCD${++lcdCount}`;
+            value = "";
         } else if (type === "vsource") {
             id = `E${++vsourceCount}`;
             value = "5V";
@@ -4284,12 +6258,18 @@ function handleDrop(e) {
             orient: 0,
             vertical: false,
         };
+        if (isLedType(type)) {
+            comp.ledColor = LED_DEFAULT_COLOR;
+            comp.iMax = LED_DEFAULT_IMAX_A;
+            ensureLedFields(comp);
+        }
         components.push(comp);
         snapTwoTerminalComponent(comp);
         selectPlacedComponent(comp);
         saveState();
         draw();
     }
+    resetPaletteDragState();
 }
 
 // --- RENDU ---
@@ -4310,6 +6290,7 @@ function draw() {
     drawWireAuxiliaryJunctions();
     components.forEach(c => {
         ensureOpampFields(c);
+        ensureLedFields(c);
         renderComponent(c);
     });
     if (dragPreview && isSchematicTerminalType(dragPreview.type)) {
@@ -4332,6 +6313,8 @@ function draw() {
         ctx.globalAlpha = 1;
     }
 
+    drawLedEffectsOverlay();
+
     if (isMarqueeSelecting && marqueeCornerA && marqueeCornerB) {
         const r = normalizeMarqueeRect(marqueeCornerA, marqueeCornerB);
         ctx.save();
@@ -4348,6 +6331,11 @@ function draw() {
     }
 
     ctx.restore();
+
+    if (ledColorEditorCompId) {
+        const ledComp = components.find(c => c.id === ledColorEditorCompId);
+        if (ledComp) positionLedColorEditorForComponent(ledComp);
+    }
 }
 
 function drawGrid() {
@@ -4452,6 +6440,7 @@ function renderComponent(c, opts) {
     // Couleurs par type
     if (isSelected) ctx.strokeStyle = "#0078d4";
     else if (c.type === "vsource" || c.type === "vterm") ctx.strokeStyle = "#FFA726";
+    else if (c.type === "logic_state") ctx.strokeStyle = "#5C6BC0";
     else if (c.type === "ground") ctx.strokeStyle = "#78909C";
     else if (c.type === "vsin") ctx.strokeStyle = "#42A5F5";
     else if (c.type === "vsquare") ctx.strokeStyle = "#7E57C2";
@@ -4459,8 +6448,12 @@ function renderComponent(c, opts) {
     else if (c.type === "capacitor") ctx.strokeStyle = "#42A5F5";
     else if (c.type === "inductor") ctx.strokeStyle = "#FF7043";
     else if (c.type === "diode") ctx.strokeStyle = "#EC407A";
+    else if (isLedType(c.type)) ctx.strokeStyle = getLedColor(c);
+    else if (isSeg7Type(c.type)) ctx.strokeStyle = "#4DD0E1";
+    else if (isOptoPlaceholderType(c.type)) ctx.strokeStyle = "#90A4AE";
     else if (c.type === "npn") ctx.strokeStyle = "#FFA726";
     else if (c.type === "opamp") ctx.strokeStyle = "#AB47BC";
+    else if (isLogicFamilyType(c.type)) ctx.strokeStyle = "#7986CB";
     else if (c.type === "voltmeter" || c.type === "voltmeter_rms") ctx.strokeStyle = "#4DB6AC";
     else if (c.type === "ammeter" || c.type === "ammeter_rms") ctx.strokeStyle = "#CE93D8";
     else if (c.type === "ohmmeter") ctx.strokeStyle = "#FFB74D";
@@ -4545,6 +6538,70 @@ function renderComponent(c, opts) {
         ctx.restore();
         drawJunctions(ends);
         return;
+    } else if (isLogicGateType(c.type)) {
+        const { w, h } = logicGateDimsFromOrient(getCompOrient(c), c.type);
+        drawLogicGateSymbolOriented(ctx, c);
+        if (!ghost) drawLogicGateIecLabelUpright(ctx, c);
+        const ends = logicGateJunctionsWorld(c);
+        if (!ghost) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(c.id, w / 2, -10);
+            ctx.textAlign = "start";
+            ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+        drawJunctions(ends);
+        return;
+    } else if (isLogicFlipFlopType(c.type)) {
+        const { w, h } = logicFlipFlopDimsFromOrient(getCompOrient(c), c.type);
+        drawLogicFlipFlopSymbolOriented(ctx, c);
+        if (!ghost) drawLogicFlipFlopPinLabelsUpright(ctx, c);
+        const ends = logicFlipFlopJunctionsWorld(c);
+        if (!ghost) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(c.id, w / 2, -10);
+            ctx.textAlign = "start";
+            ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+        drawJunctions(ends);
+        return;
+    } else if (isLogicIcType(c.type)) {
+        const { w, h } = ic74ls00DimsFromOrient(getCompOrient(c));
+        drawIc74ls00SymbolOriented(ctx, c);
+        if (!ghost) drawIc74PinLabelsUpright(ctx, c);
+        const ends = ic74ls00JunctionsWorld(c);
+        if (!ghost) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(c.id, w / 2, -10);
+            if (c.value) {
+                ctx.textBaseline = "top";
+                ctx.fillText(String(c.value), w / 2, h + 10);
+            }
+            ctx.textAlign = "start";
+            ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+        drawJunctions(ends);
+        return;
+    } else if (isSeg7Type(c.type)) {
+        const { w, h } = seg7DimsFromOrient(getCompOrient(c));
+        drawSeg7Symbol(ctx, w, h, getCompOrient(c), c, ghost);
+        if (!ghost) drawSeg7PinLabelsUpright(ctx, c);
+        const ends = seg7JunctionsWorld(c);
+        if (!ghost) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(c.id, w / 2, -10);
+            ctx.textAlign = "start";
+            ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+        drawJunctions(ends);
+        return;
     } else if (isSingleTerminalRefType(c.type)) {
         const o = getCompOrient(c);
         const { w, h } = singleTerminalDimsFromOrient(o);
@@ -4553,8 +6610,14 @@ function renderComponent(c, opts) {
         ctx.rotate((-o * Math.PI) / 2);
         ctx.translate(-GND_BASE_W / 2, -GND_BASE_H / 2);
         if (isGroundType(c.type)) drawGroundSymbol(ctx, GND_BASE_W, GND_BASE_H);
-        else drawVtermSymbol(ctx, GND_BASE_W, GND_BASE_H, c.value);
+        else if (isLogicStateType(c.type)) {
+            drawLogicStateSymbol(ctx, GND_BASE_W, GND_BASE_H, c.value, false);
+        } else drawVtermSymbol(ctx, GND_BASE_W, GND_BASE_H, c.value);
         ctx.restore();
+        if (isLogicStateType(c.type) && !ghost) {
+            drawLogicStateLabelUpright(ctx, c);
+            drawLogicStateRailLabelUpright(ctx, c);
+        }
         const ends = singleTerminalJunctionsWorld(c);
         ctx.restore();
         drawJunctions(ends);
@@ -4602,6 +6665,12 @@ function renderComponent(c, opts) {
             drawInductorSymbol(ctx, w, h, vertLayout);
         } else if (c.type === "diode") {
             drawDiodeSymbol(ctx, w, h, o);
+        } else if (isLedType(c.type)) {
+            drawLedSymbol(ctx, w, h, o, c, ghost);
+        } else if (c.type === "lamp") {
+            drawOptoPlaceholderSymbol(ctx, w, h, o, "LAMPE");
+        } else if (c.type === "lcd") {
+            drawOptoPlaceholderSymbol(ctx, w, h, o, "LCD");
         } else {
             if (vertLayout) {
                 ctx.beginPath();
@@ -4672,6 +6741,42 @@ function handleCanvasDblClick(e) {
         window.setTimeout(() => openValueEditor(hitComp), 0);
         return;
     }
+    if (isLogicStateType(hitComp.type)) {
+        e.preventDefault();
+        e.stopPropagation();
+        isMovingComponent = false;
+        dragStartClient = null;
+        releaseCanvasPointerCapture(e);
+        closeValueEditor();
+        ensureLogicRailField(hitComp);
+        hitComp.logicRail = toggleLogicRail(hitComp.logicRail);
+        saveState();
+        draw();
+        return;
+    }
+    if (isLogicFamilyType(hitComp.type)) {
+        e.preventDefault();
+        e.stopPropagation();
+        isMovingComponent = false;
+        dragStartClient = null;
+        releaseCanvasPointerCapture(e);
+        closeValueEditor();
+        ensureLogicRailField(hitComp);
+        hitComp.logicRail = toggleLogicRail(hitComp.logicRail);
+        saveState();
+        draw();
+        return;
+    }
+    if (isLedType(hitComp.type)) {
+        e.preventDefault();
+        e.stopPropagation();
+        isMovingComponent = false;
+        dragStartClient = null;
+        releaseCanvasPointerCapture(e);
+        closeValueEditor();
+        window.setTimeout(() => openLedColorEditor(hitComp), 0);
+        return;
+    }
     if (findComponentTerminalNearWorld(hitComp, worldPos.x, worldPos.y)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -4698,7 +6803,10 @@ function handleMouseDown(e) {
         closeValueEditor();
         draw();
     }
-
+    if (ledColorEditorCompId && !e.target.closest("#led-color-editor") && e.detail < 2) {
+        closeLedColorEditor();
+        draw();
+    }
     const worldPos = screenToWorld(e.clientX, e.clientY);
 
     if (e.button === 0 && e.detail >= 2) {
@@ -4818,6 +6926,7 @@ function handleMouseMove(e) {
         comp.y += worldPos.y - lastMousePos.y;
         lastMousePos = worldPos;
         if (valueEditorCompId === comp.id) positionValueEditorForComponent(comp);
+        if (ledColorEditorCompId === comp.id) positionLedColorEditorForComponent(comp);
         draw();
     } else if (isDraggingView) {
         offset.x += e.clientX - lastMousePos.x;
@@ -4871,6 +6980,16 @@ function handlePointerUp(e) {
         if (comp && !moved) {
             const worldPos = screenToWorld(e.clientX, e.clientY);
             if (!findComponentTerminalNearWorld(comp, worldPos.x, worldPos.y)) {
+                if (isLogicStateType(comp.type)) {
+                    ensureLogicRailField(comp);
+                    comp.value = normalizeLogicStateDisplay(comp.value) === "1" ? "0" : "1";
+                    saveState();
+                    isMovingComponent = false;
+                    dragStartClient = null;
+                    releaseCanvasPointerCapture(e);
+                    draw();
+                    return;
+                }
                 if (isSignalGeneratorType(comp.type)) {
                     isMovingComponent = false;
                     dragStartClient = null;
@@ -4886,6 +7005,10 @@ function handlePointerUp(e) {
             else if (isSignalGeneratorType(comp.type)) snapSignalGeneratorComponent(comp);
             else if (isNpnType(comp.type)) snapNpnComponent(comp);
             else if (isOpampType(comp.type)) snapOpampComponent(comp);
+            else if (isLogicGateType(comp.type)) snapLogicGateComponent(comp);
+            else if (isLogicFlipFlopType(comp.type)) snapLogicFlipFlopComponent(comp);
+            else if (isLogicIcType(comp.type)) snapIc74ls00Component(comp);
+            else if (isSeg7Type(comp.type)) snapSeg7Component(comp);
             else if (isSingleTerminalRefType(comp.type)) snapSingleTerminalComponent(comp);
             else if (isTwoTerminalType(comp.type)) snapTwoTerminalComponent(comp);
             else {
@@ -4927,6 +7050,15 @@ function cloneComponentForClipboard(c) {
     if (isOpampType(c.type)) {
         o.vp = getOpampVp(c);
         o.vn = getOpampVn(c);
+    }
+    if (isLedType(c.type)) {
+        ensureLedFields(c);
+        o.ledColor = getLedColor(c);
+        o.iMax = getLedImax(c);
+    }
+    if (isLogicStateType(c.type) || isLogicFamilyType(c.type)) {
+        ensureLogicRailField(c);
+        o.logicRail = parseLogicRail(c.logicRail);
     }
     return o;
 }
@@ -4980,10 +7112,26 @@ function allocateComponentId(type) {
     if (type === "vsquare") return `Carre${++vsquareCount}`;
     if (type === "ground") return `G${++groundCount}`;
     if (type === "vterm") return `B${++vtermCount}`;
+    if (type === "logic_state") return `LS${++logicStateCount}`;
     if (type === "resistor") return `R${++resistorCount}`;
     if (type === "capacitor") return `C${++capacitorCount}`;
     if (type === "inductor") return `L${++inductorCount}`;
     if (type === "diode") return `D${++diodeCount}`;
+    if (type === "led") return `LD${++ledCount}`;
+    if (type === "lamp") return `LP${++lampCount}`;
+    if (type === "seg7") return `S7${++seg7Count}`;
+    if (type === "lcd") return `LCD${++lcdCount}`;
+    if (type === "logic_not") return `NOT${++logicNotCount}`;
+    if (type === "logic_and") return `AND${++logicAndCount}`;
+    if (type === "logic_or") return `OR${++logicOrCount}`;
+    if (type === "logic_nand") return `NAND${++logicNandCount}`;
+    if (type === "logic_nor") return `NOR${++logicNorCount}`;
+    if (type === "logic_xor") return `XOR${++logicXorCount}`;
+    if (type === "logic_xnor") return `XNOR${++logicXnorCount}`;
+    if (type === "logic_dff") return `Dbas${++logicDbasCount}`;
+    if (type === "logic_jk") return `JKff${++logicJkCount}`;
+    if (type === "ic_74ls00") return `U74${++ic74ls00Count}`;
+    if (type === "ic_74ls74") return `U7474${++ic74ls74Count}`;
     if (type === "vsource") return `E${++vsourceCount}`;
     if (type === "voltmeter") return `V${++voltmeterCount}`;
     if (type === "voltmeter_rms") return `Vm${++voltmeterRmsCount}`;
@@ -5017,6 +7165,11 @@ function pasteGroupFromClipboard() {
             pasted.vp = item.vp != null ? item.vp : OPAMP_DEFAULT_VP;
             pasted.vn = item.vn != null ? item.vn : OPAMP_DEFAULT_VN;
             ensureOpampFields(pasted);
+        }
+        if (isLedType(pasted.type)) {
+            pasted.ledColor = item.ledColor || LED_DEFAULT_COLOR;
+            pasted.iMax = item.iMax > 0 ? item.iMax : LED_DEFAULT_IMAX_A;
+            ensureLedFields(pasted);
         }
         components.push(pasted);
         newCompIds.add(id);
@@ -5089,6 +7242,44 @@ function pasteFromClipboard() {
         y = snapped.y;
         mirrorX = !!clipboard.mirrorX;
         id = `U${++opampCount}`;
+    } else if (isLogicGateType(clipboard.type)) {
+        const snapped = snapLogicGateDropWorld(
+            lastWorldMouse.x,
+            lastWorldMouse.y,
+            clipboard.type,
+            getCompOrient(clipboard),
+            !!clipboard.mirrorX,
+            !!clipboard.mirrorY
+        );
+        x = snapped.x;
+        y = snapped.y;
+        mirrorX = !!clipboard.mirrorX;
+        id = allocateComponentId(clipboard.type);
+    } else if (isLogicFlipFlopType(clipboard.type)) {
+        const snapped = snapLogicFlipFlopDropWorld(
+            lastWorldMouse.x,
+            lastWorldMouse.y,
+            clipboard.type,
+            getCompOrient(clipboard),
+            !!clipboard.mirrorX,
+            !!clipboard.mirrorY
+        );
+        x = snapped.x;
+        y = snapped.y;
+        mirrorX = !!clipboard.mirrorX;
+        id = allocateComponentId(clipboard.type);
+    } else if (isLogicIcType(clipboard.type)) {
+        const snapped = snapIc74ls00DropWorld(
+            lastWorldMouse.x,
+            lastWorldMouse.y,
+            getCompOrient(clipboard),
+            !!clipboard.mirrorX,
+            !!clipboard.mirrorY
+        );
+        x = snapped.x;
+        y = snapped.y;
+        mirrorX = !!clipboard.mirrorX;
+        id = allocateComponentId(clipboard.type);
     } else if (isSignalGeneratorType(clipboard.type)) {
         const snapped = snapSignalGeneratorDropWorld(
             lastWorldMouse.x,
@@ -5108,7 +7299,11 @@ function pasteFromClipboard() {
         );
         x = snapped.x;
         y = snapped.y;
-        id = isGroundType(clipboard.type) ? `G${++groundCount}` : `B${++vtermCount}`;
+        id = isGroundType(clipboard.type)
+            ? `G${++groundCount}`
+            : isLogicStateType(clipboard.type)
+              ? `LS${++logicStateCount}`
+              : `B${++vtermCount}`;
     } else {
         const snapped = snapTwoTerminalDropWorld(
             lastWorldMouse.x,
@@ -5121,6 +7316,10 @@ function pasteFromClipboard() {
         else if (clipboard.type === "capacitor") id = `C${++capacitorCount}`;
         else if (clipboard.type === "inductor") id = `L${++inductorCount}`;
         else if (clipboard.type === "diode") id = `D${++diodeCount}`;
+        else if (clipboard.type === "led") id = `LD${++ledCount}`;
+        else if (clipboard.type === "lamp") id = `LP${++lampCount}`;
+        else if (clipboard.type === "seg7") id = `S7${++seg7Count}`;
+        else if (clipboard.type === "lcd") id = `LCD${++lcdCount}`;
         else if (clipboard.type === "vsource") id = `E${++vsourceCount}`;
         else if (clipboard.type === "voltmeter") id = `V${++voltmeterCount}`;
         else if (clipboard.type === "voltmeter_rms") id = `Vm${++voltmeterRmsCount}`;
@@ -5140,14 +7339,30 @@ function pasteFromClipboard() {
         orient: clipboard.orient != null ? clipboard.orient : 0,
     };
     syncVerticalFromOrient(pasted);
+    if (isLedType(pasted.type)) {
+        pasted.ledColor = clipboard.ledColor || LED_DEFAULT_COLOR;
+        pasted.iMax = clipboard.iMax > 0 ? clipboard.iMax : LED_DEFAULT_IMAX_A;
+        ensureLedFields(pasted);
+    }
     if (isOpampType(pasted.type)) {
         pasted.vp = clipboard.vp != null ? clipboard.vp : OPAMP_DEFAULT_VP;
         pasted.vn = clipboard.vn != null ? clipboard.vn : OPAMP_DEFAULT_VN;
         ensureOpampFields(pasted);
     }
+    if (isLogicStateType(pasted.type) || isLogicFamilyType(pasted.type)) {
+        pasted.logicRail = clipboard.logicRail != null ? parseLogicRail(clipboard.logicRail) : 5;
+    }
+    if (isSeg7Type(pasted.type)) {
+        ensureSeg7Fields(pasted);
+        pasted.seg7On = Array(7).fill(false);
+    }
     components.push(pasted);
     if (isNpnType(pasted.type)) snapNpnComponent(pasted);
     else if (isOpampType(pasted.type)) snapOpampComponent(pasted);
+    else if (isLogicGateType(pasted.type)) snapLogicGateComponent(pasted);
+    else if (isLogicFlipFlopType(pasted.type)) snapLogicFlipFlopComponent(pasted);
+    else if (isLogicIcType(pasted.type)) snapIc74ls00Component(pasted);
+    else if (isSeg7Type(pasted.type)) snapSeg7Component(pasted);
     else if (isSingleTerminalRefType(pasted.type)) snapSingleTerminalComponent(pasted);
     else if (isTwoTerminalType(pasted.type)) snapTwoTerminalComponent(pasted);
     selectedId = id;
@@ -5182,6 +7397,10 @@ function handleKeyDown(e) {
             cycleCompOrient(comp);
             if (isNpnType(comp.type)) snapNpnComponent(comp);
             else if (isOpampType(comp.type)) snapOpampComponent(comp);
+            else if (isLogicGateType(comp.type)) snapLogicGateComponent(comp);
+            else if (isLogicFlipFlopType(comp.type)) snapLogicFlipFlopComponent(comp);
+            else if (isLogicIcType(comp.type)) snapIc74ls00Component(comp);
+            else if (isSeg7Type(comp.type)) snapSeg7Component(comp);
             else if (isSingleTerminalRefType(comp.type)) snapSingleTerminalComponent(comp);
             else snapTwoTerminalComponent(comp);
             saveState();
@@ -5201,12 +7420,16 @@ function handleKeyDown(e) {
             (isSignalGeneratorType(comp.type) ||
                 isOscilloscopeType(comp.type) ||
                 isNpnType(comp.type) ||
-                isOpampType(comp.type))
+                isOpampType(comp.type) ||
+                isLogicFamilyType(comp.type))
         ) {
             comp.mirrorX = !comp.mirrorX;
             if (isOscilloscopeType(comp.type)) snapOscilloscopeComponent(comp);
             else if (isSignalGeneratorType(comp.type)) snapSignalGeneratorComponent(comp);
             else if (isNpnType(comp.type)) snapNpnComponent(comp);
+            else if (isLogicGateType(comp.type)) snapLogicGateComponent(comp);
+            else if (isLogicFlipFlopType(comp.type)) snapLogicFlipFlopComponent(comp);
+            else if (isLogicIcType(comp.type)) snapIc74ls00Component(comp);
             else snapOpampComponent(comp);
             saveState();
             draw();
@@ -5214,9 +7437,19 @@ function handleKeyDown(e) {
     }
     if (selectedId && e.key.toLowerCase() === "y" && !isCtrl) {
         const comp = components.find(c => c.id === selectedId);
-        if (comp && (isNpnType(comp.type) || isOpampType(comp.type))) {
+        if (
+            comp &&
+            (isNpnType(comp.type) ||
+                isOpampType(comp.type) ||
+                isLogicGateType(comp.type) ||
+                isLogicFlipFlopType(comp.type) ||
+                isLogicIcType(comp.type))
+        ) {
             comp.mirrorY = !comp.mirrorY;
             if (isNpnType(comp.type)) snapNpnComponent(comp);
+            else if (isLogicGateType(comp.type)) snapLogicGateComponent(comp);
+            else if (isLogicFlipFlopType(comp.type)) snapLogicFlipFlopComponent(comp);
+            else if (isLogicIcType(comp.type)) snapIc74ls00Component(comp);
             else snapOpampComponent(comp);
             saveState();
             draw();
@@ -5260,8 +7493,17 @@ function handleKeyDown(e) {
             closeOscilloscopeViewer();
             return;
         }
+        if (commandsHelpOverlayEl) {
+            closeCommandsHelp();
+            return;
+        }
         if (valueEditorCompId) {
             closeValueEditor();
+            draw();
+            return;
+        }
+        if (ledColorEditorCompId) {
+            closeLedColorEditor();
             draw();
             return;
         }
@@ -5294,6 +7536,8 @@ function applyParsedSchematic(jsonStr) {
         wires = data.wires || [];
     }
     components.forEach(ensureOpampFields);
+    components.forEach(ensureLedFields);
+    components.forEach(ensureLogicRailField);
     syncCountersFromComponents();
     syncWireCountFromWires();
     rebuildUsedJunctionKeys();
@@ -5347,7 +7591,22 @@ function syncCountersFromComponents() {
         maxO = 0,
         maxSin = 0,
         maxCarre = 0,
-        maxOsc = 0;
+        maxOsc = 0,
+        maxLd = 0,
+        maxLp = 0,
+        maxS7 = 0,
+        maxLcd = 0,
+        maxNot = 0,
+        maxAnd = 0,
+        maxOr = 0,
+        maxNand = 0,
+        maxNor = 0,
+        maxXor = 0,
+        maxXnor = 0,
+        maxDbas = 0,
+        maxJk = 0,
+        maxU74 = 0,
+        maxU7474 = 0;
     for (const c of components) {
         if (!c || !c.id) continue;
         let m = /^R(\d+)$/.exec(c.id);
@@ -5380,6 +7639,40 @@ function syncCountersFromComponents() {
         if (m) maxCarre = Math.max(maxCarre, +m[1]);
         m = /^Osc(\d+)$/i.exec(c.id);
         if (m) maxOsc = Math.max(maxOsc, +m[1]);
+        m = /^LD(\d+)$/i.exec(c.id);
+        if (m) maxLd = Math.max(maxLd, +m[1]);
+        m = /^LP(\d+)$/i.exec(c.id);
+        if (m) maxLp = Math.max(maxLp, +m[1]);
+        m = /^S7(\d+)$/i.exec(c.id);
+        if (m) maxS7 = Math.max(maxS7, +m[1]);
+        m = /^LCD(\d+)$/i.exec(c.id);
+        if (m) maxLcd = Math.max(maxLcd, +m[1]);
+        m = /^NOT(\d+)$/i.exec(c.id);
+        if (m) maxNot = Math.max(maxNot, +m[1]);
+        m = /^AND(\d+)$/i.exec(c.id);
+        if (m) maxAnd = Math.max(maxAnd, +m[1]);
+        m = /^OR(\d+)$/i.exec(c.id);
+        if (m) maxOr = Math.max(maxOr, +m[1]);
+        m = /^NAND(\d+)$/i.exec(c.id);
+        if (m) maxNand = Math.max(maxNand, +m[1]);
+        m = /^NOR(\d+)$/i.exec(c.id);
+        if (m) maxNor = Math.max(maxNor, +m[1]);
+        m = /^XOR(\d+)$/i.exec(c.id);
+        if (m) maxXor = Math.max(maxXor, +m[1]);
+        m = /^XNOR(\d+)$/i.exec(c.id);
+        if (m) maxXnor = Math.max(maxXnor, +m[1]);
+        m = /^Dbas(\d+)$/i.exec(c.id);
+        if (m) maxDbas = Math.max(maxDbas, +m[1]);
+        m = /^DFF(\d+)$/i.exec(c.id);
+        if (m) maxDbas = Math.max(maxDbas, +m[1]);
+        m = /^JKff(\d+)$/i.exec(c.id);
+        if (m) maxJk = Math.max(maxJk, +m[1]);
+        m = /^JK(\d+)$/i.exec(c.id);
+        if (m) maxJk = Math.max(maxJk, +m[1]);
+        m = /^U7474(\d+)$/i.exec(c.id);
+        if (m) maxU7474 = Math.max(maxU7474, +m[1]);
+        m = /^U74(\d+)$/i.exec(c.id);
+        if (m) maxU74 = Math.max(maxU74, +m[1]);
     }
     resistorCount = maxR;
     capacitorCount = maxC;
@@ -5390,15 +7683,19 @@ function syncCountersFromComponents() {
     vsourceCount = maxE;
     let maxG = 0;
     let maxB = 0;
+    let maxLs = 0;
     for (const c of components) {
         if (!c || !c.id) continue;
         let m = /^G(\d+)$/.exec(c.id);
         if (m) maxG = Math.max(maxG, +m[1]);
         m = /^B(\d+)$/.exec(c.id);
         if (m) maxB = Math.max(maxB, +m[1]);
+        m = /^LS(\d+)$/i.exec(c.id);
+        if (m) maxLs = Math.max(maxLs, +m[1]);
     }
     groundCount = maxG;
     vtermCount = maxB;
+    logicStateCount = maxLs;
     voltmeterCount = maxV;
     voltmeterRmsCount = maxVm;
     ammeterCount = maxA;
@@ -5407,6 +7704,21 @@ function syncCountersFromComponents() {
     vsinCount = maxSin;
     vsquareCount = maxCarre;
     oscilloscopeCount = maxOsc;
+    ledCount = maxLd;
+    lampCount = maxLp;
+    seg7Count = maxS7;
+    lcdCount = maxLcd;
+    logicNotCount = maxNot;
+    logicAndCount = maxAnd;
+    logicOrCount = maxOr;
+    logicNandCount = maxNand;
+    logicNorCount = maxNor;
+    logicXorCount = maxXor;
+    logicXnorCount = maxXnor;
+    logicDbasCount = maxDbas;
+    logicJkCount = maxJk;
+    ic74ls00Count = maxU74;
+    ic74ls74Count = maxU7474;
 }
 
 async function loadCircuitFromText(text) {
@@ -5429,6 +7741,7 @@ async function loadCircuitFromText(text) {
     wireDraft = null;
     isWireDrag = false;
     components.forEach(ensureOpampFields);
+    components.forEach(ensureLogicRailField);
     syncCountersFromComponents();
     syncWireCountFromWires();
     rebuildUsedJunctionKeys();
@@ -5460,11 +7773,27 @@ function resetCircuit() {
     vsourceCount = 0;
     groundCount = 0;
     vtermCount = 0;
+    logicStateCount = 0;
     voltmeterCount = 0;
     ammeterCount = 0;
     voltmeterRmsCount = 0;
     ammeterRmsCount = 0;
     ohmmeterCount = 0;
+    ledCount = 0;
+    lampCount = 0;
+    seg7Count = 0;
+    lcdCount = 0;
+    logicNotCount = 0;
+    logicAndCount = 0;
+    logicOrCount = 0;
+    logicNandCount = 0;
+    logicNorCount = 0;
+    logicXorCount = 0;
+    logicXnorCount = 0;
+    logicDbasCount = 0;
+    logicJkCount = 0;
+    ic74ls00Count = 0;
+    ic74ls74Count = 0;
     vsinCount = 0;
     vsquareCount = 0;
     oscilloscopeCount = 0;

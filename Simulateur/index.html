@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -32,17 +32,17 @@
         <div class="menu-item">
             🧩 Composants
             <div class="dropdown">
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
+                <button draggable="true"
+                        onmousedown="event.stopPropagation()"
                         ondragstart="handleDragStart(event, 'resistor')">▭ Résistance</button>
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
+                <button draggable="true"
+                        onmousedown="event.stopPropagation()"
                         ondragstart="handleDragStart(event, 'capacitor')">⫿ Condensateur</button>
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
+                <button draggable="true"
+                        onmousedown="event.stopPropagation()"
                         ondragstart="handleDragStart(event, 'inductor')">∿ Bobine</button>
-                <button draggable="true" 
-                        onmousedown="event.stopPropagation()" 
+                <button draggable="true"
+                        onmousedown="event.stopPropagation()"
                         ondragstart="handleDragStart(event, 'diode')">▷| Diode (1N4148)</button>
                 <div class="menu-item-has-submenu">
                     <span class="submenu-label">⊳ NPN ▸</span>
@@ -80,7 +80,89 @@
                         ondragstart="handleDragStart(event, 'vterm')"><span class="menu-icon" aria-hidden="true">△</span><span class="menu-label">Borne (5V)</span></button>
                 <button type="button" class="menu-row" draggable="true"
                         onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'logic_state')"><span class="menu-icon" aria-hidden="true">0/1</span><span class="menu-label">État logique</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
                         ondragstart="handleDragStart(event, 'ground')"><span class="menu-icon" aria-hidden="true">⏚</span><span class="menu-label">Masse (GND)</span></button>
+            </div>
+        </div>
+
+        <div class="menu-item menu-panel-aligned">
+            💡 Opto
+            <div class="dropdown menu-dropdown-aligned">
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'led')"><span class="menu-icon" aria-hidden="true">●</span><span class="menu-label">LED</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'lamp')"><span class="menu-icon" aria-hidden="true">💡</span><span class="menu-label">Lampe</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'seg7')"><span class="menu-icon" aria-hidden="true">8</span><span class="menu-label">7 Segments</span></button>
+                <button type="button" class="menu-row" draggable="true"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event, 'lcd')"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">LCD</span></button>
+            </div>
+        </div>
+
+        <div class="menu-item menu-panel-aligned">
+            Logique
+            <div class="dropdown menu-dropdown-aligned">
+                <div class="menu-item-has-submenu">
+                    <span class="submenu-label">Portes ▸</span>
+                    <div class="dropdown submenu menu-dropdown-aligned">
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_not"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">1</span><span class="menu-label">Inverseur (NOT)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_and"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&amp;</span><span class="menu-label">ET (AND)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_or"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&#8805;1</span><span class="menu-label">OU (OR)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_nand"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&amp;</span><span class="menu-label">NON-ET (NAND)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_nor"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&#8805;1</span><span class="menu-label">NON-OU (NOR)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_xor"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">=1</span><span class="menu-label">OU exclusif (XOR)</span></button>
+                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_xnor"
+                        onmousedown="event.stopPropagation()"
+                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">=1</span><span class="menu-label">NON-OU exclusif (XNOR)</span></button>
+                    </div>
+                </div>
+                <div class="menu-item-has-submenu">
+                    <span class="submenu-label">Bascule ▸</span>
+                    <div class="dropdown submenu menu-dropdown-aligned">
+                        <button type="button" class="menu-row" draggable="true" data-comp-type="logic_dff"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">D</span><span class="menu-label">Bascule D</span></button>
+                        <button type="button" class="menu-row" draggable="true" data-comp-type="logic_jk"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">JK</span><span class="menu-label">Bascule JK</span></button>
+                    </div>
+                </div>
+                <div class="menu-item-has-submenu">
+                    <span class="submenu-label">Circuits logiques ▸</span>
+                    <div class="dropdown submenu menu-dropdown-aligned">
+                        <button type="button" class="menu-row" draggable="true" data-comp-type="ic_74ls00"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">74HC00 (4× NAND)</span></button>
+                        <button type="button" class="menu-row" draggable="true" data-comp-type="ic_74ls74"
+                                onmousedown="event.stopPropagation()"
+                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">74LS74 (2× D)</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="menu-item menu-panel-aligned">
+            ⌨ Commandes
+            <div class="dropdown menu-dropdown-aligned">
+                <button type="button" class="menu-row" onclick="menuOpenCommandsHelp()"><span class="menu-icon" aria-hidden="true">?</span><span class="menu-label">Raccourcis clavier et souris</span></button>
             </div>
         </div>
 
@@ -128,8 +210,12 @@
             <div id="comp-value-editor" class="comp-value-editor" hidden>
                 <input id="comp-value-input" type="text" spellcheck="false" autocomplete="off" aria-label="Valeur du composant">
             </div>
+            <div id="led-color-editor" class="led-color-editor" hidden>
+                <label for="led-color-input">Couleur LED</label>
+                <input id="led-color-input" type="color" aria-label="Couleur de la LED">
+            </div>
             <div id="ui-info">
-                <span id="tool-info">Fils : clic borne pour début/fin | croisement sans jonction | Échap : figer l’extrémité | Suppr : supprimer | NPN/AOP : X/Y, R | Ctrl+C/V | Clic droit : vue</span> | 
+                <span id="tool-info">Fils : clic borne pour début/fin | croisement sans jonction | Échap : figer l’extrémité | Suppr : supprimer | NPN/AOP : X/Y, R | Ctrl+C/V | Clic droit : vue</span> |
                 <span id="coords">X: 0, Y: 0</span>
             </div>
         </div>
@@ -146,7 +232,7 @@
                 <div id="sim-results-wrap" class="sim-results-wrap">
                     <h3 class="sim-panel-title">Résultats simulation (ngspice)</h3>
                     <div id="sim-panel-body" class="sim-panel-body">
-                        <p class="sim-muted">Lancez une simulation avec le bouton 🚀.</p>
+                        <p class="sim-muted">Lancez une simulation avec le bouton ▶.</p>
                     </div>
                 </div>
             </div>
@@ -154,6 +240,6 @@
         </section>
     </main>
 
-    <script src="script.js?v=marquee-junc-20260517"></script>
+    <script src="script.js?v=logic-xspice-20260521"></script>
 </body>
 </html>

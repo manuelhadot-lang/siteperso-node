@@ -2,7 +2,7 @@
 node_modules
 **/node_modules
 
-# Bundle ngspice Windows / portable : dans Docker on utilise uniquement apt (voir Dockerfile ENV NGSPICE).
+# Bundle ngspice Windows / portable : dans Docker on utilise apt + digital.cm copié au build (Dockerfile).
 Simulateur/bin
 Simulateur/lib
 

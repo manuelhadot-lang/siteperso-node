@@ -9,6 +9,14 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { resolveNgspiceForServer, applyPathPrepend } = require("./ngspice-bundle.cjs");
 
+async function loadNgspiceHasXspice() {
+    const url = pathToFileURL(
+        path.join(__dirname, "..", "Simulateur", "Engine", "ngspice-xspice-probe.mjs")
+    ).href;
+    const mod = await import(url);
+    return mod.ngspiceHasXspice;
+}
+
 function runNgspiceVersion(bin, env) {
     return new Promise((resolve, reject) => {
         execFile(
@@ -48,15 +56,39 @@ async function main() {
     console.log("Modules Simulateur/Engine : OK");
 
     try {
+        const ngspiceHasXspice = await loadNgspiceHasXspice();
         const { stdout, stderr } = await runNgspiceVersion(exe, env);
         const out = (stdout || stderr || "").trim();
         console.log("ngspice -v : OK");
         if (out) console.log("---\n" + out);
+        const xspiceInBanner = /\bxspice\b/i.test(out);
+        const xspice = ngspiceHasXspice(exe, env);
+        const digitalCm = path.join(root, "Simulateur", "lib", "ngspice", "digital.cm");
+        const fs = require("node:fs");
+        const hasCm = fs.existsSync(digitalCm);
+        console.log("XSPICE dans le binaire :", xspice ? "oui" : "non");
+        if (xspice && !xspiceInBanner) {
+            console.log(
+                "  (devhelp d_dff OK — certaines builds ngspice-46 n'affichent pas « XSPICE » dans ngspice -v)"
+            );
+        }
+        console.log("digital.cm (Simulateur/lib/ngspice/) :", hasCm ? "present" : "absent");
+        if (!xspice) {
+            console.warn(
+                "\nBascules D : mode XSPICE desactive (devhelp d_dff indisponible). " +
+                    "Verifiez ngspice_con.exe dans Simulateur/bin/ ou une build compilee avec XSPICE."
+            );
+        } else if (!hasCm) {
+            console.warn("\nBascules D : copiez digital.cm dans Simulateur/lib/ngspice/ pour activer d_dff.");
+        }
     } catch (e) {
         console.error("ngspice -v : ÉCHEC —", e && e.message ? e.message : e);
         console.error(
-            "\nPlace ngspice.exe dans Simulateur/bin/ et les DLL dans Simulateur/lib/, " +
-                "ou définis NGSPICE / NGSPICE_PATH, ou ajoute ngspice au PATH système."
+            process.platform === "win32"
+                ? "\nPlace ngspice.exe ou ngspice_con.exe dans Simulateur/bin/ et les DLL dans Simulateur/lib/, " +
+                      "ou définis NGSPICE / NGSPICE_PATH, ou ajoute ngspice au PATH système."
+                : "\nSur Linux : apt install ngspice puis NGSPICE=/usr/bin/ngspice, " +
+                      "ou place le binaire ELF dans Simulateur/bin/ngspice (pas ngspice.exe)."
         );
         process.exitCode = 1;
     }

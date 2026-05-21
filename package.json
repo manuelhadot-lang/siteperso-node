@@ -16,5 +16,13 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.3",
     "socket.io": "^4.8.1"
+  },
+  "overrides": {
+    "concat-stream": {
+      "readable-stream": "^4.7.0"
+    }
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

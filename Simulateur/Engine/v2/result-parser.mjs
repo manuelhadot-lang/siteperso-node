@@ -4,6 +4,8 @@
 
  */
 
+import { logicLevelFromVoltage } from "../logic-rails.mjs";
+
 
 
 /**
@@ -132,7 +134,29 @@ function collectBranchCurrentsFromLog(log) {
 
     }
 
+    const reRev = /\b([-+eE0-9.]+)\s*=\s*i\s*\(\s*([^)]+?)\s*\)/gi;
 
+    while ((m = reRev.exec(log)) !== null) {
+
+        const branch = String(m[2]).trim().toLowerCase();
+
+        const i = parseFloat(m[1]);
+
+        if (branch && Number.isFinite(i)) map[branch] = i;
+
+    }
+
+    const reDev = /\b((?:vil|vi|d)_[a-z0-9_]+)(?:#branchcurrent)?\s*[:=]?\s+([-+eE0-9.]+)/gi;
+
+    while ((m = reDev.exec(log)) !== null) {
+
+        const branch = String(m[1]).trim().toLowerCase();
+
+        const i = parseFloat(m[2]);
+
+        if (branch && Number.isFinite(i)) map[branch] = i;
+
+    }
 
     return map;
 
@@ -302,7 +326,49 @@ export function mergeAmmeterMeasurements(log, ammeters) {
 
 }
 
+/**
+ * @param {string} log
+ * @param {{ id: string; branch: string }[]} leds
+ */
+function ledForwardCurrentFromRow(row, meta, vmap) {
+    if (!row || typeof row.current !== "number" || !Number.isFinite(row.current)) return 0;
+    const i = row.current;
+    const np = meta?.nodePlus;
+    const nm = meta?.nodeMinus;
+    if (np && nm && vmap && Object.keys(vmap).length > 0) {
+        const vp = nodeVoltageFromMap(np, vmap);
+        const vm = nodeVoltageFromMap(nm, vmap);
+        if (vp != null && vm != null) {
+            if (vp <= vm + 0.15) return 0;
+            return Math.abs(i);
+        }
+    }
+    return i > 0 ? i : 0;
+}
 
+export function mergeLedMeasurements(log, leds) {
+    const out = {};
+    if (!log || typeof log !== "string" || !Array.isArray(leds) || leds.length === 0) return out;
+
+    const map = collectBranchCurrentsFromLog(log);
+    const vmap = collectNodeVoltagesFromLog(log);
+
+    for (const ld of leds) {
+        if (!ld.branch) continue;
+        const i = branchCurrentFromMap(ld.branch, map);
+        if (i == null) continue;
+        const iFwd = ledForwardCurrentFromRow({ current: i }, ld, vmap);
+        out[ld.id] = {
+            current: iFwd,
+            unit: "A",
+            branch: ld.branch,
+            nodePlus: ld.nodePlus,
+            nodeMinus: ld.nodeMinus,
+        };
+    }
+
+    return out;
+}
 
 /**
  * @param {string} log
@@ -465,12 +531,13 @@ export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
             if (row.length <= timeCol) continue;
             const d1 = channelDiff(row, m.ch1);
             const d2 = channelDiff(row, m.ch2);
-            if (!Number.isFinite(row[timeCol]) || !Number.isFinite(d1) || !Number.isFinite(d2)) {
-                continue;
-            }
+            if (!Number.isFinite(row[timeCol])) continue;
+            const ok1 = Number.isFinite(d1);
+            const ok2 = Number.isFinite(d2);
+            if (!ok1 && !ok2) continue;
             tArr.push(row[timeCol]);
-            v1Arr.push(d1);
-            v2Arr.push(d2);
+            v1Arr.push(ok1 ? d1 : 0);
+            v2Arr.push(ok2 ? d2 : 0);
         }
         if (tArr.length === 0) continue;
         out[m.id] = {
@@ -558,6 +625,139 @@ export function mergeAmmeterRmsFromTranWrdata(waveTxt, meta) {
             unit: "A",
             measure: "Arms",
             branch: m.branch,
+        };
+    }
+    return out;
+}
+
+/**
+ * Courants LED pendant .tran (wrdata i(VIL_*)).
+ * @param {string} waveTxt
+ * @param {{ id: string; timeCol?: number; wrVarCount?: number; currentWrIndex?: number; branch?: string; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeLedTranPlotsFromWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    let wrVarCount = 0;
+    for (const m of meta) {
+        if (m.wrVarCount > wrVarCount) wrVarCount = m.wrVarCount;
+        if (m.currentWrIndex != null && m.currentWrIndex + 1 > wrVarCount) {
+            wrVarCount = m.currentWrIndex + 1;
+        }
+    }
+    if (wrVarCount < 2) wrVarCount = 2;
+    const ncol = rows[0].length;
+    const colOffset = Math.max(0, ncol - wrVarCount);
+    const timeCol = meta[0]?.timeCol ?? 0;
+
+    for (const m of meta) {
+        if (!m?.id || m.currentWrIndex == null || m.currentWrIndex === undefined) continue;
+        const tArr = [];
+        const iArr = [];
+        for (const row of rows) {
+            if (row.length <= timeCol) continue;
+            const t = row[timeCol];
+            const iCol = m.currentWrIndex + colOffset;
+            if (iCol >= row.length) continue;
+            const iRaw = row[iCol];
+            if (!Number.isFinite(t) || !Number.isFinite(iRaw)) continue;
+            tArr.push(t);
+            iArr.push(iRaw > 0 ? iRaw : 0);
+        }
+        if (!tArr.length) continue;
+        out[m.id] = {
+            time: tArr,
+            current: iArr,
+            branch: m.branch,
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
+        };
+    }
+    return out;
+}
+
+/**
+ * @param {Record<string, { time: number[]; current: number[]; branch?: string; nodePlus?: string; nodeMinus?: string }>} ledPlots
+ */
+/**
+ * @param {string} log
+ * @param {{ id: string; nodeOut: string }[]} logicGates
+ */
+export function mergeLogicGateMeasurements(log, logicGates) {
+    const out = {};
+    if (!log || typeof log !== "string" || !Array.isArray(logicGates) || logicGates.length === 0) {
+        return out;
+    }
+    const map = collectNodeVoltagesFromLog(log);
+    for (const lg of logicGates) {
+        if (!lg?.id || !lg.nodeOut) continue;
+        const v = nodeVoltageFromMap(lg.nodeOut, map);
+        if (v == null) continue;
+        const th = typeof lg.vth === "number" && lg.vth > 0 ? lg.vth : 2.5;
+        out[lg.id] = {
+            voltage: v,
+            unit: "V",
+            logic: logicLevelFromVoltage(v, th),
+            nodeOut: lg.nodeOut,
+            vhi: lg.vhi,
+            vth: th,
+        };
+    }
+    return out;
+}
+
+/**
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; wrIndex?: number; nodeOut?: string }[]} meta
+ */
+export function mergeLogicGateTranFromWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || m.wrIndex == null || m.wrIndex === undefined) continue;
+        const wrVarCount = m.wrVarCount || m.wrIndex + 1;
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        for (const row of rows) {
+            const v = row[m.wrIndex + colOffset];
+            if (Number.isFinite(v)) vals.push(v);
+        }
+        if (!vals.length) continue;
+        const v = vals[vals.length - 1];
+        const th = typeof m.vth === "number" && m.vth > 0 ? m.vth : 2.5;
+        out[m.id] = {
+            voltage: v,
+            unit: "V",
+            logic: logicLevelFromVoltage(v, th),
+            nodeOut: m.nodeOut,
+            vhi: m.vhi,
+            vth: th,
+        };
+    }
+    return out;
+}
+
+export function mergeLedValuesFromTranPlots(ledPlots) {
+    const out = {};
+    if (!ledPlots || typeof ledPlots !== "object") return out;
+    for (const [id, plot] of Object.entries(ledPlots)) {
+        if (!plot?.current?.length) continue;
+        let peak = 0;
+        for (const i of plot.current) {
+            if (Number.isFinite(i) && i > peak) peak = i;
+        }
+        out[id] = {
+            current: peak,
+            unit: "A",
+            branch: plot.branch,
+            nodePlus: plot.nodePlus,
+            nodeMinus: plot.nodeMinus,
+            reverseBias: peak < 5e-7,
         };
     }
     return out;

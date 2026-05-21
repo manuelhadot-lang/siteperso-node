@@ -14,7 +14,18 @@ async function loadSchematicBuilder() {
  * @param {string} text
  */
 function normalizeSpiceNetlistForNgspiceBatch(text) {
-    let s = text;
+    let s = String(text || "").replace(/^\uFEFF/, "");
+    // SPICE / ngspice : la **première ligne non vide** du fichier est toujours le « titre »
+    // et n’est **pas** un composant. Si on supprime notre ligne * …, la 1re ligne devient
+    // par ex. « V_V1 … » : elle est alors ignorée comme titre → circuit faux (0 V, etc.).
+    // Remplacer par une ligne titre minimale (ASCII) — ngspice accepte tout commentaire *.
+    s = s.replace(
+        /^\* Circuit Designer - netlist SPICE \(\.(?:op|tran)\)[^\r\n]*\r?\n(?:\s*\r?\n)?/i,
+        "* CD\n"
+    );
+    // Ne PAS forcer CRLF tout le fichier : sur certaines installs ngspice-46 sous Windows,
+    // ça combiné au bloc .control / wrdata donne une analyse transitoire « réussie » mais
+    // sans données exploitables dans l’interface.
     if (!/\S/.test(s) || !/^\s*\.control\b/im.test(s)) return s;
 
     const hasCircuitAnalysis = /^\s*\.(op|tran|dc|ac|pz|noise|sens|tf)\b/im.test(s);

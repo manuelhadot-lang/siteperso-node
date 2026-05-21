@@ -36,12 +36,13 @@ body, html {
     border: 1px solid #454545;
     min-width: 180px;
     z-index: 1001;
+    overflow: visible;
 }
 
 .menu-item:hover > .dropdown { display: block; }
 
-/* Pendant un drag depuis la palette : le menu reste ouvert (évite la disparition au survol). */
-.menu-item.dropdown-pinned .dropdown {
+/* Pendant un drag : seul le panneau principal du menu reste ouvert (pas les sous-menus voisins). */
+.menu-item.dropdown-pinned > .dropdown {
     display: block !important;
 }
 
@@ -68,6 +69,11 @@ body, html {
     min-width: 228px;
 }
 
+.menu-row .menu-icon,
+.menu-row .menu-label {
+    pointer-events: none;
+}
+
 .menu-row .menu-icon {
     flex: 0 0 1.75em;
     width: 1.75em;
@@ -92,7 +98,7 @@ body, html {
 }
 
 .menu-item-has-submenu > .submenu-label {
-    cursor: default;
+    cursor: pointer;
 }
 
 .menu-item-has-submenu > .dropdown.submenu {
@@ -100,14 +106,25 @@ body, html {
     top: 0;
     left: 100%;
     min-width: 160px;
+    z-index: 1002;
 }
 
-.menu-item-has-submenu:hover > .dropdown.submenu {
+.menu-item-has-submenu:hover > .dropdown.submenu,
+.menu-item-has-submenu.submenu-open > .dropdown.submenu {
     display: block;
 }
 
-.menu-item.dropdown-pinned .menu-item-has-submenu:hover > .dropdown.submenu {
-    display: block;
+/* Pendant un drag : garder le sous-menu source visible ; pas d’ouverture des voisins au survol. */
+body.palette-drag-active .menu-item.dropdown-pinned > .dropdown.menu-dropdown-aligned {
+    display: block !important;
+}
+
+body.palette-drag-active .menu-item-has-submenu.submenu-drag-open > .dropdown.submenu {
+    display: block !important;
+}
+
+body.palette-drag-active .menu-item-has-submenu:not(.submenu-drag-open):hover > .dropdown.submenu {
+    display: none !important;
 }
 
 .sim-toolbar {
@@ -208,6 +225,47 @@ body.theme-light .comp-value-editor input {
 body.theme-light .comp-value-editor input.invalid {
     border-color: #c62828;
     background: #ffebee;
+}
+
+.led-color-editor[hidden] {
+    display: none !important;
+    pointer-events: none;
+}
+
+.led-color-editor:not([hidden]) {
+    position: absolute;
+    z-index: 201;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: #252526;
+    border: 1px solid #454545;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.led-color-editor label {
+    font: 600 11px "Segoe UI", sans-serif;
+    color: #ccc;
+}
+.led-color-editor input[type="color"] {
+    width: 48px;
+    height: 32px;
+    padding: 0;
+    border: 2px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+}
+body.theme-light .led-color-editor {
+    background: #f5f5f5;
+    border-color: #ccc;
+}
+body.theme-light .led-color-editor label {
+    color: #333;
 }
 
 #schematicCanvas {
@@ -659,4 +717,122 @@ body.theme-light #ui-info {
     font-size: 11px;
     color: #888;
     margin: 0;
+}
+
+/* Fenêtre Commandes (raccourcis) */
+.cmd-help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3600;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.cmd-help-panel {
+    background: #1e1e28;
+    border: 1px solid #454560;
+    border-radius: 8px;
+    max-width: min(560px, 96vw);
+    max-height: min(85vh, 720px);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.cmd-help-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.cmd-help-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8e8f0;
+}
+
+.cmd-help-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.cmd-help-close:hover {
+    color: #fff;
+    background: #333;
+}
+
+.cmd-help-body {
+    padding: 8px 16px 16px;
+    overflow-y: auto;
+}
+
+.cmd-help-section {
+    margin-top: 12px;
+}
+
+.cmd-help-section:first-child {
+    margin-top: 4px;
+}
+
+.cmd-help-section h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #9fa8da;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.cmd-help-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.cmd-help-table td {
+    padding: 6px 0;
+    vertical-align: top;
+    border-bottom: 1px solid #2a2a38;
+}
+
+.cmd-help-table tr:last-child td {
+    border-bottom: none;
+}
+
+.cmd-help-keys {
+    width: 38%;
+    padding-right: 12px !important;
+    white-space: nowrap;
+}
+
+.cmd-help-keys kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: Consolas, "Segoe UI", monospace;
+    font-size: 12px;
+    color: #e0e0e0;
+    background: #2d2d3a;
+    border: 1px solid #505068;
+    border-radius: 4px;
+    box-shadow: 0 1px 0 #111;
+}
+
+.cmd-help-desc {
+    color: #b0b0c0;
+    line-height: 1.45;
 }
