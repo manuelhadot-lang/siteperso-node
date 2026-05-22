@@ -30,7 +30,7 @@ function probeXspiceViaDevhelp(exe, env) {
         try {
             combined = execFileSync(exe, ["-b", "-o", log, cir], {
                 encoding: "utf8",
-                timeout: 12000,
+                timeout: 20000,
                 windowsHide: true,
                 env: env || process.env,
                 maxBuffer: 4 * 1024 * 1024,

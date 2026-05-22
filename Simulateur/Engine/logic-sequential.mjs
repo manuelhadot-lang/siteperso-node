@@ -184,13 +184,13 @@ function appendQbarDriver(c, nQ, nQbarPin, nodeFor, vhi, lines, spiceBranchName,
 
 /**
  * true si bascule D via XSPICE : digital.cm présent + binaire ngspice compilé avec XSPICE.
- * @param {{ repoRoot?: string; ngspiceExe?: string; forceBsourceDff?: boolean; forceXspiceDff?: boolean }} opts
+ * @param {{ repoRoot?: string; ngspiceExe?: string; ngspiceEnv?: NodeJS.ProcessEnv; forceBsourceDff?: boolean; forceXspiceDff?: boolean }} opts
  */
 export function useLogicDffXspice(opts = {}) {
     if (opts.forceBsourceDff === true) return false;
     if (!isXspiceDffAvailable(opts.repoRoot)) return false;
     if (opts.forceXspiceDff === true) return true;
-    if (opts.ngspiceExe) return ngspiceHasXspice(opts.ngspiceExe);
+    if (opts.ngspiceExe) return ngspiceHasXspice(opts.ngspiceExe, opts.ngspiceEnv);
     return false;
 }
 

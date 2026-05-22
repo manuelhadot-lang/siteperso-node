@@ -33,6 +33,19 @@ function resolveNgspiceCandidate(p, appRoot) {
     return t;
 }
 
+/** Chemin explicite (absolu ou relatif) vers un fichier exécutable existant. */
+function ngspiceCandidateExists(exe, appRoot) {
+    if (!exe) return false;
+    if (path.isAbsolute(exe)) return fs.existsSync(exe);
+    if (/[\\/]/.test(exe)) {
+        return (
+            fs.existsSync(path.resolve(process.cwd(), exe)) ||
+            fs.existsSync(path.resolve(appRoot, exe))
+        );
+    }
+    return false;
+}
+
 function pathsEqual(a, b) {
     return path.normalize(a).toLowerCase() === path.normalize(b).toLowerCase();
 }
@@ -107,9 +120,14 @@ function resolveNgspiceForServer(appRoot) {
 
     const prependForSimulateurBin = () => prependPathForSimulateurBundle(binDir, libDir);
 
+    const bundled = resolveBundledNgspice(binDir, libDir);
+
     const raw = process.env.NGSPICE || process.env.NGSPICE_PATH;
     if (typeof raw === "string" && raw.trim().length > 0) {
         const exe = resolveNgspiceCandidate(raw, appRoot);
+        if (!ngspiceCandidateExists(exe, appRoot) && bundled) {
+            return bundled;
+        }
         const exeDir = path.dirname(path.resolve(exe));
         if (pathsEqual(exeDir, path.resolve(binDir))) {
             return { exe, prependPath: prependForSimulateurBin() };
@@ -117,7 +135,6 @@ function resolveNgspiceForServer(appRoot) {
         return { exe, prependPath: [] };
     }
 
-    const bundled = resolveBundledNgspice(binDir, libDir);
     if (bundled) return bundled;
 
     return { exe: "ngspice", prependPath: [] };

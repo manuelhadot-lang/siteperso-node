@@ -710,8 +710,12 @@ app.post("/api/simulate", async (req, res) => {
     }
 
     const gs = Number(req.body?.gridStep);
-    const { exe: ngspiceExe } = resolveNgspiceForServer(__dirname);
-    const deckOpts = { repoRoot: __dirname, ngspiceExe };
+    const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
+    const deckOpts = {
+        repoRoot: __dirname,
+        ngspiceExe,
+        ngspiceEnv: applyPathPrepend(process.env, prependPath),
+    };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
     if (!built || typeof built !== "object") {
