@@ -576,21 +576,38 @@ canvas.addEventListener('drop', (e) => {
 async function triggerSimulation() {
     let baseUrl = window.location.origin;
     
-    // Si lancé par Live Server (port 5500/5501) en dév local, on redirige vers le serveur Node (3000)
+    // Ajustement pour Live Server (port 5500/5501) vers le serveur Node (3000)
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         if (window.location.port !== '3000') {
             baseUrl = 'http://localhost:3000';
         }
     }
 
-    // STRUCTURE SOUHAITÉE PAR TON SERVER.JS :
-    // Le serveur extrait directement `req.body?.state` puis vérifie `state.components` et `state.wires`
+    // --- TRADUCTEUR COMPATIBLE AVEC LES VALIDEURS DE SERVER.JS ---
+    const mappedElements = components.map(comp => {
+        // On conserve le type exact attendu par les Regex du serveur (battery, resistor, nand, voltmeter...)
+        return {
+            id: comp.label,         
+            name: comp.label,       
+            type: comp.type, // NE PAS CHANGER EN 'vdc', laisser 'battery' !
+            value: comp.type === 'battery' ? '5' : (comp.type === 'resistor' ? '1k' : ''), 
+            x: comp.x,
+            y: comp.y,
+            rotation: comp.rotation || 0
+        };
+    });
+
+    const mappedConnections = wires.map((w, index) => {
+        return {
+            id: `conn_${index}`,
+            from: w.fromJonctionId, 
+            to: w.toJonctionId      
+        };
+    });
+
     const payload = { 
-        state: {
-            components: components, 
-            wires: wires
-        },
-        gridStep: 16
+        elements: mappedElements, 
+        connections: mappedConnections 
     };
 
     const btn = document.getElementById('btn-simulate');
@@ -602,11 +619,7 @@ async function triggerSimulation() {
     try {
         const response = await fetch(`${baseUrl}/api/simulate`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json' 
-            },
-            // CRUCIAL : Force l'envoi des cookies (comme la session de déverrouillage du site)
-            credentials: 'include', 
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
@@ -614,7 +627,7 @@ async function triggerSimulation() {
             let backendError = "";
             try {
                 const errJson = await response.json();
-                backendError = (errJson.errors && errJson.errors.join(', ')) || errJson.error || JSON.stringify(errJson);
+                backendError = errJson.error || errJson.message || JSON.stringify(errJson);
             } catch(e) {
                 backendError = await response.text();
             }
@@ -623,20 +636,16 @@ async function triggerSimulation() {
 
         const result = await response.json();
         
-        // Ton serveur répond avec 'ok: true' en cas de succès
-        if (result.ok) {
-            console.log("=== COMPTE RENDU NGSPICE ===");
-            console.log("Logs complets :", result.log);
-            console.log("Tensions (Voltmeters) :", result.voltmeterValues);
-            console.log("Courants (Ammeters) :", result.ammeterValues);
-            
-            alert("Simulation réussie ! Toutes les mesures calculées par ngspice sont affichées dans la console F12 (Inspecter -> Console).");
+        if (result.success || result.ok) {
+            console.log("=== COMPTE RENDU NGSPICE / XSPICE ===");
+            console.log(result.data || result);
+            alert("Simulation réussie ! Les logs d'exécution complets du simulateur sont disponibles dans la console F12.");
         } else {
-            alert("Erreur de simulation :\n" + (result.errors ? result.errors.join('\n') : "Échec inconnu"));
+            alert("Erreur du moteur SPICE :\n" + (result.error || "Échec de l'analyse du circuit"));
         }
     } catch (err) {
         console.error(err);
-        alert(`Erreur de validation du circuit :\n${err.message}`);
+        alert(`Erreur lors de l'envoi ou du calcul :\n${err.message}`);
     } finally {
         if (btn) {
             btn.innerText = "🚀 Lancer Simulation"; 
