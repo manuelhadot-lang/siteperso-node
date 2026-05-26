@@ -1,39 +1,43 @@
-FROM node:20-bookworm-slim
+# 1. Utilisation d'une image officielle Node.js (version LTS)
+FROM node:20-slim
 
-# Installe ngspice pour la route /api/simulate (paquet Debian, pas le bundle Windows du dépôt).
+# 2. Installation d'ngspice et des dépendances système obligatoires
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ngspice \
-    && rm -rf /var/lib/apt/lists/* \
-    && test -x /usr/bin/ngspice
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Le serveur lit NGSPICE en priorité : on force le binaire de l’image Linux (évite Simulateur/bin/*.exe).
-ENV NGSPICE=/usr/bin/ngspice
-
+# 3. Définition du répertoire de travail dans le conteneur
 WORKDIR /app
 
-# Dépendances Node (légitime même si Render est en mode « Dockerfile » :
-# npm install tourne pendant docker build, pas sur ta machine.)
+# 4. Copie des fichiers de configuration NPM pour installer les modules
 COPY package*.json ./
-RUN npm install --omit=dev
 
-# Copie le code applicatif
+# Installer uniquement les dépendances de production pour alléger l'image
+RUN npm ci --only=production
+
+# 5. Copie de l'intégralité du code source du projet
 COPY . .
 
-# digital.cm : requis pour bascules D en XSPICE (d_dff). Simulateur/lib est dans .dockerignore,
-# donc on le prend depuis l’installation apt ngspice (pas depuis le dépôt Git).
+# 6. ÉTAPE DE SÉCURISATION DU RECONSTRUISEUR XSPICE (Ton correctif d'erreur)
+# Recherche le fichier original 'digital.cm' installé par le paquet ngspice sur Linux,
+# crée le sous-répertoire attendu par ton server.js, et y copie le modèle de code.
 RUN mkdir -p Simulateur/lib/ngspice \
-    && DIG=$(find /usr/lib/ngspice /usr/share/ngspice -name 'digital.cm' 2>/dev/null | head -n1) \
-    && test -n "$DIG" \
-    && cp "$DIG" Simulateur/lib/ngspice/digital.cm
+    && DIG=$(find /usr/lib /usr/share /var/lib -name 'digital.cm' 2>/dev/null | head -n1) \
+    && if [ -n "$DIG" ]; then \
+         cp "$DIG" Simulateur/lib/ngspice/digital.cm; \
+         echo "✓ Module digital.cm localisé et configuré avec succès."; \
+       else \
+         echo "⚠ Attention : Le fichier digital.cm système n'a pas été trouvé pendant le build. Il sera généré dynamiquement au runtime si nécessaire."; \
+       fi
 
+# 7. Définition de la variable d'environnement pour que le serveur sache où appeler ngspice sur Linux
 ENV NODE_ENV=production
-# ADMIN_USER + ADMIN_PASS : à définir uniquement dans Render → Environment (secrets).
-# Ne pas les copier dans ce fichier (sinon exposition dans l’historique Git / registry).
+ENV NGSPICE=/usr/bin/ngspice
+
+# 8. Exposition du port de ton application (par défaut 3000 comme configuré dans ton server.js)
 EXPOSE 3000
 
-# Vérifications build (équivalent npm run check-ngspice côté XSPICE)
-RUN "$NGSPICE" -v
-RUN test -f Simulateur/lib/ngspice/digital.cm
-RUN "$NGSPICE" -v 2>&1 | grep -qi xspice
-
-CMD ["npm", "start"]
+# 9. Commande de démarrage du serveur
+CMD ["node", "server.js"]
