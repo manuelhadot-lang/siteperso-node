@@ -910,10 +910,12 @@ app.post("/api/simulate", async (req, res) => {
                 `Sur Render / Docker / Linux : définir la variable d’environnement NGSPICE=/usr/bin/ngspice (voir Dockerfile) ou installer ngspice via le système ; ne pas déployer Simulateur/bin/ngspice.exe sur le serveur. ` +
                 `En local Windows : utiliser ngspice.exe dans Simulateur/bin/ ou NGSPICE vers votre installation.`;
         } else if (missing) {
+            const exeBase = path.basename(String(exeTried || "")).toLowerCase().replace(/\.exe$/i, "");
+            const probe = exeBase === "ngspice_con" ? "ngspice_con -v" : "ngspice -v";
             const hint = isWin32Platform()
-                ? "place ngspice.exe ou ngspice_con.exe dans Simulateur/bin/, ou définis NGSPICE / NGSPICE_PATH"
-                : "installe ngspice (apt install ngspice) ou définis NGSPICE=/usr/bin/ngspice";
-            primary = `ngspice introuvable ou non exécutable (essayé : ${exeTried}). ${hint}, puis relance npm start depuis le même terminal où « ngspice -v » fonctionne.`;
+                ? "sur Windows : place ngspice_con.exe dans Simulateur/bin/ (livré avec le projet), supprime une éventuelle variable NGSPICE=ngspice mal définie, ou pointe NGSPICE vers le chemin complet du .exe"
+                : "sur Linux : installe ngspice (apt install ngspice) puis exporte NGSPICE=/usr/bin/ngspice — ne déploie pas les .exe Windows sur le serveur";
+            primary = `ngspice introuvable ou non exécutable (essayé : ${exeTried}). ${hint}, puis relance npm start depuis le même terminal où « ${probe} » fonctionne.`;
         } else if (securityBlock) {
             primary =
                 `Exécution de ngspice bloquée (${exeTried}). Un antivirus ou une stratégie « logiciel inconnu » (ex. Trend Micro) peut empêcher ngspice.exe : seul un administrateur informatique peut créer une exception. ` +
@@ -1561,6 +1563,8 @@ app.post('/api/save-note', (req, res) => {
 });
 
 server.listen(PORT, LISTEN_HOST, () => {
+    const { exe: ngspiceExe } = resolveNgspiceForServer(__dirname);
+    console.log(`🔬 Simulateur ngspice : ${ngspiceExe}`);
     console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`);
     if (siteAccessPasswordConfigured()) {
         console.log('🔐 Accès site protégé : visitez n’importe quelle URL pour être redirigé vers /acces-site');

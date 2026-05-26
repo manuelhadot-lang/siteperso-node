@@ -51,7 +51,12 @@ function pathsEqual(a, b) {
 }
 
 /** Noms des exécutables Windows dans Simulateur/bin (ordre de préférence). */
-const WIN_BUNDLE_EXE_NAMES = ["ngspice.exe", "ngspice_con.exe"];
+const WIN_BUNDLE_EXE_NAMES = ["ngspice_con.exe", "ngspice.exe"];
+
+function isBareNgspiceCommand(exe) {
+    const base = path.basename(String(exe || "")).toLowerCase().replace(/\.exe$/i, "");
+    return base === "ngspice" || base === "ngspice_con";
+}
 
 /**
  * @param {string} binDir
@@ -98,6 +103,11 @@ function resolveBundledNgspice(binDir, libDir) {
         return { exe: path.normalize(unixExe), prependPath: prepend };
     }
 
+    const winCon = path.join(binDir, "ngspice_con.exe");
+    if (!isWin32() && fs.existsSync(winCon)) {
+        return { exe: path.normalize(winCon), prependPath: prepend };
+    }
+
     return null;
 }
 
@@ -125,7 +135,10 @@ function resolveNgspiceForServer(appRoot) {
     const raw = process.env.NGSPICE || process.env.NGSPICE_PATH;
     if (typeof raw === "string" && raw.trim().length > 0) {
         const exe = resolveNgspiceCandidate(raw, appRoot);
-        if (!ngspiceCandidateExists(exe, appRoot) && bundled) {
+        if (
+            bundled &&
+            (isBareNgspiceCommand(exe) || !ngspiceCandidateExists(exe, appRoot))
+        ) {
             return bundled;
         }
         const exeDir = path.dirname(path.resolve(exe));
@@ -137,7 +150,14 @@ function resolveNgspiceForServer(appRoot) {
 
     if (bundled) return bundled;
 
-    return { exe: "ngspice", prependPath: [] };
+    const winFallback = isWin32() ? findWindowsBundledExe(binDir) : null;
+    if (winFallback) {
+        return { exe: winFallback, prependPath: prependForSimulateurBin() };
+    }
+
+    // Aucun bundle trouvé : tenter le nom le plus courant sur la plateforme.
+    // Windows : ngspice_con (console build, sans dépendance X). Linux/macOS : ngspice.
+    return { exe: isWin32() ? "ngspice_con" : "ngspice", prependPath: [] };
 }
 
 /**

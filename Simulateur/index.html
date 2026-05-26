@@ -2,244 +2,56 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Circuit Designer Pro - Graphique</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur de Circuits Electroniques</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
     <header class="navbar">
-        <input type="file" id="file-open-input" accept=".json,application/json" hidden>
-
         <div class="menu-item">
-            📁 Fichier
+            <span class="menu-icon">📁</span> Fichier
             <div class="dropdown">
-                <button type="button" onclick="nouveauDocument()">📄 Nouveau</button>
-                <button type="button" onclick="openCircuit()">📂 Ouvrir…</button>
-                <button type="button" onclick="save()">💾 Enregistrer</button>
-                <button type="button" onclick="saveAs()">💾 Enregistrer sous…</button>
-                <button type="button" onclick="window.close()" style="border-top: 1px solid #444; color: #ff5555;">❌ Quitter</button>
+                <div class="dropdown-item" id="btn-new">📄 Nouveau</div>
+                <div class="dropdown-item" id="btn-open">📂 Ouvrir...</div>
+                <div class="dropdown-item" id="btn-save">💾 Enregistrer</div>
+                <div class="dropdown-item" id="btn-save-as">💾 Enregistrer sous...</div>
             </div>
         </div>
-
         <div class="menu-item">
-            🌓 Affichage
+            <span class="menu-icon">⚡</span> Sources
             <div class="dropdown">
-                <button type="button" onclick="setTheme('black')">🌑 Thème sombre</button>
-                <button type="button" onclick="setTheme('white')">☀️ Thème clair</button>
-                <button type="button" onclick="toggleGrid()" id="grid-toggle-btn">▦ Grille : Active</button>
+                <div class="dropdown-item" draggable="true" data-component="battery">🔋 Pile 5V</div>
             </div>
         </div>
-
         <div class="menu-item">
-            🧩 Composants
+            <span class="menu-icon">🔌</span> Composants
             <div class="dropdown">
-                <button draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'resistor')">▭ Résistance</button>
-                <button draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'capacitor')">⫿ Condensateur</button>
-                <button draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'inductor')">∿ Bobine</button>
-                <button draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'diode')">▷| Diode (1N4148)</button>
-                <div class="menu-item-has-submenu">
-                    <span class="submenu-label">⊳ NPN ▸</span>
-                    <div class="dropdown submenu">
-                        <button draggable="true"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event, 'npn', '2N2222')">2N2222</button>
-                    </div>
-                </div>
-                <div class="menu-item-has-submenu">
-                    <span class="submenu-label">△ AOP ▸</span>
-                    <div class="dropdown submenu">
-                        <button draggable="true"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event, 'opamp', 'LM741')">LM741</button>
-                    </div>
-                </div>
+                <div class="dropdown-item" draggable="true" data-component="resistor">⚡ Résistance</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <span class="menu-icon">🧠</span> Logique
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="nand">👾 Porte NAND</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <span class="menu-icon">📊</span> Instruments
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="voltmeter">🩺 Voltmètre</div>
             </div>
         </div>
 
-        <div class="menu-item menu-panel-aligned">
-            🔋 Sources
-            <div class="dropdown menu-dropdown-aligned">
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'vsource')"><span class="menu-icon" aria-hidden="true">🔋</span><span class="menu-label">Pile DC (5V)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'vsin')"><span class="menu-icon" aria-hidden="true">∿</span><span class="menu-label">Générateur sinus</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'vsquare')"><span class="menu-icon" aria-hidden="true">⊓</span><span class="menu-label">Générateur carré</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'vterm')"><span class="menu-icon" aria-hidden="true">△</span><span class="menu-label">Borne (5V)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'logic_state')"><span class="menu-icon" aria-hidden="true">0/1</span><span class="menu-label">État logique</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'ground')"><span class="menu-icon" aria-hidden="true">⏚</span><span class="menu-label">Masse (GND)</span></button>
-            </div>
-        </div>
+        <button id="btn-simulate">🚀 Lancer Simulation</button>
 
-        <div class="menu-item menu-panel-aligned">
-            💡 Opto
-            <div class="dropdown menu-dropdown-aligned">
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'led')"><span class="menu-icon" aria-hidden="true">●</span><span class="menu-label">LED</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'lamp')"><span class="menu-icon" aria-hidden="true">💡</span><span class="menu-label">Lampe</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'seg7')"><span class="menu-icon" aria-hidden="true">8</span><span class="menu-label">7 Segments</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'lcd')"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">LCD</span></button>
-            </div>
-        </div>
-
-        <div class="menu-item menu-panel-aligned">
-            Logique
-            <div class="dropdown menu-dropdown-aligned">
-                <div class="menu-item-has-submenu">
-                    <span class="submenu-label">Portes ▸</span>
-                    <div class="dropdown submenu menu-dropdown-aligned">
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_not"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">1</span><span class="menu-label">Inverseur (NOT)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_and"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&amp;</span><span class="menu-label">ET (AND)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_or"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&#8805;1</span><span class="menu-label">OU (OR)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_nand"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&amp;</span><span class="menu-label">NON-ET (NAND)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_nor"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">&#8805;1</span><span class="menu-label">NON-OU (NOR)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_xor"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">=1</span><span class="menu-label">OU exclusif (XOR)</span></button>
-                <button type="button" class="menu-row" draggable="true" data-comp-type="logic_xnor"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">=1</span><span class="menu-label">NON-OU exclusif (XNOR)</span></button>
-                    </div>
-                </div>
-                <div class="menu-item-has-submenu">
-                    <span class="submenu-label">Bascule ▸</span>
-                    <div class="dropdown submenu menu-dropdown-aligned">
-                        <button type="button" class="menu-row" draggable="true" data-comp-type="logic_dff"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">D</span><span class="menu-label">Bascule D</span></button>
-                        <button type="button" class="menu-row" draggable="true" data-comp-type="logic_jk"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">JK</span><span class="menu-label">Bascule JK</span></button>
-                    </div>
-                </div>
-                <div class="menu-item-has-submenu">
-                    <span class="submenu-label">Circuits logiques ▸</span>
-                    <div class="dropdown submenu menu-dropdown-aligned">
-                        <button type="button" class="menu-row" draggable="true" data-comp-type="ic_74ls00"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">74HC00 (4× NAND)</span></button>
-                        <button type="button" class="menu-row" draggable="true" data-comp-type="ic_74ls74"
-                                onmousedown="event.stopPropagation()"
-                                ondragstart="handleDragStart(event)"><span class="menu-icon" aria-hidden="true">▣</span><span class="menu-label">74LS74 (2× D)</span></button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="menu-item menu-panel-aligned">
-            ⌨ Commandes
-            <div class="dropdown menu-dropdown-aligned">
-                <button type="button" class="menu-row" onclick="menuOpenCommandsHelp()"><span class="menu-icon" aria-hidden="true">?</span><span class="menu-label">Raccourcis clavier et souris</span></button>
-            </div>
-        </div>
-
-        <div class="menu-item menu-panel-aligned">
-            👁 Visualisation
-            <div class="dropdown menu-dropdown-aligned">
-                <button type="button" class="menu-row" onclick="menuOpenOscilloscope()"><span class="menu-icon" aria-hidden="true">📈</span><span class="menu-label">Oscilloscope</span></button>
-                <button type="button" class="menu-row" onclick="menuToggleSimPanel()"><span class="menu-icon" aria-hidden="true">▤</span><span class="menu-label">Panneau simulation</span></button>
-            </div>
-        </div>
-
-        <div class="menu-item menu-panel-aligned">
-            📏 Mesures
-            <div class="dropdown menu-dropdown-aligned">
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'voltmeter')"><span class="menu-icon" aria-hidden="true">🅥</span><span class="menu-label">Voltmètre (DC)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'ammeter')"><span class="menu-icon" aria-hidden="true">🅐</span><span class="menu-label">Ampèremètre (DC)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'voltmeter_rms')"><span class="menu-icon" aria-hidden="true">V~</span><span class="menu-label">Voltmètre (Veff)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'ammeter_rms')"><span class="menu-icon" aria-hidden="true">A~</span><span class="menu-label">Ampèremètre (Aeff)</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'ohmmeter')"><span class="menu-icon" aria-hidden="true">Ω</span><span class="menu-label">Ohmmètre</span></button>
-                <button type="button" class="menu-row" draggable="true"
-                        onmousedown="event.stopPropagation()"
-                        ondragstart="handleDragStart(event, 'oscilloscope')"><span class="menu-icon" aria-hidden="true">📈</span><span class="menu-label">Oscilloscope</span></button>
-            </div>
-        </div>
-
-        <div class="sim-toolbar">
-            <button id="runBtn" type="button">▶ Simulation en direct</button>
-            <button id="stopSimBtn" type="button" hidden>■ Arrêter</button>
-        </div>
+        <div class="info-space">⌨️ [Shift] + Cadre pour sélectionner | [R] Rotation | [Suppr] Effacer</div>
     </header>
 
-    <main id="editor-container">
-        <div id="editor-workarea" class="editor-workarea">
-            <canvas id="schematicCanvas" tabindex="-1" aria-label="Schéma du circuit"></canvas>
-            <div id="comp-value-editor" class="comp-value-editor" hidden>
-                <input id="comp-value-input" type="text" spellcheck="false" autocomplete="off" aria-label="Valeur du composant">
-            </div>
-            <div id="led-color-editor" class="led-color-editor" hidden>
-                <label for="led-color-input">Couleur LED</label>
-                <input id="led-color-input" type="color" aria-label="Couleur de la LED">
-            </div>
-            <div id="ui-info">
-                <span id="tool-info">Fils : clic borne pour début/fin | croisement sans jonction | Échap : figer l’extrémité | Suppr : supprimer | NPN/AOP : X/Y, R | Ctrl+C/V | Clic droit : vue</span> |
-                <span id="coords">X: 0, Y: 0</span>
-            </div>
-        </div>
-        <section id="sim-panel" class="sim-panel" aria-label="Simulation et réglages">
-            <div class="sim-panel-toolbar">
-                <span class="sim-panel-toolbar-title">Simulation</span>
-                <button type="button" id="sim-panel-close-btn" class="sim-panel-close-btn" onclick="closeSimPanel()" title="Fermer le panneau">✕ Fermer</button>
-            </div>
-            <div id="sim-panel-row" class="sim-panel-row">
-                <div id="inspector-panel" class="inspector-panel" hidden>
-                    <h3 class="sim-panel-title" id="inspector-title">Réglages composant</h3>
-                    <div id="inspector-body" class="inspector-body"></div>
-                </div>
-                <div id="sim-results-wrap" class="sim-results-wrap">
-                    <h3 class="sim-panel-title">Résultats simulation (ngspice)</h3>
-                    <div id="sim-panel-body" class="sim-panel-body">
-                        <p class="sim-muted">Lancez une simulation avec le bouton ▶.</p>
-                    </div>
-                </div>
-            </div>
-            <p id="inspector-placeholder" class="sim-muted inspector-placeholder">Cliquez sur un générateur sinus ou carré pour afficher ses réglages à côté des résultats.</p>
-        </section>
+    <main class="canvas-container">
+        <canvas id="circuitCanvas"></canvas>
     </main>
 
-    <script src="script.js?v=logic-xspice-20260521"></script>
+    <script src="app.js"></script>
 </body>
 </html>
