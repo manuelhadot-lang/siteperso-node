@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulateur de Circuits Electroniques</title>
+    <title>Simulateur de Circuits Électroniques</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,40 +18,110 @@
                 <div class="dropdown-item" id="btn-save-as">💾 Enregistrer sous...</div>
             </div>
         </div>
+
+        <div class="menu-item">
+            <span class="menu-icon">⚙️</span> Éditeur
+            <div class="dropdown">
+                <div class="dropdown-item" id="btn-commands">⌨️ Commandes</div>
+            </div>
+        </div>
+
         <div class="menu-item">
             <span class="menu-icon">⚡</span> Sources
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="battery">🔋 Pile 5V</div>
+                <div class="dropdown-item" draggable="true" data-component="battery">🔋 Pile DC</div>
+                <div class="dropdown-item" draggable="true" data-component="vcc">🔌 Alimentation VCC</div>
+                <div class="dropdown-item" draggable="true" data-component="gnd">📐 Masse (0V)</div>
+                <div class="dropdown-item" draggable="true" data-component="gimp">⚡ GImp (Impulsions)</div>
             </div>
         </div>
+
         <div class="menu-item">
             <span class="menu-icon">🔌</span> Composants
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="resistor">⚡ Résistance</div>
+                <div class="dropdown-item" draggable="true" data-component="resistor">🟦 Résistance</div>
             </div>
         </div>
+
         <div class="menu-item">
             <span class="menu-icon">🧠</span> Logique
             <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="logic_terminal">🎛️ Borne Numérique (0/1)</div>
                 <div class="dropdown-item" draggable="true" data-component="nand">👾 Porte NAND</div>
+                <div class="dropdown-item" draggable="true" data-component="d_flipflop">💾 Bascule D (Flip-Flop)</div>
+                <div class="dropdown-item" draggable="true" data-component="jk_flipflop">🔁 Bascule JK (Flip-Flop)</div>
             </div>
         </div>
+
         <div class="menu-item">
-            <span class="menu-icon">📊</span> Instruments
+            <span class="menu-icon">🚨</span> Opto
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="voltmeter">🩺 Voltmètre</div>
+                <div class="dropdown-item" draggable="true" data-component="led">🔴 LED (Rouge)</div>
             </div>
         </div>
 
-        <button id="btn-simulate">🚀 Lancer Simulation</button>
+        <div class="menu-item">
+            <span class="menu-icon">📊</span> Mesures
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="voltmeter">📟 Voltmètre</div>
+            </div>
+        </div>
 
-        <div class="info-space">⌨️ [Shift] + Cadre pour sélectionner | [R] Rotation | [Suppr] Effacer</div>
+        <div class="simulation-controls">
+            <button id="btn-simulate">🚀 Lancer Simulation</button>
+            <button id="btn-stop" class="disabled">🛑 Stop</button>
+        </div>
     </header>
+
+    <div id="commands-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-commands">&times;</span>
+            <h2>Commandes de l'Éditeur</h2>
+            <div class="modal-body">
+                <p><strong>Ctrl + C / Ctrl + V :</strong> Copier / Coller la sélection (Évite le double-copier)</p>
+                <p><strong>Clic simple (Simulation active) :</strong> Commuter l'état (0 ou 1) d'une Borne Logique</p>
+                <p><strong>Clic simple (Hors simulation) :</strong> Sélectionner un fil ou un composant</p>
+                <p><strong>Double-clic :</strong> Modifier la valeur (Résistances, VCC, Niveau Haut de Borne Logique)</p>
+                <p><strong>[Shift] + Glisser cadre :</strong> Sélectionner plusieurs composants</p>
+                <p><strong>[R] :</strong> Pivoter les composants sélectionnés de 90° (sauf bascules et GImp)</p>
+                <p><strong>[X] :</strong> Retourner horizontalement le GImp sélectionné</p>
+                <p><strong>[Suppr] ou [Backspace] :</strong> Supprimer la sélection (Composants ou fil choisi)</p>
+                <p><strong>[Espace] :</strong> Ajouter un point d'ancrage intermédiaire sur un fil en cours de tracé</p>
+                <p><strong>[Ctrl] + [Z] / [Ctrl] + [Y] :</strong> Annuler / Rétablir</p>
+            </div>
+        </div>
+    </div>
 
     <main class="canvas-container">
         <canvas id="circuitCanvas"></canvas>
     </main>
 
-    <script src="app.js"></script>
+    <div id="gimp-panel" class="bottom-panel hidden">
+        <div class="panel-header">
+            <span id="gimp-panel-title">GImp — Réglages</span>
+            <button type="button" id="gimp-panel-close" class="panel-close" title="Fermer">&times;</button>
+        </div>
+        <div class="panel-body">
+            <label class="panel-field">
+                <span>Amplitude</span>
+                <select id="gimp-voltage">
+                    <option value="5">0 – 5 V</option>
+                    <option value="3.3">0 – 3,3 V</option>
+                </select>
+            </label>
+            <label class="panel-field">
+                <span>Fréquence</span>
+                <input type="number" id="gimp-freq" min="0.1" step="any" value="1000">
+                <span class="panel-unit">Hz</span>
+            </label>
+            <label class="panel-field">
+                <span>Rapport cyclique</span>
+                <input type="number" id="gimp-duty" min="1" max="99" step="1" value="10">
+                <span class="panel-unit">%</span>
+            </label>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>

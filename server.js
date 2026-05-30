@@ -614,9 +614,10 @@ function runNgspice(netlistPath, outputPath, opts = {}) {
     const { exe, prependPath } = resolveNgspiceForServer(__dirname);
     const env = applyPathPrepend(process.env, prependPath);
     const cwd = opts.cwd || __dirname;
-    const args = ["-b"];
-    if (opts.xspiceRc) args.push("-f", opts.xspiceRc);
-    args.push("-o", outputPath, netlistPath);
+    // NB : pas de « -f rc ». L'option -f n'existe pas dans ngspice-46 (elle bascule en
+    // mode interactif, n'exécute rien et n'écrit pas le -o log). Les codemodels XSPICE
+    // (dont digital.cm) sont chargés automatiquement par spinit (../lib/ngspice/digital.cm).
+    const args = ["-b", "-o", outputPath, netlistPath];
     return new Promise((resolve, reject) => {
         execFile(
             exe,

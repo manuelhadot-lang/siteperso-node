@@ -1,0 +1,4 @@
+* Configuration pour Ngspice 46 Windows
+codemodel ../lib/ngspice/spice2poly.cm
+codemodel ../lib/ngspice/analog.cm
+codemodel ../lib/ngspice/digital.cm
