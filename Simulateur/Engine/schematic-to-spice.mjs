@@ -158,13 +158,15 @@ function terminalKeysForComponent(c) {
 }
 
 /** Comparateur / Schmitt (boucle + ou boucle ouverte) : bascule dure. Amplificateur (boucle −) : tanh raide. */
-function opampUsesComparatorModel(c, parent) {
+function opampUsesComparatorModel(c, parent, components) {
+    const topo = new Map(parent);
+    ufUnionPassiveInternals(topo, components);
     const outKey = `${c.id}#2`;
     const posKey = `${c.id}#0`;
     const negKey = `${c.id}#1`;
-    const outRoot = ufFind(parent, outKey);
-    const posRoot = ufFind(parent, posKey);
-    const negRoot = ufFind(parent, negKey);
+    const outRoot = ufFind(topo, outKey);
+    const posRoot = ufFind(topo, posKey);
+    const negRoot = ufFind(topo, negKey);
     const positiveFeedback = outRoot === posRoot;
     const negativeFeedback = outRoot === negRoot;
     return positiveFeedback || !negativeFeedback;
@@ -175,7 +177,7 @@ function formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode = false
     const vp = parseOpampVp(c);
     const vn = parseOpampVn(c);
     const bname = spiceBranchName("BAOP", c.id);
-    const diff = `V(${nPlus})-V(${nMinus})`;
+    const diff = spiceVoltageDiffExpr(nPlus, nMinus);
     if (comparatorMode) {
         return `${bname} ${nOut} 0 V={${vn}+(${vp}-${vn})*u(${diff})}`;
     }
@@ -202,6 +204,60 @@ function isPowerSourceType(t) {
 /** Courant de test pour l’ohmètre (mesure R = ΔV / I). */
 const OHMMETER_TEST_CURRENT_A = 0.001;
 
+/** Met à 0 les sources indépendantes pour mesure Ω (comme un multimètre). */
+function zeroIndependentSourceLine(line) {
+    const t = String(line || "").trim();
+    if (/^IOHM_/i.test(t)) return line;
+    if (/^VI_/i.test(t)) return line;
+    if (/^V[^\s]+\s+.+\s+DC\s+/i.test(t)) {
+        return line.replace(/(\sDC\s+)[^\s]+/i, "$10");
+    }
+    if (/^V[^\s]+\s+.+\s+(SIN|PULSE)\(/i.test(t)) {
+        return line.replace(/\s+(SIN|PULSE)\([^)]*\)/i, " DC 0");
+    }
+    return line;
+}
+
+/**
+ * Netlist .op avec sources coupées — mesure de résistance entre les bornes de l'ohmmètre.
+ * @param {string} fullNetlist
+ * @param {{ id: string; nodePlus: string; nodeMinus: string }[]} ohmeters
+ */
+export function buildOhmmeterIsolationNetlist(fullNetlist, ohmeters) {
+    if (!fullNetlist || !Array.isArray(ohmeters) || ohmeters.length === 0) return "";
+    const out = [];
+    let skipControl = false;
+    for (const raw of fullNetlist.split(/\r?\n/)) {
+        const t = raw.trim();
+        if (/^\.(tran|op)\b/i.test(t)) continue;
+        if (t === ".control") {
+            skipControl = true;
+            continue;
+        }
+        if (t === ".endc") {
+            skipControl = false;
+            continue;
+        }
+        if (skipControl) continue;
+        if (t.startsWith("wrdata")) continue;
+        if (t === ".end") continue;
+        if (/^\.options\b/i.test(t)) continue;
+        out.push(zeroIndependentSourceLine(raw));
+    }
+    out.push(".op");
+    out.push(".control");
+    out.push("op");
+    for (const om of ohmeters) {
+        out.push(`echo @@OH:${om.id}@@`);
+        if (om.nodePlus !== "0") out.push(`print v(${om.nodePlus})`);
+        if (om.nodeMinus !== "0") out.push(`print v(${om.nodeMinus})`);
+    }
+    out.push("quit");
+    out.push(".endc");
+    out.push(".end");
+    return out.join("\n");
+}
+
 function ufFind(parent, x) {
     if (!parent.has(x)) parent.set(x, x);
     const p = parent.get(x);
@@ -217,6 +273,29 @@ function ufUnion(parent, a, b) {
     const ra = ufFind(parent, a);
     const rb = ufFind(parent, b);
     if (ra !== rb) parent.set(ra, rb);
+}
+
+/** Résistances / passifs : même nœud électrique aux deux bornes (pour détecter la rétroaction AOP). */
+function ufUnionPassiveInternals(parent, components) {
+    for (const c of components) {
+        if (c.type === "resistor" || c.type === "capacitor" || c.type === "inductor") {
+            ufUnion(parent, `${c.id}#0`, `${c.id}#1`);
+        }
+    }
+}
+
+function spiceVoltageExpr(nodeName) {
+    const n = String(nodeName || "").trim();
+    if (n === "0") return "0";
+    return `V(${n})`;
+}
+
+function spiceVoltageDiffExpr(nPlus, nMinus) {
+    const p = String(nPlus || "").trim();
+    const m = String(nMinus || "").trim();
+    if (m === "0") return spiceVoltageExpr(p);
+    if (p === "0") return `-V(${m})`;
+    return `V(${p})-V(${m})`;
 }
 
 function parseResistanceOhm(s) {
@@ -246,15 +325,27 @@ function parseCapacitanceFarad(s) {
     if (t.endsWith("uf")) {
         mult = 1e-6;
         t = t.slice(0, -2);
-    } else if (t.endsWith("nf")) {
-        mult = 1e-9;
-        t = t.slice(0, -2);
+    } else if (t.endsWith("u")) {
+        mult = 1e-6;
+        t = t.slice(0, -1);
     } else if (t.endsWith("pf")) {
         mult = 1e-12;
+        t = t.slice(0, -2);
+    } else if (t.endsWith("nf")) {
+        mult = 1e-9;
         t = t.slice(0, -2);
     } else if (t.endsWith("mf")) {
         mult = 1e-3;
         t = t.slice(0, -2);
+    } else if (t.endsWith("p")) {
+        mult = 1e-12;
+        t = t.slice(0, -1);
+    } else if (t.endsWith("n")) {
+        mult = 1e-9;
+        t = t.slice(0, -1);
+    } else if (t.endsWith("m")) {
+        mult = 1e-3;
+        t = t.slice(0, -1);
     } else if (t.endsWith("f")) {
         mult = 1;
         t = t.slice(0, -1);
@@ -271,6 +362,9 @@ function parseInductanceHenry(s) {
     if (t.endsWith("mh")) {
         mult = 1e-3;
         t = t.slice(0, -2);
+    } else if (t.endsWith("m")) {
+        mult = 1e-3;
+        t = t.slice(0, -1);
     } else if (t.endsWith("uh")) {
         mult = 1e-6;
         t = t.slice(0, -2);
@@ -608,13 +702,13 @@ function formatSpiceTime(seconds) {
     return `${s.toExponential(3)}`;
 }
 
-/** Aligné sur l’oscilloscope (8 div. horizontales, jusqu’à 500 µs/div). */
+/** Aligné sur l’oscilloscope UI (8 div. horizontales, jusqu’à 100 ms/div). */
 const TRAN_SCOPE_H_DIVS = 8;
-const TRAN_MAX_TIME_DIV_SEC = 5e-4;
+const TRAN_MAX_TIME_DIV_SEC = 0.1;
 const TRAN_SAMPLES_PER_PERIOD = 200;
-const TRAN_MAX_POINTS = 30000;
+const TRAN_MAX_POINTS = 50000;
 
-/** Pas et durée de simulation transitoire selon les générateurs AC du schéma. */
+/** Pas et durée de simulation transitoire selon les générateurs AC et la base de temps du scope. */
 function computeTranTiming(components) {
     let minPeriod = 1;
     for (const c of components) {
@@ -622,11 +716,21 @@ function computeTranTiming(components) {
         const f = parseFreqHz(c.value);
         if (f > 0) minPeriod = Math.min(minPeriod, 1 / f);
     }
-    const tstep = minPeriod / TRAN_SAMPLES_PER_PERIOD;
-    let tstop = Math.max(minPeriod * 8, TRAN_SCOPE_H_DIVS * TRAN_MAX_TIME_DIV_SEC);
 
-    // Compteur ripple (N bascules) : le bit MSB a une période ≈ T_clk × 2^N.
-    // Il faut au moins 2^N fronts horloge LSB pour dépasser 7, 15, … (ex. 4 bascules → 16 impulsions).
+    let scopeWindowSec = 0;
+    for (const c of components) {
+        if (c.type === "oscilloscope" && Number(c.timeDivSec) > 0) {
+            scopeWindowSec = Math.max(scopeWindowSec, c.timeDivSec * TRAN_SCOPE_H_DIVS);
+        }
+    }
+    if (scopeWindowSec <= 0) scopeWindowSec = TRAN_SCOPE_H_DIVS * 0.001;
+
+    let tstep = minPeriod / TRAN_SAMPLES_PER_PERIOD;
+    const hasScope = components.some((c) => c.type === "oscilloscope");
+    let tstop = hasScope
+        ? Math.max(scopeWindowSec, minPeriod * 2)
+        : Math.max(minPeriod * 8, scopeWindowSec);
+
     const numFf = components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length;
     if (numFf > 0) {
         const ripplePeriods = (1 << numFf) + 2;
@@ -634,7 +738,14 @@ function computeTranTiming(components) {
     }
 
     if (tstop / tstep > TRAN_MAX_POINTS) {
-        tstop = tstep * TRAN_MAX_POINTS;
+        tstep = tstop / TRAN_MAX_POINTS;
+        const minStep = minPeriod / 40;
+        if (tstep > minStep && minPeriod < 1) {
+            tstep = minStep;
+            if (tstop / tstep > TRAN_MAX_POINTS) {
+                tstop = tstep * TRAN_MAX_POINTS;
+            }
+        }
     }
     return {
         tstep,
@@ -912,6 +1023,21 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             /* Source 0 V en série : ngspice ne fournit pas toujours i(D_*), mais i(VIL_*) oui. */
             lines.push(`${spiceBranchName("VIL", c.id)} ${anode} ${mid} 0`);
             lines.push(`${spiceBranchName("D", c.id)} ${mid} ${cathode} DLED`);
+        } else if (c.type === "seg7") {
+            const nCom = nodeFor(`${c.id}#7`);
+            if (!declaredDiodeModels.has("DLED")) {
+                declaredDiodeModels.add("DLED");
+                lines.push(
+                    `.model DLED D (IS=1.05E-15 N=1.8 RS=15 BV=50 IBV=10u CJO=10p)`
+                );
+            }
+            for (let i = 0; i < 7; i++) {
+                const nSeg = nodeFor(`${c.id}#${i}`);
+                touch(`${c.id}#__seg${i}`);
+                const mid = nodeFor(`${c.id}#__seg${i}`);
+                lines.push(`${spiceBranchName("VIL", `${c.id}_s${i}`)} ${nSeg} ${mid} 0`);
+                lines.push(`${spiceBranchName("D", `${c.id}_s${i}`)} ${mid} ${nCom} DLED`);
+            }
         } else if (c.type === "npn") {
             const nb = nodeFor(`${c.id}#0`);
             const nc = nodeFor(`${c.id}#1`);
@@ -933,7 +1059,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const nPlus = nodeFor(`${c.id}#0`);
             const nMinus = nodeFor(`${c.id}#1`);
             const nOut = nodeFor(`${c.id}#2`);
-            const comparatorMode = opampUsesComparatorModel(c, parent);
+            const comparatorMode = opampUsesComparatorModel(c, parent, components);
             lines.push(formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode }));
         } else if (isLogicGateComponentType(c.type)) {
             const inKeys = logicGateInputNodeKeys(c);
@@ -984,10 +1110,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const vhi = resolveIc74ls74Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendIc74ls74Netlist(c, nodeFor, vhi, lines, spiceBranchName);
         } else if (c.type === "vsource") {
-            const n0 = nodeFor(`${c.id}#0`);
-            const n1 = nodeFor(`${c.id}#1`);
+            const nPlus = nodeFor(`${c.id}#0`);
+            const nMinus = nodeFor(`${c.id}#1`);
             const v = parseDcVolts(c.value);
-            lines.push(`${spiceBranchName("V", c.id)} ${n0} ${n1} DC ${v}`);
+            lines.push(`${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} DC ${v}`);
         } else if (c.type === "vterm") {
             const n0 = nodeFor(`${c.id}#0`);
             const v = parseDcVolts(c.value);
@@ -997,16 +1123,16 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const v = parseLogicStateVolts(c.value, c.logicRail);
             lines.push(`${spiceBranchName("V", c.id)} ${n0} 0 DC ${v}`);
         } else if (c.type === "vsin") {
-            const n0 = nodeFor(`${c.id}#0`);
-            const n1 = nodeFor(`${c.id}#1`);
+            const nMinus = nodeFor(`${c.id}#0`);
+            const nPlus = nodeFor(`${c.id}#1`);
             const vpk = parseSinusAmplitudeVolts(c.value);
             const freq = parseFreqHz(c.value);
             const voff = parseOffsetVolts(c.value);
             const phi = parsePhaseDeg(c.value);
-            lines.push(`${spiceBranchName("V", c.id)} ${n0} ${n1} SIN(${voff} ${vpk} ${freq} 0 0 ${phi})`);
+            lines.push(`${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} SIN(${voff} ${vpk} ${freq} 0 0 ${phi})`);
         } else if (c.type === "vsquare") {
-            const n0 = nodeFor(`${c.id}#0`);
-            const n1 = nodeFor(`${c.id}#1`);
+            const nMinus = nodeFor(`${c.id}#0`);
+            const nPlus = nodeFor(`${c.id}#1`);
             const freq = parseFreqHz(c.value);
             const voff = parseOffsetVolts(c.value);
             const { ampPos, ampNeg } = parseSquareAmplitudes(c.value);
@@ -1015,7 +1141,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const vlow = voff - ampNeg;
             const vhi = voff + ampPos;
             lines.push(
-                `${spiceBranchName("V", c.id)} ${n0} ${n1} PULSE(${vlow} ${vhi} 0 1n 1n ${ton} ${period})`
+                `${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} PULSE(${vlow} ${vhi} 0 1n 1n ${ton} ${period})`
             );
         } else if (c.type === "vpulse") {
             const n0 = nodeFor(`${c.id}#0`);
@@ -1082,6 +1208,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             testCurrent: OHMMETER_TEST_CURRENT_A,
         });
     }
+    if (ohmeters.length > 0 && (powerSrc || hasVtermPower)) {
+        warnings.push(
+            "Ohmmètre : la résistance affichée est mesurée avec les sources du circuit coupées (mode Ω d'un multimètre)."
+        );
+    }
 
     const oscilloscopes = [];
     for (const c of components) {
@@ -1146,7 +1277,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 `Voltmètre (eff.) ${c.id} : les deux bornes sont sur le même nœud (${np}). Vérifiez le câblage.`
             );
         }
-        voltmetersRms.push({ id: c.id, nodePlus: np, nodeMinus: nm });
+        voltmetersRms.push({ id: c.id, nodePlus: nm, nodeMinus: np });
     }
 
     const ammetersRms = [];
@@ -1191,8 +1322,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
     const scopesTranMeta = [];
     const ledsTranMeta = [];
+    const seg7TranMeta = [];
     const logicGatesTranMeta = [];
-    const metersTranMeta = { voltmetersRms: [], ammetersRms: [] };
+    const metersTranMeta = { voltmetersRms: [], ammetersRms: [], voltmeters: [], ammeters: [], ohmmeters: [] };
     let analysisTran = false;
 
     lines.push("");
@@ -1200,19 +1332,17 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const voltmeters = [];
     for (const c of components) {
         if (c.type !== "voltmeter") continue;
-        const kp = `${c.id}#0`;
-        const km = `${c.id}#1`;
-        const np = nodeFor(kp);
-        const nm = nodeFor(km);
-        if (np === nm) {
+        const nMinus = nodeFor(`${c.id}#0`);
+        const nPlus = nodeFor(`${c.id}#1`);
+        if (nPlus === nMinus) {
             warnings.push(
-                `Voltmètre ${c.id} : les deux bornes sont sur le même nœud (${np}). Vérifiez le câblage des deux fils.`
+                `Voltmètre ${c.id} : les deux bornes sont sur le même nœud (${nPlus}). Vérifiez le câblage des deux fils.`
             );
         }
         voltmeters.push({
             id: c.id,
-            nodePlus: np,
-            nodeMinus: nm,
+            nodePlus: nPlus,
+            nodeMinus: nMinus,
         });
     }
 
@@ -1265,8 +1395,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             wrVars.push(`i(${b})`);
         }
         function channelWrMeta(plusNode, minusNode) {
-            const plusWrIndex = nodeCol.get(plusNode);
+            const plusIsGnd = isSpiceGndNode(plusNode);
             const minusIsGnd = isSpiceGndNode(minusNode);
+            const plusWrIndex = plusIsGnd ? null : nodeCol.get(plusNode);
             const minusWrIndex = minusIsGnd ? null : nodeCol.get(minusNode);
             return {
                 plusNode,
@@ -1274,6 +1405,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 wrIndex: plusWrIndex,
                 minusWrIndex,
                 minusIsGnd,
+                plusIsGnd,
             };
         }
         for (const osc of oscilloscopes) {
@@ -1310,6 +1442,43 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 wrVarCount: wrVars.length,
                 branch: am.branch,
                 currentWrIndex: currentCol.get(am.branch),
+            });
+        }
+        for (const vm of voltmeters) {
+            addWrNode(vm.nodePlus);
+            addWrNode(vm.nodeMinus);
+            metersTranMeta.voltmeters.push({
+                id: vm.id,
+                timeCol: 0,
+                wrVarCount: wrVars.length,
+                nodePlus: vm.nodePlus,
+                nodeMinus: vm.nodeMinus,
+                channel: channelWrMeta(vm.nodePlus, vm.nodeMinus),
+            });
+        }
+        for (const am of ammeters) {
+            addWrCurrent(am.branch);
+            metersTranMeta.ammeters.push({
+                id: am.id,
+                timeCol: 0,
+                wrVarCount: wrVars.length,
+                branch: am.branch,
+                currentWrIndex: currentCol.get(am.branch),
+                nodePlus: am.nodePlus,
+                nodeMinus: am.nodeMinus,
+            });
+        }
+        for (const om of ohmeters) {
+            addWrNode(om.nodePlus);
+            addWrNode(om.nodeMinus);
+            metersTranMeta.ohmmeters.push({
+                id: om.id,
+                timeCol: 0,
+                wrVarCount: wrVars.length,
+                nodePlus: om.nodePlus,
+                nodeMinus: om.nodeMinus,
+                testCurrent: om.testCurrent,
+                channel: channelWrMeta(om.nodePlus, om.nodeMinus),
             });
         }
         for (const c of components) {
@@ -1396,6 +1565,25 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 nodeMinus: nodeFor(`${c.id}#1`),
             });
         }
+        const seg7TranMetaLocal = [];
+        for (const c of components) {
+            if (c.type !== "seg7") continue;
+            const segWr = [];
+            for (let i = 0; i < 7; i++) {
+                const n = nodeFor(`${c.id}#${i}`);
+                addWrNode(n);
+                segWr.push(nodeCol.get(n));
+            }
+            const nCom = nodeFor(`${c.id}#7`);
+            addWrNode(nCom);
+            seg7TranMetaLocal.push({
+                id: c.id,
+                timeCol: 0,
+                segmentWrIndex: segWr,
+                commonWrIndex: nodeCol.get(nCom),
+            });
+        }
+        seg7TranMeta.push(...seg7TranMetaLocal);
         const finalWrVarCount = wrVars.length;
         for (const m of ledsTranMeta) {
             m.wrVarCount = finalWrVarCount;
@@ -1413,6 +1601,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             }
             m.wrVarCount = finalWrVarCount;
         }
+        for (const m of seg7TranMeta) {
+            m.wrVarCount = finalWrVarCount;
+        }
         for (const vm of metersTranMeta.voltmetersRms) {
             const def = voltmetersRms.find((v) => v.id === vm.id);
             if (def) vm.channel = channelWrMeta(def.nodePlus, def.nodeMinus);
@@ -1421,6 +1612,20 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         for (const m of metersTranMeta.ammetersRms) {
             m.wrVarCount = finalWrVarCount;
             if (m.branch) m.currentWrIndex = currentCol.get(m.branch);
+        }
+        for (const vm of metersTranMeta.voltmeters) {
+            const def = voltmeters.find((v) => v.id === vm.id);
+            if (def) vm.channel = channelWrMeta(def.nodePlus, def.nodeMinus);
+            vm.wrVarCount = finalWrVarCount;
+        }
+        for (const m of metersTranMeta.ammeters) {
+            m.wrVarCount = finalWrVarCount;
+            if (m.branch) m.currentWrIndex = currentCol.get(m.branch);
+        }
+        for (const om of metersTranMeta.ohmmeters) {
+            const def = ohmeters.find((o) => o.id === om.id);
+            if (def) om.channel = channelWrMeta(def.nodePlus, def.nodeMinus);
+            om.wrVarCount = finalWrVarCount;
         }
         lines.push(`wrdata __TRAN_WAVE_PATH__ ${wrVars.join(" ")}`);
         if (oscilloscopes.length > 0) {
@@ -1690,9 +1895,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         }
     }
 
+    const netlistText = lines.join("\n");
+
     return {
         ok: true,
-        netlist: lines.join("\n"),
+        netlist: netlistText,
         warnings,
         voltmeters,
         ammeters,
@@ -1707,6 +1914,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         voltmetersRms,
         ammetersRms,
         ohmeters,
+        ohmmeterIsolationNetlist:
+            ohmeters.length > 0 ? buildOhmmeterIsolationNetlist(netlistText, ohmeters) : "",
         oscilloscopes,
         nodeMeasures: [],
         scopesTranMeta,
@@ -1714,6 +1923,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         logicGates,
         logicGatesTranMeta,
         metersTranMeta,
+        seg7TranMeta,
         analysisTran,
         seg7Displays: components
             .filter(c => c.type === "seg7")

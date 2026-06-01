@@ -121,8 +121,54 @@ body {
     color: white;
 }
 
-.menu-item:hover .dropdown {
+.menu-item:hover > .dropdown {
     display: block;
+}
+
+.dropdown-submenu {
+    position: relative;
+}
+
+.dropdown-submenu > .submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    min-width: 120px;
+    border-radius: 4px;
+    background-color: var(--panel-bg);
+    border: 2px solid var(--border-color);
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.5);
+    z-index: 2;
+}
+
+.dropdown-submenu.open > .submenu {
+    display: block;
+}
+
+.submenu-title {
+    cursor: pointer;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.panel-field-range {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-field-range input[type="range"] {
+    flex: 1;
+    min-width: 120px;
+    accent-color: #00bcd4;
+}
+
+.panel-field-range output {
+    min-width: 56px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
 }
 
 .canvas-container {
@@ -174,6 +220,53 @@ body {
     margin-top: 15px;
 }
 
+.modal.hidden {
+    display: none !important;
+}
+
+.scope-floating {
+    position: fixed;
+    left: 120px;
+    top: 70px;
+    z-index: 200;
+    background-color: var(--panel-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0 12px 12px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+}
+
+.scope-floating.hidden {
+    display: none !important;
+}
+
+.scope-floating-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0 10px;
+    color: #fff;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: move;
+    user-select: none;
+}
+
+.scope-floating-header .panel-close {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#scope-popup-canvas {
+    display: block;
+    background: #050a0e;
+    border: 1px solid #1a3a4a;
+    border-radius: 4px;
+    max-width: min(640px, calc(100vw - 40px));
+    height: auto;
+}
+
 .modal-body p {
     margin-bottom: 10px;
     font-size: 13px;
@@ -191,7 +284,8 @@ body {
     flex-shrink: 0;
 }
 
-.bottom-panel.hidden {
+.bottom-panel.hidden,
+.hidden {
     display: none;
 }
 
@@ -259,4 +353,20 @@ body {
 .panel-unit {
     color: #888;
     font-size: 12px;
+}
+
+.panel-action-btn {
+    margin-left: 12px;
+    padding: 6px 14px;
+    background: #006978;
+    color: #fff;
+    border: 1px solid #00bcd4;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    align-self: center;
+}
+
+.panel-action-btn:hover {
+    background: #00838f;
 }

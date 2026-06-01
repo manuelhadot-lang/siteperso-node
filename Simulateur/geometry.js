@@ -33,12 +33,47 @@ export function getComponentJonctions(comp) {
     const rad = (comp.rotation || 0) * Math.PI / 180;
     let localPts = [];
 
-    if (['battery', 'resistor', 'voltmeter', 'led'].includes(comp.type)) {
+    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'led'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'gimp') {
         localPts = [
             { id: `${comp.label}_in`, x: 0, y: 40 },
             { id: `${comp.label}_out`, x: comp.flipX ? -40 : 40, y: 0 },
+        ];
+    } else if (comp.type === 'gsin') {
+        localPts = [
+            { id: `${comp.label}_in`, x: 0, y: 40 },
+            { id: `${comp.label}_out`, x: 40, y: 0 },
+        ];
+    } else if (comp.type === 'oscilloscope') {
+        localPts = [
+            { id: `${comp.label}_CH1`, x: -60, y: -20 },
+            { id: `${comp.label}_CH2`, x: -60, y: 20 },
+            { id: `${comp.label}_GND`, x: 0, y: 60 },
+        ];
+    } else if (comp.type === 'seg7') {
+        const ys = [-60, -40, -20, 0, 20, 40, 60];
+        const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+        localPts = names.map((n, i) => ({ id: `${comp.label}_${n}`, x: -40, y: ys[i] }));
+        localPts.push({ id: `${comp.label}_COM`, x: 16, y: 72 });
+    } else if (['capacitor', 'inductor', 'diode'].includes(comp.type)) {
+        localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
+    } else if (comp.type === 'gsqr') {
+        localPts = [
+            { id: `${comp.label}_in`, x: 0, y: 40 },
+            { id: `${comp.label}_out`, x: 40, y: 0 },
+        ];
+    } else if (comp.type === 'npn') {
+        localPts = [
+            { id: `${comp.label}_B`, x: -40, y: 0 },
+            { id: `${comp.label}_C`, x: 20, y: -40 },
+            { id: `${comp.label}_E`, x: 20, y: 40 },
+        ];
+    } else if (comp.type === 'opamp') {
+        localPts = [
+            { id: `${comp.label}_plus`, x: -40, y: -20 },
+            { id: `${comp.label}_minus`, x: -40, y: 20 },
+            { id: `${comp.label}_out`, x: 40, y: 0 },
         ];
     } else if (comp.type === 'nand') {
         localPts = [{ id: `${comp.label}_inA`, x: -40, y: -20 }, { id: `${comp.label}_inB`, x: -40, y: 20 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
@@ -68,12 +103,14 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
             ly = ry;
         }
+        if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp')) lx = -lx;
+        if (comp.flipY && comp.type === 'opamp') ly = -ly;
         list.push({ id: pt.id, x: snapToGrid(comp.x + lx), y: snapToGrid(comp.y + ly) });
     });
     return list;
@@ -85,7 +122,11 @@ export function componentHitTest(comp, mx, my) {
     const dy = Math.abs(my - comp.y);
     if (comp.type === 'logic_terminal') return dx < 38 && dy < 22;
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
-    if (comp.type === 'gimp') return dx < 45 && dy < 50;
+    if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
+    if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
+    if (comp.type === 'seg7') return dx < 42 && dy < 78;
+    if (comp.type === 'opamp') return dx < 44 && dy < 42;
+    if (comp.type === 'npn') return dx < 44 && dy < 44;
     return dx < 30 && dy < 30;
 }
 
@@ -121,7 +162,7 @@ export function getVoltageAtJonction(targetJonctionId) {
         for (let comp of circuit.components) {
             if (comp.label && jId.startsWith(comp.label)) {
                 if (comp.type === 'vcc') return comp.value !== undefined ? comp.value : 5;
-                if (comp.type === 'battery' && jId.endsWith('_out')) return comp.value !== undefined ? comp.value : 5;
+                if (comp.type === 'battery' && jId.endsWith('_in')) return comp.value !== undefined ? comp.value : 5;
             }
         }
     }

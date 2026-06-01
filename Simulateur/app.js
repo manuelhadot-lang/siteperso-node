@@ -2,17 +2,23 @@
 import { canvas, GRID_SIZE, scale, pan, flags, counters, circuit, interaction, zone, menuDrag, clipboard, undoStack, redoStack, emptyDragImage, snapToGrid, toGridCoords, saveState } from './state.js';
 import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest } from './geometry.js';
 import { resizeCanvas, draw } from './renderer.js';
-import { triggerSimulation, stopSimulation } from './simulation.js';
-import { openGimpPanel, closeGimpPanel, onGimpRemoved, initGimpPanel } from './gimp-panel.js';
+import { triggerSimulation, stopSimulation, requestLiveSimulation } from './simulation.js';
+import { openSourcePanel, closeSourcePanel, onSourceRemoved, initSourcePanel } from './source-panel.js';
+import { openScopePanel, closeScopePanelFully, onScopeRemoved, initScopePanel, onScopePopupClosed } from './scope-panel.js';
+import { initScopePopup, refreshScopePopup, setScopePopupCloseCallback } from './scope-popup.js';
 import { bindLedAnimationRedraw } from './led-animation.js';
+import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animation.js';
 
 const COMPONENT_PREFIX = {
-    battery: 'VDC', resistor: 'R', nand: 'Nand', d_flipflop: 'DFF', jk_flipflop: 'JKFF', led: 'LED',
-    voltmeter: 'V', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp',
+    battery: 'VDC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D',
+    npn: 'Q', opamp: 'AOP',
+    nand: 'Nand', d_flipflop: 'DFF', jk_flipflop: 'JKFF', led: 'LED', seg7: 'SEG',
+    voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'gimp']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
 let fileHandle = null;
 let lastMouseGridPos = { x: 0, y: 0 };
+let liveDragMoved = false;
 
 // --- HISTORIQUE & SÉCURITÉ ---
 function undo() {
@@ -61,7 +67,7 @@ function loadCircuitFromJSON(jsonText) {
         const data = JSON.parse(jsonText);
         circuit.components = data.components || []; circuit.wires = data.wires || []; circuit.autoJunctions = data.autoJunctions || [];
         Object.assign(counters, data.counters || {}); interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
-        undoStack.length = 0; redoStack.length = 0; stopSimulation(); closeGimpPanel(); draw();
+        undoStack.length = 0; redoStack.length = 0; stopSimulation(); closeSourcePanel(); draw();
     } catch (e) { alert("Erreur lors de la lecture du fichier JSON."); }
 }
 
@@ -74,14 +80,21 @@ window.addEventListener('keydown', (e) => {
     if (key === 'r' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de pivoter."); return; }
         const rotatable = interaction.selectedComponents.filter(comp => !NON_ROTATABLE.has(comp.type));
-        if (rotatable.length === 0) { alert("La rotation est verrouillée pour les bascules et le GImp."); return; }
+        if (rotatable.length === 0) { alert("La rotation est verrouillée pour les bascules, le GImp, le transistor et l'AOP."); return; }
         saveState(); rotatable.forEach(comp => comp.rotation = ((comp.rotation || 0) + 90) % 360); draw(); return;
     }
     if (key === 'x' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
-        const flippable = interaction.selectedComponents.filter(comp => comp.type === 'gimp');
+        const flippable = interaction.selectedComponents.filter(comp =>
+            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp');
         if (flippable.length === 0) return;
         saveState(); flippable.forEach(comp => { comp.flipX = !comp.flipX; }); draw(); return;
+    }
+    if (key === 'y' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
+        if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
+        const flippable = interaction.selectedComponents.filter(comp => comp.type === 'opamp');
+        if (flippable.length === 0) return;
+        saveState(); flippable.forEach(comp => { comp.flipY = !comp.flipY; }); draw(); return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
         if (interaction.selectedComponents.length > 0 || interaction.selectedAutoJunctions.length > 0 || interaction.selectedWire !== null) {
@@ -89,7 +102,8 @@ window.addEventListener('keydown', (e) => {
             saveState();
             if (interaction.selectedComponents.length > 0) {
                 interaction.selectedComponents.forEach(comp => {
-                    onGimpRemoved(comp);
+                    onSourceRemoved(comp);
+                    onScopeRemoved(comp);
                     const idx = circuit.components.indexOf(comp); if (idx > -1) circuit.components.splice(idx, 1);
                     circuit.wires = circuit.wires.filter(w => !w.fromJonctionId.startsWith(comp.label) && !w.toJonctionId.startsWith(comp.label));
                 }); interaction.selectedComponents = [];
@@ -192,10 +206,37 @@ canvas.addEventListener('mousedown', (e) => {
     }
     if (interaction.activeWire && e.button === 2) { interaction.activeWire = null; draw(); return; }
     if (interaction.hoveredComponent) {
-        if (flags.isSimulating) { alert("Arrêtez la simulation d'abord."); return; }
-        if (!interaction.selectedComponents.includes(interaction.hoveredComponent)) { interaction.selectedComponents = [interaction.hoveredComponent]; interaction.selectedAutoJunctions = []; }
+        const hc = interaction.hoveredComponent;
+        if (flags.isSimulating) {
+            if (hc.type === 'oscilloscope') {
+                closeSourcePanel();
+                openScopePanel(hc);
+                interaction.selectedComponents = [hc];
+                draw();
+                return;
+            }
+            if (hc.type === 'gimp' || hc.type === 'gsin' || hc.type === 'gsqr') {
+                closeScopePanelFully();
+                openSourcePanel(hc);
+                interaction.selectedComponents = [hc];
+                draw();
+                return;
+            }
+            if (!interaction.selectedComponents.includes(hc)) {
+                interaction.selectedComponents = [hc];
+                interaction.selectedAutoJunctions = [];
+            }
+            flags.isDraggingComponent = true;
+            liveDragMoved = false;
+            draw();
+            return;
+        }
+        if (!interaction.selectedComponents.includes(hc)) { interaction.selectedComponents = [hc]; interaction.selectedAutoJunctions = []; }
+        if (hc.type === 'gimp' || hc.type === 'gsin' || hc.type === 'gsqr') { closeScopePanelFully(); openSourcePanel(hc); }
+        else if (hc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(hc); }
+        else { closeSourcePanel(); closeScopePanelFully(); }
         flags.isDraggingComponent = true; saveState();
-    } else { interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; flags.isPanning = true; flags.startX = e.clientX - pan.x; flags.startY = e.clientY - pan.y; }
+    } else { interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; if (!flags.isSimulating) { closeSourcePanel(); closeScopePanelFully(); } flags.isPanning = true; flags.startX = e.clientX - pan.x; flags.startY = e.clientY - pan.y; }
     draw();
 });
 
@@ -215,6 +256,7 @@ canvas.addEventListener('mousemove', (e) => {
                 if (fMoved && tMoved) { w.points.forEach(pt => { pt.x += dX; pt.y += dY; }); } else if (fMoved) { w.points[0].x += dX; w.points[0].y += dY; } else if (tMoved) { w.points[w.points.length - 1].x += dX; w.points[w.points.length - 1].y += dY; }
             });
             lastMouseGridPos = { x: sX, y: sY };
+            if (flags.isSimulating) liveDragMoved = true;
         } draw();
     } else draw();
 });
@@ -223,17 +265,65 @@ canvas.addEventListener('mouseup', () => {
     if (flags.isSelectingZone) {
         flags.isSelectingZone = false; const xMi = Math.min(zone.start.x, zone.end.x), xMa = Math.max(zone.start.x, zone.end.x), yMi = Math.min(zone.start.y, zone.end.y), yMa = Math.max(zone.start.y, zone.end.y);
         interaction.selectedComponents = circuit.components.filter(c => c.x >= xMi && c.x <= xMa && c.y >= yMi && c.y <= yMa); interaction.selectedAutoJunctions = circuit.autoJunctions.filter(aj => aj.x >= xMi && aj.x <= xMa && aj.y >= yMi && aj.y <= yMa);
-    } flags.isPanning = false; flags.isDraggingComponent = false; draw();
+    }
+    const wasDragging = flags.isDraggingComponent;
+    flags.isPanning = false; flags.isDraggingComponent = false;
+    if (wasDragging && flags.isSimulating && liveDragMoved) {
+        requestLiveSimulation();
+    }
+    draw();
 });
 
 canvas.addEventListener('dblclick', (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
-        if (flags.isSimulating) { alert("Arrêtez la simulation."); return; }
-        if (target.type === 'resistor') { let v = prompt(`Valeur de ${target.label} :`, target.value || "1k"); if (v) { saveState(); target.value = v.trim(); draw(); } }
-        else if (['battery', 'vcc'].includes(target.type)) { let v = prompt("Tension (Volts) :", target.value !== undefined ? target.value : "5"); if (v && !isNaN(parseFloat(v))) { saveState(); target.value = parseFloat(v); draw(); } }
-        else if (target.type === 'logic_terminal') { let v = prompt("Tension Niveau Haut (Volts) :", target.highVoltage !== undefined ? target.highVoltage : "5"); if (v && !isNaN(parseFloat(v))) { saveState(); target.highVoltage = parseFloat(v); draw(); } }
-        else if (target.type === 'gimp') { openGimpPanel(target); }
+        if (target.type === 'oscilloscope') {
+            closeSourcePanel();
+            openScopePanel(target);
+            return;
+        }
+        if (target.type === 'gimp' || target.type === 'gsin' || target.type === 'gsqr') {
+            closeScopePanelFully();
+            openSourcePanel(target);
+            return;
+        }
+        const live = flags.isSimulating;
+        if (target.type === 'resistor') {
+            let v = prompt(`Valeur de ${target.label} :`, target.value || "1k");
+            if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'capacitor') {
+            let v = prompt(`Capacité de ${target.label} (ex. 1u, 100n, 10p, 1m) :`, target.value || "1u");
+            if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'inductor') {
+            let v = prompt(`Inductance de ${target.label} (ex. 1m, 10u) :`, target.value || "1m");
+            if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'diode') {
+            let v = prompt(`Modèle diode ${target.label} (ex. 1N4148) :`, target.value || "1N4148");
+            if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'opamp') {
+            let vp = prompt('Alimentation + (V) :', target.vp ?? 15);
+            if (vp === null) return;
+            let vn = prompt('Alimentation − (V) :', target.vn ?? -15);
+            if (vn === null) return;
+            if (!live) saveState();
+            target.vp = parseFloat(vp) || 15;
+            target.vn = parseFloat(vn) || -15;
+            draw();
+            if (live) requestLiveSimulation();
+        }
+        else if (['battery', 'vcc'].includes(target.type)) {
+            let v = prompt("Tension (Volts) :", target.value !== undefined ? target.value : "5");
+            if (v && !isNaN(parseFloat(v))) { if (!live) saveState(); target.value = parseFloat(v); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'logic_terminal') {
+            if (live) { alert("Arrêtez la simulation."); return; }
+            let v = prompt("Tension Niveau Haut (Volts) :", target.highVoltage !== undefined ? target.highVoltage : "5");
+            if (v && !isNaN(parseFloat(v))) { saveState(); target.highVoltage = parseFloat(v); draw(); }
+        }
     }
 });
 
@@ -258,9 +348,39 @@ canvas.addEventListener('drop', (e) => {
         nc.dutyCycle = 10;
         nc.voltageRail = 5;
         nc.flipX = false;
+    } else if (menuDrag.draggedComponentType === 'gsin') {
+        nc.peakAmplitude = 5;
+        nc.frequency = 1000;
+        nc.offset = 0;
+    } else if (menuDrag.draggedComponentType === 'gsqr') {
+        nc.peakAmplitude = 5;
+        nc.frequency = 1000;
+        nc.offset = 0;
+    } else if (menuDrag.draggedComponentType === 'capacitor') {
+        nc.value = '1u';
+    } else if (menuDrag.draggedComponentType === 'inductor') {
+        nc.value = '1m';
+    } else if (menuDrag.draggedComponentType === 'diode') {
+        nc.value = '1N4148';
+    } else if (menuDrag.draggedComponentType === 'npn') {
+        nc.value = '2N2222';
+        nc.flipX = false;
+    } else if (menuDrag.draggedComponentType === 'opamp') {
+        nc.value = 'uA741';
+        nc.vp = 15;
+        nc.vn = -15;
+        nc.flipX = false;
+        nc.flipY = false;
+    } else if (menuDrag.draggedComponentType === 'oscilloscope') {
+        nc.timeDivSec = 0.001;
+        nc.ch1VoltsPerDiv = 1;
+        nc.ch2VoltsPerDiv = 1;
+        nc.ch1PositionDiv = 0;
+        nc.ch2PositionDiv = 0;
     }
     circuit.components.push(nc); interaction.selectedComponents = [nc]; interaction.selectedAutoJunctions = []; interaction.selectedWire = null; flags.isDraggingFromMenu = false; menuDrag.draggedComponentType = null; draw();
-    if (nc.type === 'gimp') openGimpPanel(nc);
+    if (nc.type === 'gimp' || nc.type === 'gsin' || nc.type === 'gsqr') { closeScopePanelFully(); openSourcePanel(nc); }
+    else if (nc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(nc); }
 });
 
 // --- CHARGEMENT INITIAL ---
@@ -272,10 +392,34 @@ window.onload = function() {
             menuDrag.draggedComponentType = e.currentTarget.getAttribute('data-component'); flags.isDraggingFromMenu = true; e.dataTransfer.setDragImage(emptyDragImage, 0, 0);
         });
     });
+    document.querySelectorAll('.dropdown-submenu .submenu-title').forEach(title => {
+        title.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const sub = title.closest('.dropdown-submenu');
+            const wasOpen = sub.classList.contains('open');
+            document.querySelectorAll('.dropdown-submenu.open').forEach(s => s.classList.remove('open'));
+            if (!wasOpen) sub.classList.add('open');
+        });
+    });
+    document.querySelectorAll('.dropdown-submenu .submenu').forEach(sub => {
+        sub.addEventListener('click', (e) => e.stopPropagation());
+    });
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.dropdown-submenu.open').forEach(s => s.classList.remove('open'));
+    });
     document.getElementById('btn-new').addEventListener('click', () => { if (circuit.components.length > 0 && confirm("Tout effacer ?")) { saveState(); circuit.components = []; circuit.wires = []; circuit.autoJunctions = []; Object.keys(counters).forEach(k => counters[k]=0); stopSimulation(); } });
     document.getElementById('btn-open').addEventListener('click', openFile); document.getElementById('btn-save').addEventListener('click', saveFile); document.getElementById('btn-save-as').addEventListener('click', saveAs);
     document.getElementById('btn-simulate').addEventListener('click', () => { if (!flags.isSimulating) triggerSimulation(); }); document.getElementById('btn-stop').addEventListener('click', stopSimulation);
-    initGimpPanel();
+    initSourcePanel();
+    initScopePanel();
+    initScopePopup();
+    setScopePopupCloseCallback(onScopePopupClosed);
+    document.getElementById('source-panel-close')?.addEventListener('click', () => {
+        closeSourcePanel();
+        closeScopePanelFully();
+    });
     bindLedAnimationRedraw(draw);
+    bindScopeAnimationRedraw(draw);
+    bindScopePopupRedraw(refreshScopePopup);
     const m = document.getElementById('commands-modal'); document.getElementById('btn-commands').addEventListener('click', () => m.style.display = 'block'); document.getElementById('close-commands').addEventListener('click', () => m.style.display = 'none'); window.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });
 };

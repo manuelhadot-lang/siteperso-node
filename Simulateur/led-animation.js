@@ -6,13 +6,22 @@ export const PERSISTENCE_FREQ_HZ = 50;
 
 const LED_ON_A = 1e-4;
 
+/** Courant maxi recommandé pour une LED standard (au-delà → grillée). */
+export const LED_MAX_SAFE_CURRENT_A = 0.02;
+
+export function isLedOvercurrent(current) {
+    return typeof current === 'number' && Number.isFinite(current) && Math.abs(current) > LED_MAX_SAFE_CURRENT_A;
+}
+
 let redraw = () => {};
 let anim = {
     rafId: null,
     startMs: 0,
     plots: {},
+    vmPlots: {},
     /** @type {Record<string, number>} période (s) propre à chaque LED */
     ledPeriods: {},
+    vmPeriods: {},
     /** @type {Record<string, boolean>} persistance rétinienne par LED */
     ledPersistence: {},
     /** @type {Record<string, number>} courant moyen si persistance */
@@ -25,7 +34,7 @@ export function bindLedAnimationRedraw(fn) {
 
 function getSourceFrequencyHz() {
     for (const comp of circuit.components) {
-        if (comp.type === 'gimp' && comp.frequency > 0) return comp.frequency;
+        if ((comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') && comp.frequency > 0) return comp.frequency;
     }
     return 0;
 }
@@ -162,6 +171,85 @@ function prepareLedTiming(plots) {
     }
 }
 
+function interpolateVoltagePlot(plot, tSec) {
+    const { time, voltage } = plot;
+    if (!time?.length) return 0;
+    if (tSec <= time[0]) return voltage[0] ?? 0;
+    const last = time.length - 1;
+    if (tSec >= time[last]) return voltage[last] ?? 0;
+    let lo = 0;
+    let hi = last;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (time[mid] <= tSec) lo = mid;
+        else hi = mid;
+    }
+    const t0 = time[lo];
+    const t1 = time[hi];
+    const v0 = voltage[lo] ?? 0;
+    const v1 = voltage[hi] ?? 0;
+    if (t1 <= t0) return v0;
+    return v0 + ((tSec - t0) / (t1 - t0)) * (v1 - v0);
+}
+
+function detectPlotPeriodSec(time, values, threshold = 2.5) {
+    if (!time?.length || !values?.length) return null;
+    const rising = [];
+    for (let i = 1; i < values.length; i++) {
+        if (values[i] > threshold && values[i - 1] <= threshold) rising.push(time[i]);
+    }
+    if (rising.length >= 2) return rising[1] - rising[0];
+    let toggles = 0;
+    for (let i = 1; i < values.length; i++) {
+        if ((values[i] > threshold) !== (values[i - 1] > threshold)) toggles++;
+    }
+    const span = time[time.length - 1] - time[0];
+    if (toggles >= 2 && span > 0) return (2 * span) / toggles;
+    return null;
+}
+
+function prepareVmTiming(vmPlots) {
+    anim.vmPeriods = {};
+    const fallback = fallbackPeriodSec({});
+    for (const [id, plot] of Object.entries(vmPlots)) {
+        anim.vmPeriods[id] = detectPlotPeriodSec(plot.time, plot.voltage) ?? fallback;
+    }
+}
+
+/** Affichage voltmètre sur signaux logiques (0 / Vhi) — évite 1,6 V en transition. */
+export function quantizeVoltmeterReading(v, samples) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return v;
+    const vals = Array.isArray(samples) ? samples.filter(Number.isFinite) : [];
+    if (vals.length >= 4) {
+        const maxV = Math.max(...vals);
+        const minV = Math.min(...vals);
+        if (maxV - minV > 1.5) {
+            const vhi = maxV >= 3 ? maxV : 5;
+            const vlo = minV <= 0.5 ? 0 : minV;
+            return v >= vhi / 2 ? vhi : vlo;
+        }
+    }
+    if (v >= 4) return Math.round(v * 10) / 10;
+    if (v <= 0.5) return 0;
+    return v;
+}
+
+export function getAnimatedVoltmeterVoltage(label) {
+    const plot = anim.vmPlots[label];
+    if (!plot?.time?.length) return null;
+    const period = anim.vmPeriods[label] ?? 1;
+    const elapsed = (performance.now() - anim.startMs) / 1000;
+    // Temps réel : ne pas figer sur la phase stable des compteurs ripple (réservée aux LED).
+    const tSample = plotTimeOrigin(elapsed, period);
+    const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
+    const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
+    return quantizeVoltmeterReading(interpolateVoltagePlot(plot, tAbs), plot.voltage);
+}
+
+export function hasVoltmeterAnimation() {
+    return Object.keys(anim.vmPlots).length > 0 && anim.rafId != null;
+}
+
 export function getAnimatedLedCurrent(label) {
     const plot = anim.plots[label];
     if (!plot) return null;
@@ -180,15 +268,19 @@ export function hasLedAnimation() {
     return anim.rafId != null && Object.keys(anim.plots).length > 0;
 }
 
-export function startLedAnimation(plots) {
+export function startLedAnimation(plots, vmPlots = {}) {
     stopLedAnimation();
-    if (!plots || !Object.keys(plots).length) return;
+    const hasLeds = plots && Object.keys(plots).length > 0;
+    const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
+    if (!hasLeds && !hasVm) return;
 
-    anim.plots = plots;
+    anim.plots = plots || {};
+    anim.vmPlots = vmPlots || {};
     anim.startMs = performance.now();
-    prepareLedTiming(plots);
+    if (hasLeds) prepareLedTiming(plots);
+    if (hasVm) prepareVmTiming(vmPlots);
 
-    const needsFrameLoop = Object.keys(plots).some((id) => !anim.ledPersistence[id]);
+    const needsFrameLoop = Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) || hasVm;
     if (!needsFrameLoop) {
         redraw();
         return;
@@ -201,11 +293,30 @@ export function startLedAnimation(plots) {
     anim.rafId = requestAnimationFrame(tick);
 }
 
+let smokeRafId = null;
+
+export function startBurntLedSmokeLoop() {
+    if (smokeRafId != null) return;
+    const tick = () => {
+        redraw();
+        smokeRafId = requestAnimationFrame(tick);
+    };
+    smokeRafId = requestAnimationFrame(tick);
+}
+
+function stopBurntLedSmokeLoop() {
+    if (smokeRafId != null) cancelAnimationFrame(smokeRafId);
+    smokeRafId = null;
+}
+
 export function stopLedAnimation() {
     if (anim.rafId != null) cancelAnimationFrame(anim.rafId);
     anim.rafId = null;
     anim.plots = {};
+    anim.vmPlots = {};
     anim.ledPeriods = {};
+    anim.vmPeriods = {};
     anim.ledPersistence = {};
     anim.steadyCurrent = {};
+    stopBurntLedSmokeLoop();
 }

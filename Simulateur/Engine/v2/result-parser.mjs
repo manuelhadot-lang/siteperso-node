@@ -511,13 +511,21 @@ export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
     const colOffset = Math.max(0, ncol - wrVarCount);
 
     function channelDiff(row, ch) {
-        if (!ch || ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
-        const plusCol = ch.wrIndex + colOffset;
-        const vp = row[plusCol];
-        if (!Number.isFinite(vp)) return NaN;
-        if (ch.minusIsGnd || ch.minusWrIndex == null) return vp;
-        const vm = row[ch.minusWrIndex + colOffset];
-        if (!Number.isFinite(vm)) return NaN;
+        if (!ch) return NaN;
+        const plusIsGnd = ch.plusIsGnd ?? isSpiceReferenceNode(ch.plusNode);
+        const minusIsGnd = ch.minusIsGnd ?? isSpiceReferenceNode(ch.minusNode);
+        let vp = 0;
+        let vm = 0;
+        if (!plusIsGnd) {
+            if (ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
+            vp = row[ch.wrIndex + colOffset];
+            if (!Number.isFinite(vp)) return NaN;
+        }
+        if (!minusIsGnd) {
+            if (ch.minusWrIndex == null) return NaN;
+            vm = row[ch.minusWrIndex + colOffset];
+            if (!Number.isFinite(vm)) return NaN;
+        }
         return vp - vm;
     }
 
@@ -554,13 +562,21 @@ export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
  * @param {Record<string, { ch1?: { voltage?: number[] }; ch2?: { voltage?: number[] } }>} scopePlots
  */
 function channelDiffFromRow(row, ch, colOffset) {
-    if (!ch || ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
-    const plusCol = ch.wrIndex + colOffset;
-    const vp = row[plusCol];
-    if (!Number.isFinite(vp)) return NaN;
-    if (ch.minusIsGnd || ch.minusWrIndex == null) return vp;
-    const vm = row[ch.minusWrIndex + colOffset];
-    if (!Number.isFinite(vm)) return NaN;
+    if (!ch) return NaN;
+    const plusIsGnd = ch.plusIsGnd ?? isSpiceReferenceNode(ch.plusNode);
+    const minusIsGnd = ch.minusIsGnd ?? isSpiceReferenceNode(ch.minusNode);
+    let vp = 0;
+    let vm = 0;
+    if (!plusIsGnd) {
+        if (ch.wrIndex == null || ch.wrIndex === undefined) return NaN;
+        vp = row[ch.wrIndex + colOffset];
+        if (!Number.isFinite(vp)) return NaN;
+    }
+    if (!minusIsGnd) {
+        if (ch.minusWrIndex == null) return NaN;
+        vm = row[ch.minusWrIndex + colOffset];
+        if (!Number.isFinite(vm)) return NaN;
+    }
     return vp - vm;
 }
 
@@ -625,6 +641,161 @@ export function mergeAmmeterRmsFromTranWrdata(waveTxt, meta) {
             unit: "A",
             measure: "Arms",
             branch: m.branch,
+        };
+    }
+    return out;
+}
+
+/**
+ * Voltmètre en .tran : dernière valeur instantanée (adapté aux sorties logiques / bascules).
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; channel: { wrIndex?: number; minusWrIndex?: number | null; minusIsGnd?: boolean }; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeVoltmeterFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || !m.channel) continue;
+        let wrVarCount = m.wrVarCount || 2;
+        if (m.channel.wrIndex != null && m.channel.wrIndex + 1 > wrVarCount) {
+            wrVarCount = m.channel.wrIndex + 1;
+        }
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        for (const row of rows) {
+            const d = channelDiffFromRow(row, m.channel, colOffset);
+            if (Number.isFinite(d)) vals.push(d);
+        }
+        if (!vals.length) continue;
+        const raw = vals[vals.length - 1];
+        const vhi = Math.max(...vals.filter(Number.isFinite));
+        const vlo = Math.min(...vals.filter(Number.isFinite));
+        let voltage = raw;
+        if (vhi - vlo > 1.5) {
+            const railHi = vhi >= 3 ? vhi : 5;
+            const railLo = vlo <= 0.5 ? 0 : vlo;
+            voltage = raw >= railHi / 2 ? railHi : railLo;
+        }
+        out[m.id] = {
+            voltage,
+            unit: "V",
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
+        };
+    }
+    return out;
+}
+
+/**
+ * Courbes voltmètre pendant .tran (animation affichage).
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; channel: object; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeVoltmeterTranPlotsFromWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || !m.channel) continue;
+        let wrVarCount = m.wrVarCount || 2;
+        if (m.channel.wrIndex != null && m.channel.wrIndex + 1 > wrVarCount) {
+            wrVarCount = m.channel.wrIndex + 1;
+        }
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const timeCol = m.timeCol ?? 0;
+        const tArr = [];
+        const vArr = [];
+        for (const row of rows) {
+            if (row.length <= timeCol) continue;
+            const d = channelDiffFromRow(row, m.channel, colOffset);
+            if (!Number.isFinite(row[timeCol]) || !Number.isFinite(d)) continue;
+            tArr.push(row[timeCol]);
+            vArr.push(d);
+        }
+        if (!tArr.length) continue;
+        out[m.id] = {
+            time: tArr,
+            voltage: vArr,
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
+        };
+    }
+    return out;
+}
+
+/**
+ * Ampèremètre en .tran : dernier courant mesuré sur la branche VI.
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; currentWrIndex?: number; branch?: string; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeAmmeterFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || m.currentWrIndex == null || m.currentWrIndex === undefined) continue;
+        const wrVarCount = m.wrVarCount || m.currentWrIndex + 1;
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        let peakI = 0;
+        for (const row of rows) {
+            const i = row[m.currentWrIndex + colOffset];
+            if (Number.isFinite(i)) {
+                vals.push(i);
+                if (Math.abs(i) > Math.abs(peakI)) peakI = i;
+            }
+        }
+        if (!vals.length) continue;
+        out[m.id] = {
+            current: peakI,
+            unit: "A",
+            branch: m.branch,
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
+        };
+    }
+    return out;
+}
+
+/**
+ * Ohmmètre en .tran : R = |V| / I_test à la fin de la simulation.
+ * @param {string} waveTxt
+ * @param {{ id: string; wrVarCount?: number; testCurrent?: number; channel: { wrIndex?: number; minusWrIndex?: number | null; minusIsGnd?: boolean }; nodePlus?: string; nodeMinus?: string }[]} meta
+ */
+export function mergeOhmmeterFromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || !m.channel) continue;
+        const iTest = m.testCurrent > 0 ? m.testCurrent : 0.001;
+        let wrVarCount = m.wrVarCount || 2;
+        if (m.channel.wrIndex != null && m.channel.wrIndex + 1 > wrVarCount) {
+            wrVarCount = m.channel.wrIndex + 1;
+        }
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const vals = [];
+        for (const row of rows) {
+            const d = channelDiffFromRow(row, m.channel, colOffset);
+            if (Number.isFinite(d)) vals.push(Math.abs(d));
+        }
+        if (!vals.length) continue;
+        const r = vals[vals.length - 1] / iTest;
+        if (!Number.isFinite(r) || r <= 0) continue;
+        out[m.id] = {
+            resistance: r,
+            unit: "Ohm",
+            nodePlus: m.nodePlus,
+            nodeMinus: m.nodeMinus,
         };
     }
     return out;
@@ -790,4 +961,50 @@ export function deriveOscilloscopeValuesFromScopePlots(scopePlots) {
     return out;
 }
 
+const SEG7_NAMES = ["a", "b", "c", "d", "e", "f", "g"];
+
+function seg7SegmentsFromVoltages(segmentV, vCom) {
+    const segments = {};
+    const vc = Number.isFinite(vCom) ? vCom : 0;
+    for (let i = 0; i < 7; i++) {
+        const v = segmentV[i];
+        segments[SEG7_NAMES[i]] = Number.isFinite(v) && v - vc >= 1.5;
+    }
+    return segments;
+}
+
+export function mergeSeg7Measurements(log, seg7Displays) {
+    const out = {};
+    if (!log || !Array.isArray(seg7Displays) || seg7Displays.length === 0) return out;
+    const vmap = collectNodeVoltagesFromLog(log);
+    for (const d of seg7Displays) {
+        if (!d?.id) continue;
+        const vCom = nodeVoltageFromMap(d.commonNode, vmap) ?? 0;
+        const segmentV = (d.segmentNodes || []).map((n) => nodeVoltageFromMap(n, vmap));
+        out[d.id] = { segments: seg7SegmentsFromVoltages(segmentV, vCom) };
+    }
+    return out;
+}
+
+export function mergeSeg7FromTranWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+    const last = rows[rows.length - 1];
+    let wrVarCount = 2;
+    for (const m of meta) {
+        if (m.wrVarCount > wrVarCount) wrVarCount = m.wrVarCount;
+    }
+    const colOffset = Math.max(0, last.length - wrVarCount);
+
+    for (const m of meta) {
+        if (!m?.id) continue;
+        const vCom = m.commonWrIndex != null ? last[m.commonWrIndex + colOffset] : 0;
+        const segmentV = (m.segmentWrIndex || []).map((ix) =>
+            ix != null ? last[ix + colOffset] : NaN
+        );
+        out[m.id] = { segments: seg7SegmentsFromVoltages(segmentV, vCom) };
+    }
+    return out;
+}
 

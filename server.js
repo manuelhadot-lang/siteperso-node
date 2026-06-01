@@ -540,6 +540,20 @@ async function getMergeLedMeasurements() {
     return module.mergeLedMeasurements;
 }
 
+async function getMergeSeg7Measurements() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeSeg7Measurements !== "function")
+        throw new Error("Module mergeSeg7Measurements introuvable.");
+    return module.mergeSeg7Measurements;
+}
+
+async function getMergeSeg7FromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeSeg7FromTranWrdata !== "function")
+        throw new Error("Module mergeSeg7FromTranWrdata introuvable.");
+    return module.mergeSeg7FromTranWrdata;
+}
+
 async function getMergeLedTranPlotsFromWrdata() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.mergeLedTranPlotsFromWrdata !== "function")
@@ -608,6 +622,34 @@ async function getMergeAmmeterRmsFromTranWrdata() {
     if (typeof module.mergeAmmeterRmsFromTranWrdata !== "function")
         throw new Error("Module mergeAmmeterRmsFromTranWrdata introuvable.");
     return module.mergeAmmeterRmsFromTranWrdata;
+}
+
+async function getMergeVoltmeterFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeVoltmeterFromTranWrdata !== "function")
+        throw new Error("Module mergeVoltmeterFromTranWrdata introuvable.");
+    return module.mergeVoltmeterFromTranWrdata;
+}
+
+async function getMergeAmmeterFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeAmmeterFromTranWrdata !== "function")
+        throw new Error("Module mergeAmmeterFromTranWrdata introuvable.");
+    return module.mergeAmmeterFromTranWrdata;
+}
+
+async function getMergeOhmmeterFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeOhmmeterFromTranWrdata !== "function")
+        throw new Error("Module mergeOhmmeterFromTranWrdata introuvable.");
+    return module.mergeOhmmeterFromTranWrdata;
+}
+
+async function getMergeVoltmeterTranPlotsFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeVoltmeterTranPlotsFromWrdata !== "function")
+        throw new Error("Module mergeVoltmeterTranPlotsFromWrdata introuvable.");
+    return module.mergeVoltmeterTranPlotsFromWrdata;
 }
 
 function runNgspice(netlistPath, outputPath, opts = {}) {
@@ -685,6 +727,12 @@ app.post("/api/simulate", async (req, res) => {
     let mergeScopePlotsFromTranWrdata;
     let mergeVoltmeterRmsFromTranWrdata;
     let mergeAmmeterRmsFromTranWrdata;
+    let mergeVoltmeterFromTranWrdata;
+    let mergeAmmeterFromTranWrdata;
+    let mergeOhmmeterFromTranWrdata;
+    let mergeVoltmeterTranPlotsFromWrdata;
+    let mergeSeg7Measurements;
+    let mergeSeg7FromTranWrdata;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
@@ -700,6 +748,12 @@ app.post("/api/simulate", async (req, res) => {
         mergeScopePlotsFromTranWrdata = await getMergeScopePlotsFromTranWrdata();
         mergeVoltmeterRmsFromTranWrdata = await getMergeVoltmeterRmsFromTranWrdata();
         mergeAmmeterRmsFromTranWrdata = await getMergeAmmeterRmsFromTranWrdata();
+        mergeVoltmeterFromTranWrdata = await getMergeVoltmeterFromTranWrdata();
+        mergeAmmeterFromTranWrdata = await getMergeAmmeterFromTranWrdata();
+        mergeOhmmeterFromTranWrdata = await getMergeOhmmeterFromTranWrdata();
+        mergeVoltmeterTranPlotsFromWrdata = await getMergeVoltmeterTranPlotsFromWrdata();
+        mergeSeg7Measurements = await getMergeSeg7Measurements();
+        mergeSeg7FromTranWrdata = await getMergeSeg7FromTranWrdata();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -790,17 +844,17 @@ app.post("/api/simulate", async (req, res) => {
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
         const tran = !!(/** @type {{ analysisTran?: boolean }} */ (built).analysisTran);
-        const voltmeterValues = tran
-            ? {}
-            : mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
-        const ammeterValues = tran ? {} : mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
+        let voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
+        let ammeterValues = mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
         let ledValues = mergeLedMeasurements(combinedLog, built.leds || []);
         let logicValues = mergeLogicGateMeasurements(combinedLog, built.logicGates || []);
-        const ohmmeterValues = tran ? {} : mergeOhmmeterMeasurements(combinedLog, built.ohmeters || []);
+        let ohmmeterValues = {};
         let voltmeterRmsValues = {};
         let ammeterRmsValues = {};
         let scopePlots = {};
+        let seg7Values = mergeSeg7Measurements(combinedLog, built.seg7Displays || []);
         let ledTranPlots = {};
+        let voltmeterTranPlots = {};
         let waveDiag = "";
         if (tran) {
             let waveTxt = "";
@@ -820,6 +874,18 @@ app.post("/api/simulate", async (req, res) => {
             const fromTranLg = mergeLogicGateTranFromWrdata(waveTxt, lgMeta);
             if (Object.keys(fromTranLg).length > 0) logicValues = fromTranLg;
             const metersMeta = built.metersTranMeta || {};
+            voltmeterValues = mergeVoltmeterFromTranWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.voltmeters) ? metersMeta.voltmeters : []
+            );
+            voltmeterTranPlots = mergeVoltmeterTranPlotsFromWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.voltmeters) ? metersMeta.voltmeters : []
+            );
+            ammeterValues = mergeAmmeterFromTranWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.ammeters) ? metersMeta.ammeters : []
+            );
             voltmeterRmsValues = mergeVoltmeterRmsFromTranWrdata(
                 waveTxt,
                 Array.isArray(metersMeta.voltmetersRms) ? metersMeta.voltmetersRms : []
@@ -828,6 +894,9 @@ app.post("/api/simulate", async (req, res) => {
                 waveTxt,
                 Array.isArray(metersMeta.ammetersRms) ? metersMeta.ammetersRms : []
             );
+            const seg7Meta = Array.isArray(built.seg7TranMeta) ? built.seg7TranMeta : [];
+            const fromTranSeg7 = mergeSeg7FromTranWrdata(waveTxt, seg7Meta);
+            if (Object.keys(fromTranSeg7).length > 0) seg7Values = fromTranSeg7;
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
@@ -845,6 +914,34 @@ app.post("/api/simulate", async (req, res) => {
                 built.warnings.push(
                     `Oscilloscope(s) ${miss} : aucune courbe dans tran_waves.txt. Reliez CH1, CH2 et la masse (borne du bas) ; vérifiez qu’il y a un générateur sinus/carré.`
                 );
+            }
+        }
+        const ohmList = Array.isArray(built.ohmeters) ? built.ohmeters : [];
+        const ohmIsoNetlist = built.ohmmeterIsolationNetlist;
+        if (ohmList.length > 0 && typeof ohmIsoNetlist === "string" && ohmIsoNetlist.trim()) {
+            try {
+                const ohmLogPath = path.join(tempDir, "ngspice_ohm.log");
+                await writeFile(path.join(tempDir, "circuit_ohm.cir"), ohmIsoNetlist, "utf8");
+                const ohmRun = await runNgspice("circuit_ohm.cir", "ngspice_ohm.log", {
+                    cwd: tempDir,
+                    xspiceRc,
+                });
+                let ohmLog = "";
+                try {
+                    ohmLog = await readFileAsync(ohmLogPath, "utf8");
+                } catch {
+                    /* pas de log ohmmètre */
+                }
+                const ohmCombined = [ohmLog, ohmRun.stdout || "", ohmRun.stderr || ""]
+                    .filter((part) => typeof part === "string" && part.trim().length > 0)
+                    .join("\n");
+                ohmmeterValues = mergeOhmmeterMeasurements(ohmCombined, ohmList);
+            } catch (ohmErr) {
+                built.warnings = built.warnings || [];
+                built.warnings.push(
+                    "Ohmmètre : mesure en mode isolation impossible — vérifiez le câblage ou retirez l’ohmmètre du circuit alimenté."
+                );
+                ohmmeterValues = mergeOhmmeterMeasurements(combinedLog, ohmList);
             }
         }
         const oscilloscopeValues = tran
@@ -865,6 +962,7 @@ app.post("/api/simulate", async (req, res) => {
             ledIds: Array.isArray(built.leds) ? built.leds.map((l) => l.id) : [],
             ledBranches: Array.isArray(built.leds) ? built.leds : [],
             ledTranPlots,
+            voltmeterTranPlots,
             logicValues,
             logicIds: Array.isArray(built.logicGates) ? built.logicGates.map((g) => g.id) : [],
             logicGates: Array.isArray(built.logicGates) ? built.logicGates : [],
@@ -886,6 +984,7 @@ app.post("/api/simulate", async (req, res) => {
             oscilloscopeNodes: Array.isArray(built.oscilloscopes) ? built.oscilloscopes : [],
             analysisTran: tran,
             scopePlots,
+            seg7Values,
             seg7Displays: Array.isArray(built.seg7Displays) ? built.seg7Displays : [],
         });
     } catch (error) {

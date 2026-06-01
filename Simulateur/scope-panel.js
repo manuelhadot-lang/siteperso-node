@@ -1,0 +1,139 @@
+// scope-panel.js — réglages oscilloscope (panneau bas)
+import { flags, saveState } from './state.js';
+import { draw, resizeCanvas } from './renderer.js';
+import { clearSourceSelection } from './source-panel.js';
+import { openScopePopup, refreshScopePopup, closeScopePopup, isScopePopupOpen } from './scope-popup.js';
+import { requestLiveSimulation } from './simulation.js';
+
+let activeScope = null;
+
+const panel = () => document.getElementById('source-panel');
+const titleEl = () => document.getElementById('source-panel-title');
+const scopeFields = () => document.getElementById('scope-fields');
+const timeDivEl = () => document.getElementById('scope-time-div');
+const ch1VdivEl = () => document.getElementById('scope-ch1-vdiv');
+const ch2VdivEl = () => document.getElementById('scope-ch2-vdiv');
+const ch1PosEl = () => document.getElementById('scope-ch1-pos');
+const ch2PosEl = () => document.getElementById('scope-ch2-pos');
+const ch1PosVal = () => document.getElementById('scope-ch1-pos-val');
+const ch2PosVal = () => document.getElementById('scope-ch2-pos-val');
+const openWindowBtn = () => document.getElementById('scope-open-window');
+
+function formatPosDiv(v) {
+    const n = Number.isFinite(v) ? v : 0;
+    const s = n.toFixed(1).replace('.', ',');
+    return `${n >= 0 ? '+' : ''}${s} div`;
+}
+
+export function isScopePanelOpen() {
+    return activeScope != null && panel() && !panel().classList.contains('hidden');
+}
+
+export function getScopePanelHeight() {
+    return isScopePanelOpen() && panel() ? panel().offsetHeight : 0;
+}
+
+export function getActiveScope() {
+    return activeScope;
+}
+
+function syncFieldsFromComponent(comp) {
+    if (!comp) return;
+    if (titleEl()) titleEl().textContent = `${comp.label} — Oscilloscope`;
+    if (timeDivEl()) timeDivEl().value = String(comp.timeDivSec ?? 0.001);
+    if (ch1VdivEl()) ch1VdivEl().value = String(comp.ch1VoltsPerDiv ?? 1);
+    if (ch2VdivEl()) ch2VdivEl().value = String(comp.ch2VoltsPerDiv ?? 1);
+    const p1 = comp.ch1PositionDiv ?? 0;
+    const p2 = comp.ch2PositionDiv ?? 0;
+    if (ch1PosEl()) ch1PosEl().value = String(p1);
+    if (ch2PosEl()) ch2PosEl().value = String(p2);
+    if (ch1PosVal()) ch1PosVal().textContent = formatPosDiv(p1);
+    if (ch2PosVal()) ch2PosVal().textContent = formatPosDiv(p2);
+    updateOpenWindowButton();
+}
+
+function updateOpenWindowButton() {
+    const btn = openWindowBtn();
+    if (!btn) return;
+    btn.textContent = isScopePopupOpen() ? '📈 Fenêtre scope ouverte' : '📈 Afficher fenêtre scope';
+}
+
+function applyFieldsToComponent() {
+    if (!activeScope) return;
+    activeScope.timeDivSec = parseFloat(timeDivEl()?.value) || 0.001;
+    activeScope.ch1VoltsPerDiv = parseFloat(ch1VdivEl()?.value) || 1;
+    activeScope.ch2VoltsPerDiv = parseFloat(ch2VdivEl()?.value) || 1;
+    activeScope.ch1PositionDiv = parseFloat(ch1PosEl()?.value) || 0;
+    activeScope.ch2PositionDiv = parseFloat(ch2PosEl()?.value) || 0;
+    if (ch1PosVal()) ch1PosVal().textContent = formatPosDiv(activeScope.ch1PositionDiv);
+    if (ch2PosVal()) ch2PosVal().textContent = formatPosDiv(activeScope.ch2PositionDiv);
+    refreshScopePopup();
+    draw();
+    if (flags.isSimulating) requestLiveSimulation();
+}
+
+/** Ouvre le panneau bas (sans forcer la popup). */
+export function openScopePanel(comp, { openPopup = false } = {}) {
+    if (!comp || comp.type !== 'oscilloscope') return;
+    clearSourceSelection();
+    activeScope = comp;
+    syncFieldsFromComponent(comp);
+    const sf = scopeFields();
+    if (sf) {
+        sf.classList.remove('hidden');
+        sf.style.display = 'flex';
+    }
+    panel()?.classList.remove('hidden');
+    if (openPopup) openScopePopup(comp);
+    resizeCanvas();
+}
+
+export function closeScopePanelFully() {
+    activeScope = null;
+    const sf = scopeFields();
+    if (sf) { sf.classList.add('hidden'); sf.style.display = 'none'; }
+    panel()?.classList.add('hidden');
+    closeScopePopup(true);
+    resizeCanvas();
+}
+
+export function onScopePopupClosed() {
+    updateOpenWindowButton();
+}
+
+export function onScopeRemoved(comp) {
+    if (activeScope === comp) closeScopePanelFully();
+}
+
+export function initScopePanel() {
+    const apply = () => {
+        if (!activeScope) return;
+        applyFieldsToComponent();
+    };
+    const onChange = () => {
+        if (!activeScope) return;
+        if (!flags.isSimulating) saveState();
+        applyFieldsToComponent();
+    };
+
+    timeDivEl()?.addEventListener('change', onChange);
+    ch1VdivEl()?.addEventListener('change', onChange);
+    ch2VdivEl()?.addEventListener('change', onChange);
+    ch1PosEl()?.addEventListener('change', onChange);
+    ch2PosEl()?.addEventListener('change', onChange);
+    timeDivEl()?.addEventListener('input', apply);
+    ch1VdivEl()?.addEventListener('input', apply);
+    ch2VdivEl()?.addEventListener('input', apply);
+    ch1PosEl()?.addEventListener('input', apply);
+    ch2PosEl()?.addEventListener('input', apply);
+
+    openWindowBtn()?.addEventListener('click', () => {
+        if (!activeScope) return;
+        if (isScopePopupOpen()) {
+            closeScopePopup();
+        } else {
+            openScopePopup(activeScope);
+        }
+        updateOpenWindowButton();
+    });
+}

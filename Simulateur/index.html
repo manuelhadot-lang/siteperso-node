@@ -33,6 +33,8 @@
                 <div class="dropdown-item" draggable="true" data-component="vcc">🔌 Alimentation VCC</div>
                 <div class="dropdown-item" draggable="true" data-component="gnd">📐 Masse (0V)</div>
                 <div class="dropdown-item" draggable="true" data-component="gimp">⚡ GImp (Impulsions)</div>
+                <div class="dropdown-item" draggable="true" data-component="gsin">〰️ Générateur sinusoïdal</div>
+                <div class="dropdown-item" draggable="true" data-component="gsqr">⬜ Générateur carré</div>
             </div>
         </div>
 
@@ -40,6 +42,21 @@
             <span class="menu-icon">🔌</span> Composants
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="resistor">🟦 Résistance</div>
+                <div class="dropdown-item" draggable="true" data-component="capacitor">⚡ Condensateur</div>
+                <div class="dropdown-item" draggable="true" data-component="inductor">🌀 Bobine</div>
+                <div class="dropdown-item" draggable="true" data-component="diode">🔺 Diode</div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">Transistors ▸</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="npn">2N2222</div>
+                    </div>
+                </div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">AOP ▸</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="opamp">uA741</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -57,6 +74,7 @@
             <span class="menu-icon">🚨</span> Opto
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="led">🔴 LED (Rouge)</div>
+                <div class="dropdown-item" draggable="true" data-component="seg7">🔢 Afficheur 7 segments</div>
             </div>
         </div>
 
@@ -64,6 +82,9 @@
             <span class="menu-icon">📊</span> Mesures
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="voltmeter">📟 Voltmètre</div>
+                <div class="dropdown-item" draggable="true" data-component="ammeter">⚡ Ampèremètre</div>
+                <div class="dropdown-item" draggable="true" data-component="ohmmeter">🔧 Ohmmètre</div>
+                <div class="dropdown-item" draggable="true" data-component="oscilloscope">📈 Oscilloscope</div>
             </div>
         </div>
 
@@ -96,12 +117,12 @@
         <canvas id="circuitCanvas"></canvas>
     </main>
 
-    <div id="gimp-panel" class="bottom-panel hidden">
+    <div id="source-panel" class="bottom-panel hidden">
         <div class="panel-header">
-            <span id="gimp-panel-title">GImp — Réglages</span>
-            <button type="button" id="gimp-panel-close" class="panel-close" title="Fermer">&times;</button>
+            <span id="source-panel-title">Source — Réglages</span>
+            <button type="button" id="source-panel-close" class="panel-close" title="Fermer">&times;</button>
         </div>
-        <div class="panel-body">
+        <div id="gimp-fields" class="panel-body" style="display:flex">
             <label class="panel-field">
                 <span>Amplitude</span>
                 <select id="gimp-voltage">
@@ -120,6 +141,95 @@
                 <span class="panel-unit">%</span>
             </label>
         </div>
+        <div id="gsin-fields" class="panel-body hidden">
+            <label class="panel-field">
+                <span>Amplitude crête</span>
+                <input type="number" id="gsin-amplitude" min="0" step="any" value="5">
+                <span class="panel-unit">V</span>
+            </label>
+            <label class="panel-field">
+                <span>Fréquence</span>
+                <input type="number" id="gsin-freq" min="0.1" step="any" value="1000">
+                <span class="panel-unit">Hz</span>
+            </label>
+            <label class="panel-field">
+                <span>Offset DC</span>
+                <input type="number" id="gsin-offset" step="any" value="0">
+                <span class="panel-unit">V</span>
+            </label>
+        </div>
+        <div id="gsqr-fields" class="panel-body hidden">
+            <label class="panel-field">
+                <span>Amplitude crête</span>
+                <input type="number" id="gsqr-amplitude" min="0" step="any" value="5">
+                <span class="panel-unit">V</span>
+            </label>
+            <label class="panel-field">
+                <span>Fréquence</span>
+                <input type="number" id="gsqr-freq" min="0.1" step="any" value="1000">
+                <span class="panel-unit">Hz</span>
+            </label>
+            <label class="panel-field">
+                <span>Offset DC</span>
+                <input type="number" id="gsqr-offset" step="any" value="0">
+                <span class="panel-unit">V</span>
+            </label>
+        </div>
+        <div id="scope-fields" class="panel-body hidden">
+            <label class="panel-field">
+                <span>Base de temps</span>
+                <select id="scope-time-div">
+                    <option value="0.0005">500 µs/div</option>
+                    <option value="0.0002">200 µs/div</option>
+                    <option value="0.0001">100 µs/div</option>
+                    <option value="0.00005">50 µs/div</option>
+                    <option value="0.00001">10 µs/div</option>
+                    <option value="0.001" selected>1 ms/div</option>
+                    <option value="0.002">2 ms/div</option>
+                    <option value="0.005">5 ms/div</option>
+                    <option value="0.01">10 ms/div</option>
+                    <option value="0.05">50 ms/div</option>
+                    <option value="0.1">100 ms/div</option>
+                </select>
+            </label>
+            <label class="panel-field">
+                <span>Ampli vert. CH1</span>
+                <select id="scope-ch1-vdiv">
+                    <option value="0.5">0,5 V/div</option>
+                    <option value="1" selected>1 V/div</option>
+                    <option value="2">2 V/div</option>
+                    <option value="5">5 V/div</option>
+                </select>
+            </label>
+            <label class="panel-field">
+                <span>Ampli vert. CH2</span>
+                <select id="scope-ch2-vdiv">
+                    <option value="0.5">0,5 V/div</option>
+                    <option value="1" selected>1 V/div</option>
+                    <option value="2">2 V/div</option>
+                    <option value="5">5 V/div</option>
+                </select>
+            </label>
+            <label class="panel-field panel-field-range">
+                <span>Position CH1</span>
+                <input type="range" id="scope-ch1-pos" min="-4" max="4" step="0.1" value="0">
+                <output id="scope-ch1-pos-val">0,0 div</output>
+            </label>
+            <label class="panel-field panel-field-range">
+                <span>Position CH2</span>
+                <input type="range" id="scope-ch2-pos" min="-4" max="4" step="0.1" value="0">
+                <output id="scope-ch2-pos-val">0,0 div</output>
+            </label>
+            <button type="button" id="scope-open-window" class="panel-action-btn">📈 Afficher fenêtre scope</button>
+        </div>
+    </div>
+
+    <div id="scope-popup" class="scope-floating hidden">
+        <div class="scope-floating-header" id="scope-popup-drag-handle">
+            <span id="scope-popup-title">Oscilloscope</span>
+            <button type="button" id="scope-popup-close" class="panel-close" title="Fermer">&times;</button>
+        </div>
+        <canvas id="scope-popup-canvas" width="640" height="360"></canvas>
     </div>
 
     <script type="module" src="app.js"></script>

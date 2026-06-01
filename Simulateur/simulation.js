@@ -1,13 +1,35 @@
 // simulation.js
 import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
 import { draw } from './renderer.js';
-import { startLedAnimation, stopLedAnimation } from './led-animation.js';
+import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation } from './led-animation.js';
+import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
+import { openScopePanel, isScopePanelOpen, getActiveScope } from './scope-panel.js';
+import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
+
+let liveSimTimer = null;
+
+/** Relance ngspice pendant une simulation active (valeurs composants / sources). */
+export function requestLiveSimulation() {
+    if (!flags.isSimulating) return;
+    clearTimeout(liveSimTimer);
+    liveSimTimer = setTimeout(() => {
+        if (flags.isSimulating) triggerSimulation(true);
+    }, 400);
+}
 
 const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
-    gnd: 'ground', nand: 'logic_nand', d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', led: 'diode_led',
-    gimp: 'vpulse',
+    gnd: 'ground', nand: 'logic_nand', d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', led: 'diode_led', seg7: 'seg7',
+    gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
+
+function formatGsinValue(comp) {
+    const a = comp.peakAmplitude ?? 5;
+    const f = comp.frequency ?? 1000;
+    const o = comp.offset ?? 0;
+    const fStr = f >= 1000 && f % 1000 === 0 ? `${f / 1000}kHz` : `${f}Hz`;
+    return `${a}V ${fStr} ${o}V`;
+}
 
 function formatGimpValue(comp) {
     const v = comp.voltageRail ?? 5;
@@ -15,6 +37,14 @@ function formatGimpValue(comp) {
     const d = comp.dutyCycle ?? 10;
     const fStr = f >= 1000 && f % 1000 === 0 ? `${f / 1000}kHz` : `${f}Hz`;
     return `${v}V ${fStr} ${d}%`;
+}
+
+function formatGsqrValue(comp) {
+    const a = comp.peakAmplitude ?? 5;
+    const f = comp.frequency ?? 1000;
+    const o = comp.offset ?? 0;
+    const fStr = f >= 1000 && f % 1000 === 0 ? `${f / 1000}kHz` : `${f}Hz`;
+    return `${a}V ${fStr} offset ${o}V`;
 }
 
 function jonctionIdToTerminalKey(jonctionId) {
@@ -43,10 +73,33 @@ function jonctionIdToTerminalKey(jonctionId) {
             if (jonctionId === `${id}_RESET`) return `${id}#6`;
         } else if (['gnd', 'vcc', 'logic_terminal'].includes(comp.type)) {
             if (jonctionId === `${id}_out`) return `${id}#0`;
-        } else if (['battery', 'gimp'].includes(comp.type)) {
-            // Symbole : entrée (gauche) = −, sortie (droite) = + (comme la pile)
+        } else if (comp.type === 'gimp') {
             if (jonctionId === `${id}_in`) return `${id}#1`;
             if (jonctionId === `${id}_out`) return `${id}#0`;
+        } else if (comp.type === 'gsin') {
+            if (jonctionId === `${id}_in`) return `${id}#0`;
+            if (jonctionId === `${id}_out`) return `${id}#1`;
+        } else if (comp.type === 'gsqr') {
+            if (jonctionId === `${id}_in`) return `${id}#0`;
+            if (jonctionId === `${id}_out`) return `${id}#1`;
+        } else if (comp.type === 'oscilloscope') {
+            if (jonctionId === `${id}_CH1`) return `${id}#0`;
+            if (jonctionId === `${id}_CH2`) return `${id}#1`;
+            if (jonctionId === `${id}_GND`) return `${id}#2`;
+        } else if (comp.type === 'npn') {
+            if (jonctionId === `${id}_B`) return `${id}#0`;
+            if (jonctionId === `${id}_C`) return `${id}#1`;
+            if (jonctionId === `${id}_E`) return `${id}#2`;
+        } else if (comp.type === 'opamp') {
+            if (jonctionId === `${id}_plus`) return `${id}#0`;
+            if (jonctionId === `${id}_minus`) return `${id}#1`;
+            if (jonctionId === `${id}_out`) return `${id}#2`;
+        } else if (comp.type === 'seg7') {
+            const segs = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+            for (let i = 0; i < segs.length; i++) {
+                if (jonctionId === `${id}_${segs[i]}`) return `${id}#${i}`;
+            }
+            if (jonctionId === `${id}_COM`) return `${id}#7`;
         } else {
             if (jonctionId === `${id}_in`) return `${id}#0`;
             if (jonctionId === `${id}_out`) return `${id}#1`;
@@ -69,8 +122,28 @@ function buildSimulationState() {
             out.value = comp.value || '5';
         } else if (comp.type === 'gimp') {
             out.value = formatGimpValue(comp);
+        } else if (comp.type === 'gsin') {
+            out.value = formatGsinValue(comp);
+        } else if (comp.type === 'gsqr') {
+            out.value = formatGsqrValue(comp);
         }
         if (comp.type === 'resistor') out.value = comp.value || '1k';
+        if (comp.type === 'capacitor') out.value = comp.value || '1u';
+        if (comp.type === 'inductor') out.value = comp.value || '1m';
+        if (comp.type === 'diode') out.value = comp.value || '1N4148';
+        if (comp.type === 'npn') out.value = comp.value || '2N2222';
+        if (comp.type === 'opamp') {
+            out.value = comp.value || 'uA741';
+            out.vp = comp.vp ?? 15;
+            out.vn = comp.vn ?? -15;
+        }
+        if (comp.type === 'oscilloscope') {
+            out.timeDivSec = comp.timeDivSec ?? 0.001;
+            out.ch1VoltsPerDiv = comp.ch1VoltsPerDiv ?? 1;
+            out.ch2VoltsPerDiv = comp.ch2VoltsPerDiv ?? 1;
+            out.ch1PositionDiv = comp.ch1PositionDiv ?? 0;
+            out.ch2PositionDiv = comp.ch2PositionDiv ?? 0;
+        }
         return out;
     });
     const simWires = circuit.wires
@@ -104,12 +177,46 @@ export async function triggerSimulation(isSilentUpdate = false) {
         const result = await response.json();
         if (result.ok) {
             simulationResults.voltmeters = result.voltmeterValues || {};
+            simulationResults.ammeters = result.ammeterValues || {};
+            simulationResults.ohmmeters = result.ohmmeterValues || {};
             simulationResults.leds = result.ledValues || {};
-            if (result.analysisTran && result.ledTranPlots && Object.keys(result.ledTranPlots).length) {
-                startLedAnimation(result.ledTranPlots);
+            simulationResults.scopePlots = result.scopePlots || {};
+            simulationResults.seg7 = result.seg7Values || {};
+            const scopePlotKeys = Object.keys(simulationResults.scopePlots);
+            if (scopePlotKeys.length > 0) {
+                startScopeAnimation(simulationResults.scopePlots);
+            } else {
+                stopScopeAnimation();
+            }
+            const osc = circuit.components.find((c) => c.type === 'oscilloscope');
+            if (osc) {
+                if (!isSilentUpdate) {
+                    openScopePanel(osc, { openPopup: true });
+                } else {
+                    const keepPopup = isScopePopupOpen();
+                    const keepPanel = isScopePanelOpen();
+                    if (keepPanel || keepPopup) {
+                        openScopePanel(getActiveScope() || osc, { openPopup: keepPopup });
+                    }
+                    refreshScopePopup();
+                }
+            }
+            if (result.analysisTran) {
+                const vmPlots = result.voltmeterTranPlots || {};
+                const ledPlots = result.ledTranPlots || {};
+                if (Object.keys(vmPlots).length || Object.keys(ledPlots).length) {
+                    startLedAnimation(ledPlots, vmPlots);
+                } else {
+                    stopLedAnimation();
+                }
             } else {
                 stopLedAnimation();
             }
+            const hasBurntLed = Object.values(simulationResults.leds).some((m) => {
+                const i = m && typeof m === 'object' ? m.current : m;
+                return isLedOvercurrent(i);
+            });
+            if (hasBurntLed && !hasLedAnimation() && !hasVoltmeterAnimation()) startBurntLedSmokeLoop();
             flags.isSimulating = true;
             if (btnSim) { btnSim.innerText = "▶️ Simulation Live"; btnSim.style.background = "#00bcd4"; }
             if (btnStop) btnStop.classList.remove('disabled');
@@ -125,9 +232,12 @@ export async function triggerSimulation(isSilentUpdate = false) {
 }
 
 export function stopSimulation() {
+    clearTimeout(liveSimTimer);
+    liveSimTimer = null;
     stopLedAnimation();
-    flags.isSimulating = false; 
-    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.leds = {};
+    stopScopeAnimation();
+    flags.isSimulating = false;
+    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.seg7 = {};
     const btnSim = document.getElementById('btn-simulate'); const btnStop = document.getElementById('btn-stop');
     if (btnSim) { btnSim.innerText = "🚀 Lancer Simulation"; btnSim.style.background = "#00ca71"; }
     if (btnStop) btnStop.classList.add('disabled');
