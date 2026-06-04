@@ -104,9 +104,9 @@ export function appendLogicDffXspiceNetlist(c, nodeFor, vhi, lines, spiceBranchN
     const srLow = 0.4 * v;
     const srHigh = 0.6 * v;
 
-    const rippleClk = !!opts.rippleClockFromPrevQ;
+    const rippleFromQ = opts.rippleClockFromPrev === "q";
     let nClkAdc = nClk;
-    if (rippleClk) {
+    if (rippleFromQ) {
         nClkAdc = nodeFor(`${c.id}#__xa_clkinv`);
         lines.push(
             `${spiceBranchName("B", c.id)}_clkinv ${nClkAdc} 0 V = { ${v} - V(${nClk}) }`
@@ -183,7 +183,7 @@ export function logicDffXspiceInternalNodeKeys(c, opts = {}) {
         `${c.id}#__xa_zero`,
         `${c.id}#__xd_zero`,
     ];
-    if (opts.rippleClockFromPrevQ) keys.push(`${c.id}#__xa_clkinv`);
+    if (opts.rippleClockFromPrev === "q") keys.push(`${c.id}#__xa_clkinv`);
     return keys;
 }
 
@@ -216,9 +216,9 @@ export function appendLogicJkXspiceNetlist(c, nodeFor, vhi, lines, spiceBranchNa
     const srLow = 0.4 * v;
     const srHigh = 0.6 * v;
 
-    const rippleClk = !!opts.rippleClockFromPrevQ;
+    const rippleFromQ = opts.rippleClockFromPrev === "q";
     let nClkAdc = nClk;
-    if (rippleClk) {
+    if (rippleFromQ) {
         nClkAdc = nodeFor(`${c.id}#__xa_clkinv`);
         lines.push(
             `${spiceBranchName("B", c.id)}_clkinv ${nClkAdc} 0 V = { ${v} - V(${nClk}) }`
@@ -287,6 +287,6 @@ export function logicJkXspiceInternalNodeKeys(c, opts = {}) {
         `${c.id}#__xa_zero`,
         `${c.id}#__xd_zero`,
     ];
-    if (opts.rippleClockFromPrevQ) keys.push(`${c.id}#__xa_clkinv`);
+    if (opts.rippleClockFromPrev === "q") keys.push(`${c.id}#__xa_clkinv`);
     return keys;
 }

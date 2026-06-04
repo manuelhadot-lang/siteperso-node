@@ -64,9 +64,27 @@
             <span class="menu-icon">🧠</span> Logique
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="logic_terminal">🎛️ Borne Numérique (0/1)</div>
-                <div class="dropdown-item" draggable="true" data-component="nand">👾 Porte NAND</div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">Portes ▸</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="not">↩️ Porte NOT (NON)</div>
+                        <div class="dropdown-item" draggable="true" data-component="and">🔗 Porte AND (ET)</div>
+                        <div class="dropdown-item" draggable="true" data-component="nand">👾 Porte NAND (NON-ET)</div>
+                        <div class="dropdown-item" draggable="true" data-component="or">➕ Porte OR (OU)</div>
+                        <div class="dropdown-item" draggable="true" data-component="nor">⛔ Porte NOR (NON-OU)</div>
+                        <div class="dropdown-item" draggable="true" data-component="xor">✖️ Porte XOR</div>
+                        <div class="dropdown-item" draggable="true" data-component="xnor">🟰 Porte XNOR</div>
+                    </div>
+                </div>
                 <div class="dropdown-item" draggable="true" data-component="d_flipflop">💾 Bascule D (Flip-Flop)</div>
                 <div class="dropdown-item" draggable="true" data-component="jk_flipflop">🔁 Bascule JK (Flip-Flop)</div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">Circuits ▸</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="cd4511">🔢 CD4511 (BCD → 7 seg)</div>
+                        <div class="dropdown-item" draggable="true" data-component="ic_74hc90">🔟 74HC90 (compteur décade)</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -93,6 +111,48 @@
             <button id="btn-stop" class="disabled">🛑 Stop</button>
         </div>
     </header>
+
+    <div id="cd4511-doc-modal" class="modal">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-cd4511-doc">&times;</span>
+            <h2 id="cd4511-doc-title">CD4511 — Décodeur BCD / 7 segments</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>CD4511</strong> (ou équivalent CMOS) convertit un code <strong>BCD 4 bits</strong>
+                    (A = LSB) en sorties pour un afficheur <strong>7 segments</strong> en cathode commune.
+                    Il intègre une <strong>mémorisation</strong> (broche LE) et les fonctions
+                    <strong>extinction</strong> (BI) et <strong>test lampe</strong> (LT).
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th><th>Niveau actif</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>A, B, C, D</td><td>Entrées BCD (A = bit faible)</td><td>1 = logique haut (0…V<sub>CC</sub>)</td></tr>
+                        <tr><td>LE</td><td>Verrouillage — 0 : suivi des entrées ; 1 : mémorise</td><td>—</td></tr>
+                        <tr><td>BI</td><td>Extinction de l’affichage</td><td>0 = segments éteints</td></tr>
+                        <tr><td>LT</td><td>Test lampe (tous segments ON)</td><td>0 = test actif</td></tr>
+                        <tr><td>a … g</td><td>Sorties vers les segments</td><td>1 = segment allumé (cathode commune)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Câblage typique</h3>
+                <ul class="doc-list">
+                    <li>Relier <strong>a … g</strong> aux entrées du composant <em>Afficheur 7 segments</em>.</li>
+                    <li>Relier la <strong>cathode commune (COM)</strong> de l’afficheur à la <strong>masse</strong>.</li>
+                    <li>Alimenter les entrées BCD via des <em>Bornes numériques</em>, un <em>VCC</em> ou des portes logiques (0 V / 5 V).</li>
+                    <li>Laisser <strong>BI</strong> et <strong>LT</strong> au niveau haut (5 V) si non utilisés.</li>
+                </ul>
+                <h3>Simulation</h3>
+                <p>
+                    Modèle <strong>XSPICE</strong> : bascules <code>d_dlatch</code>, table <code>d_genlut</code>,
+                    ponts analogiques/numériques. Nécessite <code>digital.cm</code> et ngspice avec XSPICE
+                    (<code>npm run check-ngspice</code>).
+                </p>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
 
     <div id="commands-modal" class="modal">
         <div class="modal-content">

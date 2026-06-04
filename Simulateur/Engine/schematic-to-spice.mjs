@@ -18,16 +18,21 @@ import {
 import {
     appendIc74ls00Netlist,
     appendIc74ls74Netlist,
+    appendLogicCd4511Netlist,
     appendLogicDffNetlist,
     appendLogicJkNetlist,
-    isRippleClockFromPrevQ,
+    cd4511InputNodeKeys,
+    cd4511OutputNodeKeys,
+    getRippleClockFromPrev,
     logicSequentialInternalNodeKeys,
     ic74ls00NandGates,
     ic74ls00VccPinIndex,
     ic74ls74DffSlices,
     ic74ls74VccPinIndex,
+    isIc74hc90Type,
     isIc74ls00Type,
     isIc74ls74Type,
+    isLogicCd4511Type,
     isLogicDigitalSimType,
     isLogicIcType,
     isLogicSequentialType,
@@ -44,12 +49,23 @@ import {
     logicJkQbarOutputNodeKey,
     resolveIc74ls00Vhi,
     resolveIc74ls74Vhi,
+    resolveLogicCd4511Vhi,
     resolveSequentialVhi,
+    useLogicCd4511Xspice,
     useLogicDffXspice,
     useLogicJkXspice,
     xspiceCodemodelLines,
     isXspiceDffAvailable,
 } from "./logic-sequential.mjs";
+import {
+    appendIc74hc90Netlist,
+    ic74hc90GndPinIndex,
+    ic74hc90InternalNodeKeys,
+    ic74hc90OutputNodeKeys,
+    ic74hc90ToggleSlices,
+    ic74hc90VccPinIndex,
+    resolveIc74hc90Vhi,
+} from "./logic-74hc90.mjs";
 
 function isLedType(t) {
     return t === "led" || t === "diode_led";
@@ -644,7 +660,11 @@ function computeLogicVhiByTerminalKey(components, parent) {
             for (const k of logicJkInputNodeKeys(c)) touchKey(k, v);
         }
         if (isLogicIcType(c.type) && c.logicRail != null && c.logicRail !== "") {
-            const vccIdx = isIc74ls74Type(c.type) ? ic74ls74VccPinIndex() : ic74ls00VccPinIndex();
+            const vccIdx = isIc74ls74Type(c.type)
+                ? ic74ls74VccPinIndex()
+                : isIc74hc90Type(c.type)
+                  ? ic74hc90VccPinIndex()
+                  : ic74ls00VccPinIndex();
             touchKey(`${c.id}#${vccIdx}`, logicVhi(parseLogicRail(c.logicRail)));
         }
     }
@@ -731,7 +751,9 @@ function computeTranTiming(components) {
         ? Math.max(scopeWindowSec, minPeriod * 2)
         : Math.max(minPeriod * 8, scopeWindowSec);
 
-    const numFf = components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length;
+    const numFf =
+        components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length +
+        components.filter((c) => isIc74hc90Type(c.type)).length * 4;
     if (numFf > 0) {
         const ripplePeriods = (1 << numFf) + 2;
         tstop = Math.max(tstop, minPeriod * ripplePeriods);
@@ -925,8 +947,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         if (isLedType(c.type)) touch(`${c.id}#__ledint`);
         for (const k of logicSequentialInternalNodeKeys(c, {
             ...deckOpts,
-            rippleClockFromPrevQ: isRippleClockFromPrevQ(c, wires, components),
+            rippleClockFromPrev: getRippleClockFromPrev(c, wires, components),
         })) touch(k);
+        if (isIc74hc90Type(c.type)) {
+            for (const k of ic74hc90InternalNodeKeys(c, deckOpts)) touch(k);
+        }
     }
 
     const roots = new Set();
@@ -954,23 +979,41 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     const hasLogicDff = components.some((c) => c.type === "logic_dff");
     const hasLogicJk = components.some((c) => c.type === "logic_jk");
+    const hasLogicCd4511 = components.some((c) => isLogicCd4511Type(c.type));
     const usesXspiceFf =
         (hasLogicDff && useLogicDffXspice(deckOpts)) || (hasLogicJk && useLogicJkXspice(deckOpts));
+    const usesXspiceCd4511 = hasLogicCd4511 && useLogicCd4511Xspice(deckOpts);
+    const usesXspiceDigital = usesXspiceFf || usesXspiceCd4511;
     const lines = [];
     lines.push("* Circuit Designer - netlist SPICE (.op)");
-    if (usesXspiceFf) {
+    if (usesXspiceDigital) {
         for (const cmLine of xspiceCodemodelLines(deckOpts.repoRoot)) {
             lines.push(cmLine);
         }
-        const ffTypes = [];
-        if (hasLogicDff && useLogicDffXspice(deckOpts)) ffTypes.push("D (d_dff)");
-        if (hasLogicJk && useLogicJkXspice(deckOpts)) ffTypes.push("JK (d_jkff)");
+        const xParts = [];
+        if (hasLogicDff && useLogicDffXspice(deckOpts)) xParts.push("D (d_dff)");
+        if (hasLogicJk && useLogicJkXspice(deckOpts)) xParts.push("JK (d_jkff)");
+        if (usesXspiceCd4511) xParts.push("CD4511 (d_dlatch + d_genlut)");
         warnings.push(
-            `Bascule(s) ${ffTypes.join(", ")} : modèle XSPICE (digital.cm) — simulation mixte analogique/numérique.`
+            `${xParts.length ? xParts.join(", ") : "Circuits logiques"} : modèle XSPICE (digital.cm) — simulation mixte analogique/numérique.`
         );
-    } else if ((hasLogicDff || hasLogicJk) && isXspiceDffAvailable(deckOpts.repoRoot)) {
+    } else if (
+        (hasLogicDff || hasLogicJk || hasLogicCd4511) &&
+        isXspiceDffAvailable(deckOpts.repoRoot)
+    ) {
+        if (hasLogicCd4511) {
+            warnings.push(
+                "CD4511 : digital.cm présent mais ngspice sans XSPICE — circuit non simulé (voir Simulateur/lib/ngspice/README.txt)."
+            );
+        }
+        if (hasLogicDff || hasLogicJk) {
+            warnings.push(
+                "Bascule(s) : digital.cm présent mais ngspice sans XSPICE — modèle sources B (voir Simulateur/lib/ngspice/README.txt)."
+            );
+        }
+    } else if (hasLogicCd4511) {
         warnings.push(
-            "Bascule(s) : digital.cm présent mais ngspice sans XSPICE — modèle sources B (voir Simulateur/lib/ngspice/README.txt)."
+            "CD4511 : XSPICE indisponible (digital.cm ou ngspice avec XSPICE requis — voir Simulateur/lib/ngspice/README.txt)."
         );
     }
 
@@ -1084,7 +1127,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             appendLogicDffNetlist(c, nodeFor, vhi, lines, spiceBranchName, {
                 ...deckOpts,
                 srWired,
-                rippleClockFromPrevQ: isRippleClockFromPrevQ(c, wires, components),
+                rippleClockFromPrev: getRippleClockFromPrev(c, wires, components),
             });
         } else if (c.type === "logic_jk") {
             const vhi = resolveSequentialVhi(
@@ -1101,7 +1144,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             appendLogicJkNetlist(c, nodeFor, vhi, lines, spiceBranchName, {
                 ...deckOpts,
                 srWired,
-                rippleClockFromPrevQ: isRippleClockFromPrevQ(c, wires, components),
+                rippleClockFromPrev: getRippleClockFromPrev(c, wires, components),
             });
         } else if (isIc74ls00Type(c.type)) {
             const vhi = resolveIc74ls00Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
@@ -1109,6 +1152,17 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         } else if (isIc74ls74Type(c.type)) {
             const vhi = resolveIc74ls74Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendIc74ls74Netlist(c, nodeFor, vhi, lines, spiceBranchName);
+        } else if (isIc74hc90Type(c.type)) {
+            const vhi = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, deckOpts);
+        } else if (isLogicCd4511Type(c.type)) {
+            const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
+                ...deckOpts,
+                leWired: (terminalWireCount.get(`${c.id}#4`) || 0) > 0,
+                biWired: (terminalWireCount.get(`${c.id}#5`) || 0) > 0,
+                ltWired: (terminalWireCount.get(`${c.id}#6`) || 0) > 0,
+            });
         } else if (c.type === "vsource") {
             const nPlus = nodeFor(`${c.id}#0`);
             const nMinus = nodeFor(`${c.id}#1`);
@@ -1299,12 +1353,12 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     );
     const useTran =
         hasPulseSource ||
+        hasLogicGates ||
         (acSources.length > 0 &&
             (oscilloscopes.length > 0 ||
                 voltmetersRms.length > 0 ||
                 ammetersRms.length > 0 ||
-                hasLeds ||
-                hasLogicGates));
+                hasLeds));
     if (hasOpamp && acSources.length > 0 && oscilloscopes.length === 0) {
         warnings.push(
             "Comparateur / hystérésis dynamique : ajoutez un oscilloscope sur la sortie de l'AOP et un générateur sinus (ou carré) sur l'entrée pour voir les seuils en simulation transitoire."
@@ -1494,6 +1548,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 outKeys = ic74ls00NandGates().map(g => `${c.id}#${g.y}`);
             } else if (isIc74ls74Type(c.type)) {
                 outKeys = ic74ls74DffSlices().map(sl => `${c.id}#${sl.q}`);
+            } else if (isIc74hc90Type(c.type)) {
+                outKeys = ic74hc90OutputNodeKeys(c);
+            } else if (isLogicCd4511Type(c.type)) {
+                outKeys = cd4511OutputNodeKeys(c);
             }
             let vhiTran = 5;
             if (isLogicGateComponentType(c.type)) {
@@ -1518,6 +1576,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 vhiTran = resolveIc74ls00Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             } else if (isIc74ls74Type(c.type)) {
                 vhiTran = resolveIc74ls74Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            } else if (isIc74hc90Type(c.type)) {
+                vhiTran = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            } else if (isLogicCd4511Type(c.type)) {
+                vhiTran = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             }
             for (const outKey of outKeys) {
                 const nOut = nodeFor(outKey);
@@ -1527,12 +1589,20 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     icOutId = `${c.id}_Y${outKeys.indexOf(outKey) + 1}`;
                 } else if (isIc74ls74Type(c.type)) {
                     icOutId = `${c.id}_Q${outKeys.indexOf(outKey) + 1}`;
+                } else if (isIc74hc90Type(c.type)) {
+                    const qLabels = ["Q0", "Q1", "Q2", "Q3"];
+                    const idx = outKeys.indexOf(outKey);
+                    if (idx >= 0 && idx < qLabels.length) icOutId = `${c.id}_${qLabels[idx]}`;
                 } else if (c.type === "logic_dff") {
                     icOutId =
                         outKey === logicDffOutputNodeKey(c) ? `${c.id}_Q` : `${c.id}_Qbar`;
                 } else if (c.type === "logic_jk") {
                     icOutId =
                         outKey === logicJkOutputNodeKey(c) ? `${c.id}_Q` : `${c.id}_Qbar`;
+                } else if (isLogicCd4511Type(c.type)) {
+                    const segNames = ["a", "b", "c", "d", "e", "f", "g"];
+                    const idx = outKeys.indexOf(outKey);
+                    if (idx >= 0 && idx < segNames.length) icOutId = `${c.id}_${segNames[idx]}`;
                 }
                 logicGatesTranMeta.push({
                     id: icOutId,
@@ -1791,6 +1861,32 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 warnings.push(`74LS74 ${c.id} : reliez GND (broche 7) à la masse.`);
             }
         }
+        if (isIc74hc90Type(c.type)) {
+            const vccKey = `${c.id}#${ic74hc90VccPinIndex()}`;
+            const gndKey = `${c.id}#${ic74hc90GndPinIndex()}`;
+            if ((terminalWireCount.get(vccKey) || 0) === 0) {
+                warnings.push(`74HC90 ${c.id} : reliez VCC (broche 5) au +5 V.`);
+            }
+            if ((terminalWireCount.get(gndKey) || 0) === 0) {
+                warnings.push(`74HC90 ${c.id} : reliez GND (broche 10) à la masse.`);
+            }
+            const q0Key = `${c.id}#11`;
+            const cp1Key = `${c.id}#0`;
+            if (nodeFor(q0Key) === nodeFor(cp1Key)) {
+                warnings.push(
+                    `74HC90 ${c.id} : Q0 relié à CP1 — comptage décade 0…9 (horloge sur CP0, broche 14).`
+                );
+            }
+        }
+        if (isLogicCd4511Type(c.type)) {
+            const inp = cd4511InputNodeKeys(c);
+            const unwired = inp.filter((k) => (terminalWireCount.get(k) || 0) === 0);
+            if (unwired.length > 0) {
+                warnings.push(
+                    `CD4511 ${c.id} : entrée(s) non reliée(s) (A–D, LE, BI, LT) — valeurs par défaut appliquées.`
+                );
+            }
+        }
         if (c.type === "lamp" || c.type === "lcd") {
             const labels = { lamp: "Lampe", lcd: "LCD" };
             warnings.push(`${labels[c.type] || c.type} ${c.id} : non simulé pour l'instant.`);
@@ -1880,6 +1976,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     vth: vhi / 2,
                 });
             });
+        } else if (isIc74hc90Type(c.type)) {
+            const vhi = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            const qNames = ["Q0", "Q1", "Q2", "Q3"];
+            ic74hc90ToggleSlices().forEach((sl, i) => {
+                logicGates.push({
+                    id: `${c.id}/${qNames[i]}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${sl.q}`),
+                    inputs: [nodeFor(`${c.id}#${sl.clk}`)],
+                    vhi,
+                    vth: vhi / 2,
+                });
+            });
         } else if (isIc74ls74Type(c.type)) {
             const vhi = resolveIc74ls74Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             ic74ls74DffSlices().forEach((sl) => {
@@ -1888,6 +1997,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     type: c.type,
                     nodeOut: nodeFor(`${c.id}#${sl.q}`),
                     inputs: [nodeFor(`${c.id}#${sl.d}`), nodeFor(`${c.id}#${sl.clk}`)],
+                    vhi,
+                    vth: vhi / 2,
+                });
+            });
+        } else if (isLogicCd4511Type(c.type)) {
+            const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            const segNames = ["a", "b", "c", "d", "e", "f", "g"];
+            segNames.forEach((s, i) => {
+                logicGates.push({
+                    id: `${c.id}/${s}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${7 + i}`),
+                    inputs: cd4511InputNodeKeys(c).map((k) => nodeFor(k)),
                     vhi,
                     vth: vhi / 2,
                 });

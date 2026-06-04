@@ -963,12 +963,15 @@ export function deriveOscilloscopeValuesFromScopePlots(scopePlots) {
 
 const SEG7_NAMES = ["a", "b", "c", "d", "e", "f", "g"];
 
+/** Seuil bas : avec modèle diode (anode→COM), V(segment) ≈ 0,6–1 V quand le segment conduit. */
+const SEG7_LIT_DELTA_V = 0.35;
+
 function seg7SegmentsFromVoltages(segmentV, vCom) {
     const segments = {};
     const vc = Number.isFinite(vCom) ? vCom : 0;
     for (let i = 0; i < 7; i++) {
         const v = segmentV[i];
-        segments[SEG7_NAMES[i]] = Number.isFinite(v) && v - vc >= 1.5;
+        segments[SEG7_NAMES[i]] = Number.isFinite(v) && v - vc >= SEG7_LIT_DELTA_V;
     }
     return segments;
 }
@@ -982,6 +985,43 @@ export function mergeSeg7Measurements(log, seg7Displays) {
         const vCom = nodeVoltageFromMap(d.commonNode, vmap) ?? 0;
         const segmentV = (d.segmentNodes || []).map((n) => nodeVoltageFromMap(n, vmap));
         out[d.id] = { segments: seg7SegmentsFromVoltages(segmentV, vCom) };
+    }
+    return out;
+}
+
+/** Courbes .tran pour animation 7 segments (tension segment vs cathode commune). */
+export function mergeSeg7TranPlotsFromWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id) continue;
+        let wrVarCount = m.wrVarCount || 2;
+        for (const ix of m.segmentWrIndex || []) {
+            if (ix != null && ix + 1 > wrVarCount) wrVarCount = ix + 1;
+        }
+        if (m.commonWrIndex != null && m.commonWrIndex + 1 > wrVarCount) {
+            wrVarCount = m.commonWrIndex + 1;
+        }
+        const colOffset = Math.max(0, rows[0].length - wrVarCount);
+        const timeCol = m.timeCol ?? 0;
+        const time = [];
+        const common = [];
+        const segments = Object.fromEntries(SEG7_NAMES.map((n) => [n, []]));
+        for (const row of rows) {
+            if (row.length <= timeCol || !Number.isFinite(row[timeCol])) continue;
+            time.push(row[timeCol]);
+            common.push(
+                m.commonWrIndex != null ? row[m.commonWrIndex + colOffset] : 0
+            );
+            SEG7_NAMES.forEach((name, i) => {
+                const ix = m.segmentWrIndex?.[i];
+                segments[name].push(ix != null ? row[ix + colOffset] : NaN);
+            });
+        }
+        if (!time.length) continue;
+        out[m.id] = { time, common, segments };
     }
     return out;
 }

@@ -1,8 +1,35 @@
 // renderer.js
 import { canvas, ctx, GRID_SIZE, scale, pan, flags, circuit, interaction, zone, menuDrag, snapToGrid, simulationResults } from './state.js';
+import {
+    CD4511_BOX_B,
+    CD4511_BOX_L,
+    CD4511_BOX_R,
+    CD4511_BOX_T,
+    CD4511_JUNC_L,
+    CD4511_JUNC_R,
+    CD4511_LABEL_L,
+    CD4511_LABEL_R,
+    CD4511_PIN_Y,
+    CD4511_HIT_DX,
+    CD4511_HIT_DY,
+} from './cd4511-layout.js';
+import {
+    IC90_BOX_B,
+    IC90_BOX_L,
+    IC90_BOX_R,
+    IC90_BOX_T,
+    IC90_JUNC_L,
+    IC90_JUNC_R,
+    IC90_LABEL_L,
+    IC90_LABEL_R,
+    IC90_HIT_DX,
+    IC90_HIT_DY,
+    IC90_LEFT_PIN_Y,
+    IC90_RIGHT_PIN_Y,
+} from './ic74hc90-layout.js';
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
-import { getAnimatedLedCurrent, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
 
 export function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -110,6 +137,12 @@ const SEG7_PIN_Y = [-60, -40, -20, 0, 20, 40, 60];
 const SEG7_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
 
 function getSeg7LitSet(comp) {
+    if (flags.isSimulating) {
+        const anim = getAnimatedSeg7Segments(comp.label);
+        if (anim?.segments) {
+            return new Set(Object.entries(anim.segments).filter(([, on]) => on).map(([k]) => k));
+        }
+    }
     const data = simulationResults.seg7?.[comp.label];
     if (!data?.segments) return new Set();
     return new Set(Object.entries(data.segments).filter(([, on]) => on).map(([k]) => k));
@@ -121,26 +154,49 @@ function drawSeg7Display(comp) {
     const pinYs = SEG7_PIN_Y;
     const names = SEG7_NAMES;
 
-    ctx.strokeStyle = '#cccccc';
-    ctx.lineWidth = 2;
+    // Style des fils/pattes : rouge comme une LED
+    const pinColor = '#ff1744';
+    const comX = 20;
+    const comY = 100;
+
+    // Boîtier plus large (droit)
+    // Centré sur x=20 pour aligner le fil de cathode et sa jonction.
+    const boxL = -18, boxR = 58, boxT = -78, boxB = 80;
+
+    // Pattes a..g : du point de connexion (pastille) jusqu'au bord gauche du boîtier (en rouge)
+    ctx.strokeStyle = pinColor;
+    ctx.lineWidth = 3;
     for (let i = 0; i < 7; i++) {
         ctx.beginPath();
         ctx.moveTo(-40, pinYs[i]);
-        ctx.lineTo(-4, pinYs[i]);
+        ctx.lineTo(boxL, pinYs[i]);
         ctx.stroke();
     }
+    // Patte commune : sort du bas vers la pastille commune (centrée + plus longue)
     ctx.beginPath();
-    ctx.moveTo(16, 56);
-    ctx.lineTo(16, 72);
+    ctx.moveTo(comX, boxB);
+    ctx.lineTo(comX, comY);
     ctx.stroke();
 
-    ctx.save();
-    ctx.transform(1, 0, -0.22, 1, 4, 0);
-    ctx.strokeStyle = '#888888';
+    // Boîtier droit (non incliné)
+    ctx.strokeStyle = '#bdbdbd';
     ctx.lineWidth = 2;
-    ctx.strokeRect(0, -46, 34, 92);
+    ctx.strokeRect(boxL, boxT, boxR - boxL, boxB - boxT);
+
+    // Segments du chiffre centrés dans le boîtier, légèrement inclinés
+    ctx.save();
+    ctx.transform(1, 0, -0.14, 1, 0, 0);
+
+    const segMarginX = 15;
+    const segMarginTop = 22;
+    const segMarginBottom = 24;
+    const leftX = boxL + segMarginX;
+    const rightX = boxR - segMarginX;
+    const topY = boxT + segMarginTop;
+    const botY = boxB - segMarginBottom;
+    const midY = (topY + botY) / 2;
     ctx.lineCap = 'round';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 6;
     const seg = (x1, y1, x2, y2, name) => {
         ctx.strokeStyle = segColor(name);
         ctx.beginPath();
@@ -148,25 +204,136 @@ function drawSeg7Display(comp) {
         ctx.lineTo(x2, y2);
         ctx.stroke();
     };
-    seg(4, -40, 30, -40, 'a');
-    seg(28, -38, 28, -22, 'b');
-    seg(28, 22, 28, 38, 'c');
-    seg(4, 40, 30, 40, 'd');
-    seg(4, 22, 4, 38, 'e');
-    seg(4, -38, 4, -22, 'f');
-    seg(6, -2, 28, -2, 'g');
+    const hInset = 4;
+    seg(leftX + hInset, topY, rightX - hInset, topY, 'a');    // haut
+    seg(rightX, topY + 5, rightX, midY - 5, 'b');             // haut-droite
+    seg(rightX, midY + 5, rightX, botY - 5, 'c');             // bas-droite
+    seg(leftX + hInset, botY, rightX - hInset, botY, 'd');    // bas
+    seg(leftX, midY + 5, leftX, botY - 5, 'e');               // bas-gauche
+    seg(leftX, topY + 5, leftX, midY - 5, 'f');               // haut-gauche
+    seg(leftX + hInset, midY, rightX - hInset, midY, 'g');    // milieu
     ctx.restore();
 
-    ctx.fillStyle = '#ff5252';
-    ctx.font = '11px Arial';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < 7; i++) ctx.fillText(names[i], -44, pinYs[i]);
-    ctx.textAlign = 'left';
-    ctx.fillText('k', 20, 68);
+    // Étiquettes des broches a..g, au-dessus de chaque patte près du boîtier
     ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    for (let i = 0; i < 7; i++) ctx.fillText(names[i], boxL - 4, pinYs[i] - 2);
+    // Étiquette de la borne commune C
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('C', comX + 8, comY);
+    // Nom du composant
     ctx.textAlign = 'center';
-    ctx.fillText(comp.label, 0, -56);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(comp.label, 26, boxT - 6);
+}
+
+function drawLogicGateSymbol(gateType, label) {
+    const inTopY = -20;
+    const inBottomY = 20;
+    const inMidY = 0;
+    const gateLeft = -20;
+    const gateArcR = 20;
+    const outBubbleR = (gateType === 'nand' || gateType === 'nor' || gateType === 'xnor' || gateType === 'not') ? 4 : 0;
+    const isOrFamily = gateType === 'or' || gateType === 'nor' || gateType === 'xor' || gateType === 'xnor';
+    const isXorFamily = gateType === 'xor' || gateType === 'xnor';
+    const isNot = gateType === 'not';
+
+    ctx.strokeStyle = '#00ca71';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = '#1e1e1e';
+
+    if (isNot) {
+        ctx.beginPath();
+        ctx.moveTo(-16, -18);
+        ctx.lineTo(14, 0);
+        ctx.lineTo(-16, 18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    } else if (isOrFamily) {
+        ctx.beginPath();
+        ctx.moveTo(-20, -20);
+        ctx.quadraticCurveTo(0, -20, 14, 0);
+        ctx.quadraticCurveTo(0, 20, -20, 20);
+        ctx.quadraticCurveTo(-8, 0, -20, -20);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        if (isXorFamily) {
+            ctx.beginPath();
+            ctx.moveTo(-25, -20);
+            ctx.quadraticCurveTo(-13, 0, -25, 20);
+            ctx.stroke();
+        }
+    } else {
+        // Forme AND / NAND
+        ctx.beginPath();
+        ctx.moveTo(gateLeft, -20);
+        ctx.lineTo(0, -20);
+        ctx.arc(0, 0, gateArcR, -Math.PI / 2, Math.PI / 2);
+        ctx.lineTo(gateLeft, 20);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    const outStemStart = 20 + outBubbleR;
+    if (isNot) {
+        // La pointe du triangle est à x=14
+        const notStemStart = 14 + outBubbleR;
+        ctx.beginPath();
+        ctx.moveTo(notStemStart, 0);
+        ctx.lineTo(40, 0);
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(outStemStart, 0);
+        ctx.lineTo(40, 0);
+        ctx.stroke();
+    }
+
+    if (isNot) {
+        ctx.beginPath();
+        ctx.moveTo(-40, 0);
+        ctx.lineTo(-16, 0);
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(-40, inTopY);
+        ctx.lineTo(gateLeft, inTopY);
+        ctx.moveTo(-40, inBottomY);
+        ctx.lineTo(gateLeft, inBottomY);
+        ctx.stroke();
+    }
+
+    if (outBubbleR > 0) {
+        const cx = isNot ? 14 + outBubbleR : 20 + outBubbleR;
+        ctx.beginPath();
+        ctx.arc(cx, 0, outBubbleR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fill();
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, 0, -26);
+
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    if (isNot) {
+        ctx.fillText('A', -34, inMidY - 4);
+    } else {
+        ctx.fillText('A', -34, inTopY - 4);
+        ctx.fillText('B', -34, inBottomY - 4);
+    }
 }
 
 function drawMeterDisplay(valuePart, unitPart, rot) {
@@ -229,17 +396,23 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     ctx.save(); ctx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     ctx.rotate(rot * Math.PI / 180);
 
     if (interaction.selectedComponents.includes(comp)) {
         ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 1.5;
-        if (comp.type === 'jk_flipflop' || comp.type === 'd_flipflop') ctx.strokeRect(-45, -68, 90, 136);
+        if (comp.type === 'cd4511') {
+            ctx.strokeRect(-CD4511_HIT_DX, -CD4511_HIT_DY, CD4511_HIT_DX * 2, CD4511_HIT_DY * 2);
+        }
+        else if (comp.type === 'ic_74hc90') {
+            ctx.strokeRect(-IC90_HIT_DX, -IC90_HIT_DY, IC90_HIT_DX * 2, IC90_HIT_DY * 2);
+        }
+        else if (comp.type === 'jk_flipflop' || comp.type === 'd_flipflop') ctx.strokeRect(-45, -68, 90, 136);
         else if (comp.type === 'oscilloscope') ctx.strokeRect(-50, -38, 100, 100);
         else if (comp.type === 'npn') ctx.strokeRect(-42, -42, 64, 84);
         else if (comp.type === 'opamp') ctx.strokeRect(-44, -40, 88, 80);
-        else if (comp.type === 'seg7') ctx.strokeRect(-46, -58, 92, 136);
+        else if (comp.type === 'seg7') ctx.strokeRect(-52, -86, 124, 200);
         else if (comp.type !== 'logic_terminal') ctx.strokeRect(-45, -25, 90, 50);
     }
 
@@ -394,12 +567,8 @@ function drawComponentBody(comp) {
         ctx.fillStyle = '#aaaaaa';
         ctx.fillText(comp.value || 'uA741', fx(8), fy(42));
     }
-    else if (comp.type === 'nand') {
-        ctx.strokeStyle = '#00ca71'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
-        ctx.beginPath(); ctx.moveTo(-20, -20); ctx.lineTo(0, -20); ctx.arc(0, 0, 20, -Math.PI/2, Math.PI/2); ctx.lineTo(-20, 20); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(24, 0, 4, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#1e1e1e'; ctx.fill();
-        ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-20, -20); ctx.moveTo(-40, 20); ctx.lineTo(-20, 20); ctx.moveTo(28, 0); ctx.lineTo(40, 0); ctx.stroke();
-        drawLabels(comp.label, null, rot);
+    else if (['not', 'and', 'nand', 'or', 'nor', 'xor', 'xnor'].includes(comp.type)) {
+        drawLogicGateSymbol(comp.type, comp.label);
     }
     else if (comp.type === 'd_flipflop') {
         ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
@@ -433,6 +602,64 @@ function drawComponentBody(comp) {
         ctx.textAlign = 'right'; ctx.fillText('Q', 27, -20); ctx.fillText('Q', 27, 20);
         ctx.beginPath(); ctx.moveTo(20, 13); ctx.lineTo(27, 13); ctx.stroke();
         ctx.font = '12px Arial'; ctx.fillStyle = '#ffffff'; ctx.fillText(comp.label, 0, -64);
+    }
+    else if (comp.type === 'cd4511') {
+        const inLbl = ['A', 'B', 'C', 'D', 'LE', 'BI', 'LT'];
+        const outLbl = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+        ctx.strokeStyle = '#ab47bc'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(CD4511_BOX_L, CD4511_BOX_T, CD4511_BOX_R - CD4511_BOX_L, CD4511_BOX_B - CD4511_BOX_T);
+        ctx.strokeRect(CD4511_BOX_L, CD4511_BOX_T, CD4511_BOX_R - CD4511_BOX_L, CD4511_BOX_B - CD4511_BOX_T);
+        ctx.beginPath();
+        CD4511_PIN_Y.forEach((y) => {
+            ctx.moveTo(CD4511_JUNC_L, y);
+            ctx.lineTo(CD4511_BOX_L, y);
+        });
+        CD4511_PIN_Y.forEach((y) => {
+            ctx.moveTo(CD4511_BOX_R, y);
+            ctx.lineTo(CD4511_JUNC_R, y);
+        });
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px Arial'; ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        inLbl.forEach((t, i) => ctx.fillText(t, CD4511_LABEL_L, CD4511_PIN_Y[i]));
+        ctx.textAlign = 'right';
+        outLbl.forEach((t, i) => ctx.fillText(t, CD4511_LABEL_R, CD4511_PIN_Y[i]));
+        ctx.font = '9px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('CD4511', 0, -4);
+        ctx.font = '8px Arial';
+        ctx.fillText('BCD→7', 0, 6);
+        ctx.font = '11px Arial';
+        ctx.fillText(comp.label, 0, CD4511_BOX_T - 12);
+    }
+    else if (comp.type === 'ic_74hc90') {
+        const leftLbl = ['CP1', 'MR1', 'MR2', '', 'VCC', 'MS1', 'MS2'];
+        const rightLbl = ['CP0', '', 'Q0', 'Q3', 'GND', 'Q1', 'Q2'];
+        ctx.strokeStyle = '#26a69a'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
+        ctx.strokeRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
+        ctx.beginPath();
+        IC90_LEFT_PIN_Y.forEach((y, i) => {
+            if (!leftLbl[i]) return;
+            ctx.moveTo(IC90_JUNC_L, y);
+            ctx.lineTo(IC90_BOX_L, y);
+        });
+        IC90_RIGHT_PIN_Y.forEach((y, i) => {
+            if (!rightLbl[i]) return;
+            ctx.moveTo(IC90_BOX_R, y);
+            ctx.lineTo(IC90_JUNC_R, y);
+        });
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.font = '8px Arial'; ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        leftLbl.forEach((t, i) => { if (t) ctx.fillText(t, IC90_LABEL_L, IC90_LEFT_PIN_Y[i]); });
+        ctx.textAlign = 'right';
+        rightLbl.forEach((t, i) => { if (t) ctx.fillText(t, IC90_LABEL_R, IC90_RIGHT_PIN_Y[i]); });
+        ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('74HC90', 0, -4);
+        ctx.font = '8px Arial';
+        ctx.fillText('décade', 0, 6);
+        ctx.font = '11px Arial';
+        ctx.fillText(comp.label, 0, IC90_BOX_T - 12);
     }
     else if (comp.type === 'seg7') {
         drawSeg7Display(comp);

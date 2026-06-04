@@ -1,5 +1,6 @@
 // simulation.js
 import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
+import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { draw } from './renderer.js';
 import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
@@ -19,7 +20,9 @@ export function requestLiveSimulation() {
 
 const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
-    gnd: 'ground', nand: 'logic_nand', d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', led: 'diode_led', seg7: 'seg7',
+    gnd: 'ground',
+    not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', led: 'diode_led', seg7: 'seg7',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -52,7 +55,10 @@ function jonctionIdToTerminalKey(jonctionId) {
     if (junc) return `__t#${junc.x}#${junc.y}`;
     for (const comp of circuit.components) {
         const id = comp.label; if (!id) continue;
-        if (comp.type === 'nand') {
+        if (comp.type === 'not') {
+            if (jonctionId === `${id}_inA`) return `${id}#0`;
+            if (jonctionId === `${id}_out`) return `${id}#1`;
+        } else if (['and', 'nand', 'or', 'nor', 'xor', 'xnor'].includes(comp.type)) {
             if (jonctionId === `${id}_inA`) return `${id}#0`;
             if (jonctionId === `${id}_inB`) return `${id}#1`;
             if (jonctionId === `${id}_out`) return `${id}#2`;
@@ -100,6 +106,12 @@ function jonctionIdToTerminalKey(jonctionId) {
                 if (jonctionId === `${id}_${segs[i]}`) return `${id}#${i}`;
             }
             if (jonctionId === `${id}_COM`) return `${id}#7`;
+        } else if (comp.type === 'cd4511') {
+            const key = cd4511JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'ic_74hc90') {
+            const key = ic74hc90JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
         } else {
             if (jonctionId === `${id}_in`) return `${id}#0`;
             if (jonctionId === `${id}_out`) return `${id}#1`;
@@ -147,9 +159,22 @@ function buildSimulationState() {
         return out;
     });
     const simWires = circuit.wires
-        .filter((w) => w.fromJonctionId && w.toJonctionId && Array.isArray(w.points) && w.points.length >= 2)
-        .map((w) => ({ solid: true, fromKey: jonctionIdToTerminalKey(w.fromJonctionId), toKey: jonctionIdToTerminalKey(w.toJonctionId), points: w.points }))
+        .filter((w) => w.fromJonctionId && w.toJonctionId)
+        .map((w) => {
+            const fromKey = jonctionIdToTerminalKey(w.fromJonctionId);
+            const toKey = jonctionIdToTerminalKey(w.toJonctionId);
+            const pts = Array.isArray(w.points) && w.points.length >= 2
+                ? w.points
+                : [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+            return { solid: true, fromKey, toKey, points: pts };
+        })
         .filter((w) => w.fromKey && w.toKey);
+    const dropped = circuit.wires.length - simWires.length;
+    if (dropped > 0) {
+        console.warn(
+            `[Simulation] ${dropped} fil(s) ignoré(s) : jonction non reconnue ou extrémité manquante. Vérifiez le câblage (CD4511 : broches A…LT, a…g).`
+        );
+    }
     return { components: simComponents, wires: simWires };
 }
 
@@ -204,8 +229,9 @@ export async function triggerSimulation(isSilentUpdate = false) {
             if (result.analysisTran) {
                 const vmPlots = result.voltmeterTranPlots || {};
                 const ledPlots = result.ledTranPlots || {};
-                if (Object.keys(vmPlots).length || Object.keys(ledPlots).length) {
-                    startLedAnimation(ledPlots, vmPlots);
+                const seg7Plots = result.seg7TranPlots || {};
+                if (Object.keys(vmPlots).length || Object.keys(ledPlots).length || Object.keys(seg7Plots).length) {
+                    startLedAnimation(ledPlots, vmPlots, seg7Plots);
                 } else {
                     stopLedAnimation();
                 }

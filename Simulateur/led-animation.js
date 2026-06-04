@@ -14,11 +14,15 @@ export function isLedOvercurrent(current) {
 }
 
 let redraw = () => {};
+const SEG7_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+const SEG7_LIT_DELTA_V = 0.35;
+
 let anim = {
     rafId: null,
     startMs: 0,
     plots: {},
     vmPlots: {},
+    seg7Plots: {},
     /** @type {Record<string, number>} période (s) propre à chaque LED */
     ledPeriods: {},
     vmPeriods: {},
@@ -53,9 +57,11 @@ function hasRippleCounter() {
             const other = w.fromJonctionId === clkJon ? w.toJonctionId
                 : w.toJonctionId === clkJon ? w.fromJonctionId : null;
             if (!other) continue;
-            const m = /^([A-Za-z0-9_]+)_Q$/.exec(other);
-            if (!m || m[1] === comp.label) continue;
-            if (circuit.components.some((c) => ffTypes.has(c.type) && c.label === m[1])) return true;
+            const mQ = /^([A-Za-z0-9_]+)_Q$/.exec(other);
+            const mQb = /^([A-Za-z0-9_]+)_Qbar$/.exec(other);
+            const prevLabel = (mQ || mQb)?.[1];
+            if (!prevLabel || prevLabel === comp.label) continue;
+            if (circuit.components.some((c) => ffTypes.has(c.type) && c.label === prevLabel)) return true;
         }
     }
     return false;
@@ -116,6 +122,37 @@ function detectLedPeriodSec(plot) {
     const span = time[time.length - 1] - time[0];
     if (toggles >= 2 && span > 0) return (2 * span) / toggles;
     return null;
+}
+
+function interpolateSeries(time, values, tSec) {
+    if (!time?.length || !values?.length) return NaN;
+    if (tSec <= time[0]) return values[0] ?? NaN;
+    const last = time.length - 1;
+    if (tSec >= time[last]) return values[last] ?? NaN;
+    let lo = 0;
+    let hi = last;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (time[mid] <= tSec) lo = mid;
+        else hi = mid;
+    }
+    const t0 = time[lo];
+    const t1 = time[hi];
+    const v0 = values[lo];
+    const v1 = values[hi];
+    if (t1 <= t0) return v0;
+    const f = (tSec - t0) / (t1 - t0);
+    return v0 + f * (v1 - v0);
+}
+
+function seg7LitFromVoltages(segmentV, vCom) {
+    const lit = {};
+    const vc = Number.isFinite(vCom) ? vCom : 0;
+    for (let i = 0; i < 7; i++) {
+        const v = segmentV[i];
+        lit[SEG7_NAMES[i]] = Number.isFinite(v) && v - vc >= SEG7_LIT_DELTA_V;
+    }
+    return lit;
 }
 
 function interpolatePlot(plot, tSec) {
@@ -268,19 +305,40 @@ export function hasLedAnimation() {
     return anim.rafId != null && Object.keys(anim.plots).length > 0;
 }
 
-export function startLedAnimation(plots, vmPlots = {}) {
+export function hasSeg7Animation() {
+    return anim.rafId != null && Object.keys(anim.seg7Plots).length > 0;
+}
+
+/** Segments allumés à l'instant courant de la simulation live (.tran). */
+export function getAnimatedSeg7Segments(label) {
+    const plot = anim.seg7Plots[label];
+    if (!plot?.time?.length) return null;
+    const period = getGimpPeriodSec() ?? 1;
+    const elapsed = (performance.now() - anim.startMs) / 1000;
+    const tSample = sampleTimeSec(elapsed, period);
+    const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
+    const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
+    const vCom = interpolateSeries(plot.time, plot.common, tAbs);
+    const segmentV = SEG7_NAMES.map((n) => interpolateSeries(plot.time, plot.segments[n], tAbs));
+    return { segments: seg7LitFromVoltages(segmentV, vCom) };
+}
+
+export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}) {
     stopLedAnimation();
     const hasLeds = plots && Object.keys(plots).length > 0;
     const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
-    if (!hasLeds && !hasVm) return;
+    const hasSeg7 = seg7Plots && Object.keys(seg7Plots).length > 0;
+    if (!hasLeds && !hasVm && !hasSeg7) return;
 
     anim.plots = plots || {};
     anim.vmPlots = vmPlots || {};
+    anim.seg7Plots = seg7Plots || {};
     anim.startMs = performance.now();
     if (hasLeds) prepareLedTiming(plots);
     if (hasVm) prepareVmTiming(vmPlots);
 
-    const needsFrameLoop = Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) || hasVm;
+    const needsFrameLoop =
+        Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) || hasVm || hasSeg7;
     if (!needsFrameLoop) {
         redraw();
         return;
@@ -314,6 +372,7 @@ export function stopLedAnimation() {
     anim.rafId = null;
     anim.plots = {};
     anim.vmPlots = {};
+    anim.seg7Plots = {};
     anim.ledPeriods = {};
     anim.vmPeriods = {};
     anim.ledPersistence = {};

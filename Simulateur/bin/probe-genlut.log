@@ -1,0 +1,39 @@
+
+Note: No compatibility mode selected!
+
+
+Circuit: * probe xspice models
+
+d_and - digital n-input and gate
+
+Model Parameters
+  id#	 Name      	 Dir	 Description
+    0	 rise_delay	 inout	 rise delay
+    1	 fall_delay	 inout	 fall delay
+    2	 input_load	 inout	 input load value (F)
+    3	 family    	 inout	 Logic family for bridging
+    4	 inertial_delay	 inout	 swallow short pulses
+
+Instance Parameters
+  id#	 Name      	 Dir	 Description
+    5	 is_inertial	 out	 using inertial delay
+
+d_or - digital n-input o.quit: no such command available in ngspice
+Error: incomplete or empty netlist
+       or no ".plot", ".print", or ".fourier" lines in batch mode;
+no simulations run!
+r gate
+
+Model Parameters
+  id#	 Name      	 Dir	 Description
+    0	 rise_delay	 inout	 rise delay
+    1	 fall_delay	 inout	 fall delay
+    2	 input_load	 inout	 input load value (F)
+    3	 family    	 inout	 Logic family for bridging
+    4	 inertial_delay	 inout	 swallow short pulses
+
+Instance Parameters
+  id#	 Name      	 Dir	 Description
+    5	 is_inertial	 out	 using inertial delay
+
+Error: Device d_inv not found

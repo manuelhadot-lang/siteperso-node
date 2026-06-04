@@ -12,10 +12,11 @@ import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animatio
 const COMPONENT_PREFIX = {
     battery: 'VDC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', opamp: 'AOP',
-    nand: 'Nand', d_flipflop: 'DFF', jk_flipflop: 'JKFF', led: 'LED', seg7: 'SEG',
+    not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
+    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', led: 'LED', seg7: 'SEG',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
 let fileHandle = null;
 let lastMouseGridPos = { x: 0, y: 0 };
 let liveDragMoved = false;
@@ -89,12 +90,6 @@ window.addEventListener('keydown', (e) => {
             comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp');
         if (flippable.length === 0) return;
         saveState(); flippable.forEach(comp => { comp.flipX = !comp.flipX; }); draw(); return;
-    }
-    if (key === 'y' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
-        if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
-        const flippable = interaction.selectedComponents.filter(comp => comp.type === 'opamp');
-        if (flippable.length === 0) return;
-        saveState(); flippable.forEach(comp => { comp.flipY = !comp.flipY; }); draw(); return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
         if (interaction.selectedComponents.length > 0 || interaction.selectedAutoJunctions.length > 0 || interaction.selectedWire !== null) {
@@ -274,9 +269,30 @@ canvas.addEventListener('mouseup', () => {
     draw();
 });
 
+function openCd4511DocModal(componentLabel) {
+    const modal = document.getElementById('cd4511-doc-modal');
+    const title = document.getElementById('cd4511-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `CD4511 — ${componentLabel}`
+            : 'CD4511 — Décodeur BCD / 7 segments';
+    }
+    modal.style.display = 'block';
+}
+
+function closeCd4511DocModal() {
+    const modal = document.getElementById('cd4511-doc-modal');
+    if (modal) modal.style.display = 'none';
+}
+
 canvas.addEventListener('dblclick', (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
+        if (target.type === 'cd4511') {
+            openCd4511DocModal(target.label);
+            return;
+        }
         if (target.type === 'oscilloscope') {
             closeSourcePanel();
             openScopePanel(target);
@@ -422,4 +438,7 @@ window.onload = function() {
     bindScopeAnimationRedraw(draw);
     bindScopePopupRedraw(refreshScopePopup);
     const m = document.getElementById('commands-modal'); document.getElementById('btn-commands').addEventListener('click', () => m.style.display = 'block'); document.getElementById('close-commands').addEventListener('click', () => m.style.display = 'none'); window.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });
+    const cdDoc = document.getElementById('cd4511-doc-modal');
+    document.getElementById('close-cd4511-doc')?.addEventListener('click', closeCd4511DocModal);
+    window.addEventListener('click', (e) => { if (e.target === cdDoc) closeCd4511DocModal(); });
 };

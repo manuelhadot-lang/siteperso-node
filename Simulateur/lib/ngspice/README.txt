@@ -1,7 +1,7 @@
 Fichiers ngspice / XSPICE pour le simulateur
 ==========================================
 
-Pour les bascules D en mode XSPICE (recommandé), copiez ici :
+Pour les bascules D et le CD4511 (BCD → 7 segments) en mode XSPICE, copiez ici :
 
   digital.cm
 
@@ -20,3 +20,6 @@ Verifiez avec : npm run check-ngspice
   Sans devhelp d_dff, le simulateur repasse sur le modele B (sources comportementales).
 
 Sans digital.cm OU sans binaire XSPICE, les bascules D utilisent l'ancien modele (sources B).
+Le CD4511 n'est simule qu'avec XSPICE (d_dlatch + d_genlut).
+
+Test CD4511 : node Simulateur/Engine/logic-cd4511-xspice.test.mjs

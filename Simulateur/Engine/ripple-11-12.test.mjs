@@ -109,5 +109,20 @@ async function runCounter(label, state, deckOpts) {
 
 const xspiceOpts = { forceXspiceDff: true, forceBsourceDff: false, forceXspiceJk: true, forceBsourceJk: false };
 
-await runCounter("D ripple XSPICE", buildCounterState(4, "logic_dff"), xspiceOpts);
+function buildCounterStateQbar(numFf = 4) {
+    const state = buildCounterState(numFf, "logic_dff");
+    state.wires = state.wires.filter((w) => {
+        const qRipple =
+            (/^DFF\d+#2$/.test(w.fromKey) && /^DFF\d+#1$/.test(w.toKey)) ||
+            (/^DFF\d+#1$/.test(w.fromKey) && /^DFF\d+#2$/.test(w.toKey));
+        return !qRipple;
+    });
+    for (let i = 1; i < numFf; i++) {
+        state.wires.push({ solid: true, fromKey: `DFF${i}#3`, toKey: `DFF${i + 1}#1`, points: [] });
+    }
+    return state;
+}
+
+await runCounter("D ripple XSPICE (Q)", buildCounterState(4, "logic_dff"), xspiceOpts);
+await runCounter("D ripple XSPICE (/Q)", buildCounterStateQbar(4), xspiceOpts);
 await runCounter("JK ripple XSPICE", buildCounterState(4, "logic_jk"), xspiceOpts);

@@ -1,5 +1,15 @@
 // geometry.js
 import { circuit, flags, simulationResults, snapToGrid } from './state.js';
+import { CD4511_JUNC_L, CD4511_JUNC_R, CD4511_PIN_Y, CD4511_HIT_DX, CD4511_HIT_DY } from './cd4511-layout.js';
+import {
+    IC90_JUNC_L,
+    IC90_JUNC_R,
+    IC90_LEFT_PIN_Y,
+    IC90_RIGHT_PIN_Y,
+    IC90_HIT_DX,
+    IC90_HIT_DY,
+    ic74hc90JonctionToTerminalKey,
+} from './ic74hc90-layout.js';
 
 export function isPointOnSegment(px, py, p1, p2, tolerance = 1) {
     const minX = Math.min(p1.x, p2.x) - tolerance, maxX = Math.max(p1.x, p2.x) + tolerance;
@@ -55,7 +65,7 @@ export function getComponentJonctions(comp) {
         const ys = [-60, -40, -20, 0, 20, 40, 60];
         const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
         localPts = names.map((n, i) => ({ id: `${comp.label}_${n}`, x: -40, y: ys[i] }));
-        localPts.push({ id: `${comp.label}_COM`, x: 16, y: 72 });
+        localPts.push({ id: `${comp.label}_COM`, x: 20, y: 100 });
     } else if (['capacitor', 'inductor', 'diode'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'gsqr') {
@@ -75,8 +85,10 @@ export function getComponentJonctions(comp) {
             { id: `${comp.label}_minus`, x: -40, y: 20 },
             { id: `${comp.label}_out`, x: 40, y: 0 },
         ];
-    } else if (comp.type === 'nand') {
+    } else if (['and', 'nand', 'or', 'nor', 'xor', 'xnor'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_inA`, x: -40, y: -20 }, { id: `${comp.label}_inB`, x: -40, y: 20 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
+    } else if (comp.type === 'not') {
+        localPts = [{ id: `${comp.label}_inA`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'd_flipflop') {
         localPts = [
             { id: `${comp.label}_D`, x: -40, y: -20 },
@@ -96,6 +108,22 @@ export function getComponentJonctions(comp) {
             { id: `${comp.label}_SET`, x: 0, y: -60 },
             { id: `${comp.label}_RESET`, x: 0, y: 60 }
         ];
+    } else if (comp.type === 'cd4511') {
+        const inNames = ['A', 'B', 'C', 'D', 'LE', 'BI', 'LT'];
+        localPts = inNames.map((n, i) => ({ id: `${comp.label}_${n}`, x: CD4511_JUNC_L, y: CD4511_PIN_Y[i] }));
+        const outNames = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+        outNames.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: CD4511_JUNC_R, y: CD4511_PIN_Y[i] });
+        });
+    } else if (comp.type === 'ic_74hc90') {
+        const left = ['CP1', 'MR1', 'MR2', null, 'VCC', 'MS1', 'MS2'];
+        const right = ['CP0', null, 'Q0', 'Q3', 'GND', 'Q1', 'Q2'];
+        left.forEach((n, i) => {
+            if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_L, y: IC90_LEFT_PIN_Y[i] });
+        });
+        right.forEach((n, i) => {
+            if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_R, y: IC90_RIGHT_PIN_Y[i] });
+        });
     } else if (['gnd', 'vcc', 'logic_terminal'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_out`, x: 40, y: 0 }];
     }
@@ -103,7 +131,7 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
@@ -122,9 +150,11 @@ export function componentHitTest(comp, mx, my) {
     const dy = Math.abs(my - comp.y);
     if (comp.type === 'logic_terminal') return dx < 38 && dy < 22;
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
+    if (comp.type === 'cd4511') return dx < CD4511_HIT_DX && dy < CD4511_HIT_DY;
+    if (comp.type === 'ic_74hc90') return dx < IC90_HIT_DX && dy < IC90_HIT_DY;
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
-    if (comp.type === 'seg7') return dx < 42 && dy < 78;
+    if (comp.type === 'seg7') return dx < 60 && dy < 110;
     if (comp.type === 'opamp') return dx < 44 && dy < 42;
     if (comp.type === 'npn') return dx < 44 && dy < 44;
     return dx < 30 && dy < 30;

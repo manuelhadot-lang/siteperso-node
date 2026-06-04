@@ -554,6 +554,13 @@ async function getMergeSeg7FromTranWrdata() {
     return module.mergeSeg7FromTranWrdata;
 }
 
+async function getMergeSeg7TranPlotsFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeSeg7TranPlotsFromWrdata !== "function")
+        throw new Error("Module mergeSeg7TranPlotsFromWrdata introuvable.");
+    return module.mergeSeg7TranPlotsFromWrdata;
+}
+
 async function getMergeLedTranPlotsFromWrdata() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.mergeLedTranPlotsFromWrdata !== "function")
@@ -733,6 +740,7 @@ app.post("/api/simulate", async (req, res) => {
     let mergeVoltmeterTranPlotsFromWrdata;
     let mergeSeg7Measurements;
     let mergeSeg7FromTranWrdata;
+    let mergeSeg7TranPlotsFromWrdata;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
@@ -754,6 +762,7 @@ app.post("/api/simulate", async (req, res) => {
         mergeVoltmeterTranPlotsFromWrdata = await getMergeVoltmeterTranPlotsFromWrdata();
         mergeSeg7Measurements = await getMergeSeg7Measurements();
         mergeSeg7FromTranWrdata = await getMergeSeg7FromTranWrdata();
+        mergeSeg7TranPlotsFromWrdata = await getMergeSeg7TranPlotsFromWrdata();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -853,6 +862,7 @@ app.post("/api/simulate", async (req, res) => {
         let ammeterRmsValues = {};
         let scopePlots = {};
         let seg7Values = mergeSeg7Measurements(combinedLog, built.seg7Displays || []);
+        let seg7TranPlots = {};
         let ledTranPlots = {};
         let voltmeterTranPlots = {};
         let waveDiag = "";
@@ -897,6 +907,7 @@ app.post("/api/simulate", async (req, res) => {
             const seg7Meta = Array.isArray(built.seg7TranMeta) ? built.seg7TranMeta : [];
             const fromTranSeg7 = mergeSeg7FromTranWrdata(waveTxt, seg7Meta);
             if (Object.keys(fromTranSeg7).length > 0) seg7Values = fromTranSeg7;
+            seg7TranPlots = mergeSeg7TranPlotsFromWrdata(waveTxt, seg7Meta);
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
@@ -985,6 +996,7 @@ app.post("/api/simulate", async (req, res) => {
             analysisTran: tran,
             scopePlots,
             seg7Values,
+            seg7TranPlots,
             seg7Displays: Array.isArray(built.seg7Displays) ? built.seg7Displays : [],
         });
     } catch (error) {

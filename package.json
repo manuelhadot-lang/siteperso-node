@@ -15,6 +15,7 @@
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.3",
+    "operators": "^1.0.0",
     "socket.io": "^4.8.1"
   },
   "overrides": {

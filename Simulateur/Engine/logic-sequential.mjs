@@ -1,6 +1,12 @@
 /** Bascules et circuits intégrés logiques — ngspice (XSPICE d_dff ou sources B). */
 
 import {
+    appendLogicCd4511XspiceNetlist,
+    cd4511InputNodeKeys,
+    cd4511OutputNodeKeys,
+    logicCd4511XspiceInternalNodeKeys,
+} from "./logic-cd4511-xspice.mjs";
+import {
     appendLogicDffXspiceNetlist,
     appendLogicJkXspiceNetlist,
     isXspiceDffAvailable,
@@ -9,6 +15,8 @@ import {
     xspiceCodemodelLines,
 } from "./logic-xspice.mjs";
 import { ngspiceHasXspice } from "./ngspice-xspice-probe.mjs";
+
+export { cd4511InputNodeKeys, cd4511OutputNodeKeys };
 
 export function isLogicSequentialType(t) {
     return t === "logic_dff" || t === "logic_jk";
@@ -22,8 +30,16 @@ export function isIc74ls74Type(t) {
     return t === "ic_74ls74";
 }
 
+export function isLogicCd4511Type(t) {
+    return t === "logic_cd4511";
+}
+
+export function isIc74hc90Type(t) {
+    return t === "ic_74hc90";
+}
+
 export function isLogicIcType(t) {
-    return isIc74ls00Type(t) || isIc74ls74Type(t);
+    return isIc74ls00Type(t) || isIc74ls74Type(t) || isLogicCd4511Type(t) || isIc74hc90Type(t);
 }
 
 export function isLogicDigitalSimType(t) {
@@ -51,6 +67,9 @@ export function logicSequentialInternalNodeKeys(c, opts = {}) {
             keys.push(`${c.id}#__qi${sl.suffix}`, `${c.id}#__clkedge${sl.suffix}`);
         }
         return keys;
+    }
+    if (isLogicCd4511Type(c.type)) {
+        return logicCd4511XspiceInternalNodeKeys(c);
     }
     return [];
 }
@@ -169,22 +188,38 @@ export function logicFlipFlopOutputNodeKey(c) {
     return null;
 }
 
-export function isRippleClockFromPrevQ(c, wires, components) {
-    if (!c?.id || !isLogicSequentialType(c.type)) return false;
+export function logicFlipFlopQbarOutputNodeKey(c) {
+    if (c.type === "logic_dff") return logicDffQbarOutputNodeKey(c);
+    if (c.type === "logic_jk") return logicJkQbarOutputNodeKey(c);
+    return null;
+}
+
+/**
+ * Chaînage ripple : horloge = Q ou /Q de l'étage précédent.
+ * @returns {'q'|'qbar'|null}
+ */
+export function getRippleClockFromPrev(c, wires, components) {
+    if (!c?.id || !isLogicSequentialType(c.type)) return null;
     const clkKey = logicFlipFlopClockNodeKey(c);
-    if (!clkKey) return false;
+    if (!clkKey) return null;
     for (const w of wires) {
         if (!w?.solid || !w.fromKey || !w.toKey) continue;
-        let qKey = null;
-        if (w.fromKey === clkKey) qKey = w.toKey;
-        else if (w.toKey === clkKey) qKey = w.fromKey;
-        if (!qKey) continue;
+        let otherKey = null;
+        if (w.fromKey === clkKey) otherKey = w.toKey;
+        else if (w.toKey === clkKey) otherKey = w.fromKey;
+        if (!otherKey) continue;
         for (const prev of components) {
             if (!isLogicSequentialType(prev.type) || prev.id === c.id) continue;
-            if (qKey === logicFlipFlopOutputNodeKey(prev)) return true;
+            if (otherKey === logicFlipFlopOutputNodeKey(prev)) return "q";
+            if (otherKey === logicFlipFlopQbarOutputNodeKey(prev)) return "qbar";
         }
     }
-    return false;
+    return null;
+}
+
+/** @deprecated Utiliser getRippleClockFromPrev(c) === 'q' */
+export function isRippleClockFromPrevQ(c, wires, components) {
+    return getRippleClockFromPrev(c, wires, components) === "q";
 }
 
 function appendClkEdgeDetector(clkNode, edgeNode, lines, spiceBranchName, idLabel, cF, rOhm) {
@@ -311,7 +346,7 @@ function appendLogicDffBsourceNetlist(c, nodeFor, vhi, lines, spiceBranchName, o
             dAndQbarShared,
             nSet,
             nReset,
-            !!opts.rippleClockFromPrevQ
+            opts.rippleClockFromPrev === "q"
         )}`
     );
     lines.push(`${spiceBranchName("R", c.id)}_q ${nQi} ${nQ} ${rQ}`);
@@ -342,6 +377,35 @@ export function useLogicJkXspice(opts = {}) {
     return false;
 }
 
+export function useLogicCd4511Xspice(opts = {}) {
+    if (opts.forceBsourceCd4511 === true) return false;
+    if (!isXspiceDffAvailable(opts.repoRoot)) return false;
+    if (opts.forceXspiceCd4511 === true) return true;
+    if (opts.ngspiceExe) return ngspiceHasXspice(opts.ngspiceExe, opts.ngspiceEnv);
+    return false;
+}
+
+export function appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, opts = {}) {
+    if (useLogicCd4511Xspice(opts)) {
+        appendLogicCd4511XspiceNetlist(c, nodeFor, vhi, lines, spiceBranchName, opts);
+    }
+}
+
+export function resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhiFn) {
+    let vhi = 0;
+    for (const k of cd4511InputNodeKeys(c)) {
+        vhi = Math.max(vhi, logicVhiByTerminal.get(k) ?? 0);
+    }
+    for (const k of cd4511OutputNodeKeys(c)) {
+        vhi = Math.max(vhi, logicVhiByTerminal.get(k) ?? 0);
+    }
+    if (c.logicRail != null && c.logicRail !== "") {
+        vhi = Math.max(vhi, logicVhiFn(parseLogicRail(c.logicRail)));
+    }
+    if (vhi <= 0) vhi = 5;
+    return vhi > 0 ? vhi : 5;
+}
+
 export function appendLogicJkNetlist(c, nodeFor, vhi, lines, spiceBranchName, opts = {}) {
     if (useLogicJkXspice(opts)) {
         appendLogicJkXspiceNetlist(c, nodeFor, vhi, lines, spiceBranchName, opts);
@@ -364,7 +428,7 @@ function appendLogicJkBsourceNetlist(c, nodeFor, vhi, lines, spiceBranchName, op
     lines.push(`${spiceBranchName("R", c.id)}_rstpd ${nReset} 0 1e9`);
     appendClkEdgeDetector(nClk, nEdge, lines, spiceBranchName, c.id, TOGGLE_CLK_EDGE_C_F, TOGGLE_CLK_EDGE_R_OHM);
     lines.push(
-        `${spiceBranchName("B", c.id)}_qi ${nQi} 0 V = ${logicJkQiExpression(nJ, nK, nEdge, nClk, nQ, vhi, nSet, nReset, !!opts.rippleClockFromPrevQ)}`
+        `${spiceBranchName("B", c.id)}_qi ${nQi} 0 V = ${logicJkQiExpression(nJ, nK, nEdge, nClk, nQ, vhi, nSet, nReset, opts.rippleClockFromPrev === "q")}`
     );
     lines.push(`${spiceBranchName("R", c.id)}_q ${nQi} ${nQ} ${TOGGLE_FF_Q_R_OHM}`);
     lines.push(`${spiceBranchName("C", c.id)}_st ${nQi} 0 ${TOGGLE_FF_STATE_C_F}`);
