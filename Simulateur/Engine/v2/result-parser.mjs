@@ -5,6 +5,7 @@
  */
 
 import { logicLevelFromVoltage } from "../logic-rails.mjs";
+import { bcdDigitToSeg7Segments, bcdFromQVoltages, SEG7_NAMES as BCD_SEG7_NAMES } from "../bcd-seg7.mjs";
 
 
 
@@ -913,6 +914,33 @@ export function mergeLogicGateTranFromWrdata(waveTxt, meta) {
     return out;
 }
 
+/** Courbes tension complètes (.tran) pour animation des sorties logiques (ex. Q0…Q3 du 74HC90). */
+export function mergeLogicGateTranPlotsFromWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id || m.wrIndex == null || m.wrIndex === undefined) continue;
+        const wrVarCount = m.wrVarCount || m.wrIndex + 1;
+        const ncol = rows[0].length;
+        const colOffset = Math.max(0, ncol - wrVarCount);
+        const time = [];
+        const voltage = [];
+        for (const row of rows) {
+            if (!Number.isFinite(row[0])) continue;
+            const v = row[m.wrIndex + colOffset];
+            if (!Number.isFinite(v)) continue;
+            time.push(row[0]);
+            voltage.push(v);
+        }
+        if (!time.length) continue;
+        const th = typeof m.vth === "number" && m.vth > 0 ? m.vth : 2.5;
+        out[m.id] = { time, voltage, vth: th, vhi: m.vhi, nodeOut: m.nodeOut };
+    }
+    return out;
+}
+
 export function mergeLedValuesFromTranPlots(ledPlots) {
     const out = {};
     if (!ledPlots || typeof ledPlots !== "object") return out;
@@ -1046,5 +1074,90 @@ export function mergeSeg7FromTranWrdata(waveTxt, meta) {
         out[m.id] = { segments: seg7SegmentsFromVoltages(segmentV, vCom) };
     }
     return out;
+}
+
+/** Regroupe les métadonnées tran Q0…Q3 d'un 74HC90 (ids « HC902_Q0 » …). */
+export function groupHc90QTranMeta(logicGatesTranMeta) {
+    const groups = {};
+    if (!Array.isArray(logicGatesTranMeta)) return groups;
+    for (const m of logicGatesTranMeta) {
+        const match = /^(.+)_Q([0-3])$/.exec(m?.id || "");
+        if (!match) continue;
+        const base = match[1];
+        const qi = Number(match[2]);
+        if (!groups[base]) groups[base] = [];
+        groups[base][qi] = m;
+    }
+    return groups;
+}
+
+/**
+ * Afficheur 7 seg piloté par les sorties Q d'un 74HC90 (secours si CD4511 éteint / absent).
+ * @param {string} waveTxt
+ * @param {{ 0?: object; 1?: object; 2?: object; 3?: object }} qMetaByIndex
+ * @param {string} seg7Id
+ */
+export function mergeSeg7TranPlotsFromHc90Q(waveTxt, qMetaByIndex, seg7Id) {
+    const out = {};
+    if (!seg7Id || !qMetaByIndex?.[0]) return out;
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length) return out;
+
+    let wrVarCount = 2;
+    for (let i = 0; i < 4; i++) {
+        const m = qMetaByIndex[i];
+        if (m?.wrVarCount > wrVarCount) wrVarCount = m.wrVarCount;
+    }
+    const colOffset = Math.max(0, (rows[0]?.length || 0) - wrVarCount);
+    const vth =
+        typeof qMetaByIndex[0]?.vth === "number" && qMetaByIndex[0].vth > 0
+            ? qMetaByIndex[0].vth
+            : 2.5;
+
+    const time = [];
+    const common = [];
+    const segments = Object.fromEntries(BCD_SEG7_NAMES.map((n) => [n, []]));
+    const vOn = 1.2;
+    const vOff = 0.05;
+
+    for (const row of rows) {
+        if (!Number.isFinite(row[0])) continue;
+        const qV = [];
+        for (let i = 0; i < 4; i++) {
+            const m = qMetaByIndex[i];
+            const ix = m?.wrIndex;
+            qV.push(ix != null ? row[ix + colOffset] : 0);
+        }
+        const digit = bcdFromQVoltages(qV, vth);
+        const seg = bcdDigitToSeg7Segments(digit);
+        time.push(row[0]);
+        common.push(0);
+        BCD_SEG7_NAMES.forEach((name) => {
+            segments[name].push(seg[name] ? vOn : vOff);
+        });
+    }
+    if (!time.length) return out;
+    out[seg7Id] = { time, common, segments };
+    return out;
+}
+
+/** Dernière valeur BCD → segments (pour affichage statique). */
+export function mergeSeg7FromHc90Q(waveTxt, qMetaByIndex, seg7Id) {
+    const plots = mergeSeg7TranPlotsFromHc90Q(waveTxt, qMetaByIndex, seg7Id);
+    const plot = plots[seg7Id];
+    if (!plot?.time?.length) return {};
+    const last = plot.time.length - 1;
+    const segmentV = BCD_SEG7_NAMES.map((n) => plot.segments[n][last]);
+    const vCom = plot.common[last] ?? 0;
+    return {
+        [seg7Id]: { segments: seg7SegmentsFromVoltages(segmentV, vCom) },
+    };
+}
+
+/** true si l'afficheur semble éteint (tous segments < seuil). */
+export function seg7DisplayAppearsBlank(seg7Entry) {
+    const seg = seg7Entry?.segments;
+    if (!seg || typeof seg !== "object") return true;
+    return !Object.values(seg).some(Boolean);
 }
 

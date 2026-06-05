@@ -130,24 +130,121 @@
                     </thead>
                     <tbody>
                         <tr><td>A, B, C, D</td><td>Entrées BCD (A = bit faible)</td><td>1 = logique haut (0…V<sub>CC</sub>)</td></tr>
-                        <tr><td>LE</td><td>Verrouillage — 0 : suivi des entrées ; 1 : mémorise</td><td>—</td></tr>
-                        <tr><td>BI</td><td>Extinction de l’affichage</td><td>0 = segments éteints</td></tr>
-                        <tr><td>LT</td><td>Test lampe (tous segments ON)</td><td>0 = test actif</td></tr>
+                        <tr><td>LE</td><td>Verrouillage — 0 : suivi des entrées ; 1 : mémorise</td><td>Relier à <strong>0 V</strong> pour suivre un compteur</td></tr>
+                        <tr><td>BI</td><td>Extinction de l’affichage</td><td><strong>0 V = éteint</strong> — relier BI au <strong>+5 V</strong></td></tr>
+                        <tr><td>LT</td><td>Test lampe (tous segments ON)</td><td><strong>0 V = test</strong> — relier LT au <strong>+5 V</strong> en usage normal</td></tr>
                         <tr><td>a … g</td><td>Sorties vers les segments</td><td>1 = segment allumé (cathode commune)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Brochage réel (boîtier DIP 16 — repères courants)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>7</td><td>A</td><td>Entrée BCD bit faible (LSB)</td></tr>
+                        <tr><td>1</td><td>B</td><td>Entrée BCD</td></tr>
+                        <tr><td>2</td><td>C</td><td>Entrée BCD</td></tr>
+                        <tr><td>6</td><td>D</td><td>Entrée BCD bit fort (MSB)</td></tr>
+                        <tr><td>1</td><td>LE</td><td>Verrouillage (0 = suivi direct)</td></tr>
+                        <tr><td>2</td><td>BI</td><td>Extinction (1 = affichage actif)</td></tr>
+                        <tr><td>3</td><td>LT</td><td>Test lampe (1 = fonctionnement normal)</td></tr>
+                        <tr><td>12</td><td>V<sub>DD</sub></td><td>+5 V (alimentation du circuit, hors symbole)</td></tr>
+                        <tr><td>8</td><td>V<sub>SS</sub></td><td>Masse</td></tr>
+                        <tr><td>9, 10, 11, 13, 14, 15, 16</td><td>e, d, c, b, a, f, g</td><td>Sorties vers l’afficheur 7 segments</td></tr>
                     </tbody>
                 </table>
                 <h3>Câblage typique</h3>
                 <ul class="doc-list">
-                    <li>Relier <strong>a … g</strong> aux entrées du composant <em>Afficheur 7 segments</em>.</li>
-                    <li>Relier la <strong>cathode commune (COM)</strong> de l’afficheur à la <strong>masse</strong>.</li>
-                    <li>Alimenter les entrées BCD via des <em>Bornes numériques</em>, un <em>VCC</em> ou des portes logiques (0 V / 5 V).</li>
-                    <li>Laisser <strong>BI</strong> et <strong>LT</strong> au niveau haut (5 V) si non utilisés.</li>
+                    <li>Relier <strong>a … g</strong> aux entrées du composant <em>Afficheur 7 segments</em> (<code>SEG_1</code>).</li>
+                    <li>Relier la <strong>cathode commune (COM)</strong> de l’afficheur à la <strong>masse</strong> (<code>GND_1</code>).</li>
+                    <li><strong>BI</strong> et <strong>LT</strong> au <strong>+5 V</strong> (<code>VCC_1</code> ou <code>LOGIC_1</code> à 1) — pas à la masse.</li>
+                    <li><strong>LE</strong> à <strong>0 V</strong> (<code>GND_1</code> ou borne à 0) pour suivre un compteur.</li>
                 </ul>
                 <h3>Simulation</h3>
                 <p>
                     Modèle <strong>XSPICE</strong> : bascules <code>d_dlatch</code>, table <code>d_genlut</code>,
                     ponts analogiques/numériques. Nécessite <code>digital.cm</code> et ngspice avec XSPICE
                     (<code>npm run check-ngspice</code>).
+                </p>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="hc90-doc-modal" class="modal">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-hc90-doc">&times;</span>
+            <h2 id="hc90-doc-title">74HC90 — Compteur décade asynchrone</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>74HC90</strong> (ou 74LS90) est un compteur <strong>asynchrone</strong>
+                    en deux sections : <strong>÷2</strong> (bascule A, horloge <strong>CP0</strong>) et
+                    <strong>÷5</strong> (bascules B–D). En <strong>mode décade</strong>, la sortie
+                    <strong>Q0</strong> est reliée à <strong>CP1</strong> pour former un compteur
+                    <strong>0…9</strong> sur les sorties Q0–Q3 (code binaire naturel).
+                </p>
+                <h3>Brochage réel (boîtier DIP 14 — 74HC90)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>14</td><td>CP0</td><td>Horloge principale (GImp) — section ÷2</td></tr>
+                        <tr><td>1</td><td>CP1</td><td>Horloge section ÷5 — relier à <strong>Q0</strong> (décade)</td></tr>
+                        <tr><td>12</td><td>Q0</td><td>Sortie LSB — vers <strong>CD4511_1</strong> entrée <strong>A</strong></td></tr>
+                        <tr><td>9</td><td>Q1</td><td>Vers entrée <strong>B</strong></td></tr>
+                        <tr><td>8</td><td>Q2</td><td>Vers entrée <strong>C</strong></td></tr>
+                        <tr><td>11</td><td>Q3</td><td>MSB — vers entrée <strong>D</strong></td></tr>
+                        <tr><td>2, 3</td><td>MR1, MR2</td><td>Reset (niveau haut = compteur à 0)</td></tr>
+                        <tr><td>6, 7</td><td>MS1, MS2</td><td>Mode — laisser à 0 V (décade)</td></tr>
+                        <tr><td>5</td><td>VCC</td><td>+5 V (<code>VCC_1</code>)</td></tr>
+                        <tr><td>10</td><td>GND</td><td>Masse (<code>GND_1</code>)</td></tr>
+                        <tr><td>4, 13</td><td>NC</td><td>Non connectées</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">Sur le schéma, <strong>Q0…Q3</strong> sont alignés verticalement (comme <strong>A…D</strong> du CD4511) pour des fils horizontaux courts.</p>
+                <h3>Montage compteur → afficheur (noms du simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Fil</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>GND_1</code></td><td><code>HC90_1</code> GND, <code>CD4511_1</code> (masse circuit), <code>SEG_1</code> COM</td><td>Masse commune</td></tr>
+                        <tr><td><code>VCC_1</code></td><td><code>HC90_1</code> VCC</td><td>+5 V</td></tr>
+                        <tr><td><code>VCC_1</code> ou <code>LOGIC_1</code> (1)</td><td><code>CD4511_1</code> BI, LT</td><td>Afficheur actif</td></tr>
+                        <tr><td><code>GND_1</code> ou <code>LOGIC_2</code> (0)</td><td><code>CD4511_1</code> LE</td><td>Suivi direct du compteur</td></tr>
+                        <tr><td><code>GND_1</code> ou <code>LOGIC_3</code> (0)</td><td><code>HC90_1</code> MR1, MR2, MS1, MS2</td><td>Comptage décade</td></tr>
+                        <tr><td><code>GImp_1</code> sortie</td><td><code>HC90_1</code> CP0</td><td>Horloge</td></tr>
+                        <tr><td><code>HC90_1</code> Q0</td><td><code>HC90_1</code> CP1</td><td>Décade (aussi forcé en simulation)</td></tr>
+                        <tr><td><code>HC90_1</code> Q0</td><td><code>CD4511_1</code> A</td><td>BCD bit 0</td></tr>
+                        <tr><td><code>HC90_1</code> Q1</td><td><code>CD4511_1</code> B</td><td>BCD bit 1</td></tr>
+                        <tr><td><code>HC90_1</code> Q2</td><td><code>CD4511_1</code> C</td><td>BCD bit 2</td></tr>
+                        <tr><td><code>HC90_1</code> Q3</td><td><code>CD4511_1</code> D</td><td>BCD bit 3</td></tr>
+                        <tr><td><code>CD4511_1</code> a…g</td><td><code>SEG_1</code> a…g</td><td>Segments</td></tr>
+                    </tbody>
+                </table>
+                <h3>Câblage typique (mode décade 0…9)</h3>
+                <ul class="doc-list">
+                    <li>Les composants sont numérotés <code>HC90_1</code>, <code>CD4511_1</code>, <code>SEG_1</code>, <code>GND_1</code>, <code>VCC_1</code>, <code>GImp_1</code>, etc.</li>
+                    <li>Horloge <strong>1 Hz</strong> sur <code>GImp_1</code> → CP0 pour une seconde par pas (préréglage « tick seconde » dans le panneau GImp).</li>
+                    <li>Le fil <strong>Q0 → CP1</strong> reste recommandé sur la plaquette ; il est aussi appliqué automatiquement en simulation.</li>
+                </ul>
+                <h3>Deux chiffres (unités + dizaines)</h3>
+                <ul class="doc-list">
+                    <li>Dupliquer la chaîne <code>HC90 → CD4511 → SEG</code> (<code>HC90_2</code>, <code>CD4511_2</code>, <code>SEG_2</code>).</li>
+                    <li>Horloge <code>GImp_1</code> uniquement sur <code>HC90_1</code> CP0 ; <code>HC90_2</code> CP0 via une porte <strong>ET</strong>.</li>
+                    <li><strong>Report au chiffre 9</strong> : relier <code>HC90_1</code> <strong>Q0</strong> et <strong>Q3</strong> aux entrées de l’ET, sortie → <code>HC90_2</code> CP0. Au comptage 9 (binaire 1001), Q0 et Q3 sont à 1 → un front horloge sur les dizaines.</li>
+                    <li><strong>Ne pas utiliser Q1 + Q3</strong> : en BCD 0…9 ces sorties ne sont jamais hautes en même temps (seul l’état invalide 10 = 1010 les active).</li>
+                    <li><code>HC90_2</code> : même câblage décade (Q0 → CP1, MR/MS à 0, VCC/GND).</li>
+                </ul>
+                <h3>Simulation</h3>
+                <p>
+                    Quatre bascules <strong>D</strong> en mode bascule (D relié à /Q, horloges en cascade).
+                    Modèle <strong>XSPICE</strong> (<code>d_dff</code>) si ngspice et <code>digital.cm</code> sont disponibles ;
+                    sinon repli sur sources comportementales (comme la bascule D du simulateur).
+                    Vérification : <code>node Simulateur/Engine/ic74hc90-decade.test.mjs</code> ou
+                    <code>npm run check-ngspice</code>.
                 </p>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
             </div>
@@ -162,7 +259,7 @@
                 <p><strong>Ctrl + C / Ctrl + V :</strong> Copier / Coller la sélection (Évite le double-copier)</p>
                 <p><strong>Clic simple (Simulation active) :</strong> Commuter l'état (0 ou 1) d'une Borne Logique</p>
                 <p><strong>Clic simple (Hors simulation) :</strong> Sélectionner un fil ou un composant</p>
-                <p><strong>Double-clic :</strong> Modifier la valeur (Résistances, VCC, Niveau Haut de Borne Logique)</p>
+                <p><strong>Double-clic :</strong> Modifier la valeur (Résistances, VCC, Niveau Haut de Borne Logique) ; fiche technique <strong>CD4511</strong> et <strong>74HC90</strong></p>
                 <p><strong>[Shift] + Glisser cadre :</strong> Sélectionner plusieurs composants</p>
                 <p><strong>[R] :</strong> Pivoter les composants sélectionnés de 90° (sauf bascules et GImp)</p>
                 <p><strong>[X] :</strong> Retourner horizontalement le GImp sélectionné</p>
@@ -192,8 +289,17 @@
             </label>
             <label class="panel-field">
                 <span>Fréquence</span>
-                <input type="number" id="gimp-freq" min="0.1" step="any" value="1000">
+                <input type="number" id="gimp-freq" min="0.000011574" step="any" value="2" title="Hz — ex. 1 (secondes), 0.01667 (1/min), 0.000278 (1/h)">
                 <span class="panel-unit">Hz</span>
+            </label>
+            <label class="panel-field">
+                <span>Horloge</span>
+                <select id="gimp-clock-preset" title="Préréglages pour compteur lent">
+                    <option value="">Manuel</option>
+                    <option value="1">1 Hz — tick seconde</option>
+                    <option value="0.016666666666666666">1/60 Hz — tick minute</option>
+                    <option value="0.0002777777777777778">1/3600 Hz — tick heure</option>
+                </select>
             </label>
             <label class="panel-field">
                 <span>Rapport cyclique</span>

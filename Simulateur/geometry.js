@@ -1,5 +1,5 @@
 // geometry.js
-import { circuit, flags, simulationResults, snapToGrid } from './state.js';
+import { circuit, flags, simulationResults, snapToGrid, GRID_SIZE } from './state.js';
 import { CD4511_JUNC_L, CD4511_JUNC_R, CD4511_PIN_Y, CD4511_HIT_DX, CD4511_HIT_DY } from './cd4511-layout.js';
 import {
     IC90_JUNC_L,
@@ -117,7 +117,7 @@ export function getComponentJonctions(comp) {
         });
     } else if (comp.type === 'ic_74hc90') {
         const left = ['CP1', 'MR1', 'MR2', null, 'VCC', 'MS1', 'MS2'];
-        const right = ['CP0', null, 'Q0', 'Q3', 'GND', 'Q1', 'Q2'];
+        const right = ['Q0', 'Q1', 'Q2', 'Q3', null, 'GND', 'CP0'];
         left.forEach((n, i) => {
             if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_L, y: IC90_LEFT_PIN_Y[i] });
         });
@@ -125,7 +125,7 @@ export function getComponentJonctions(comp) {
             if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_R, y: IC90_RIGHT_PIN_Y[i] });
         });
     } else if (['gnd', 'vcc', 'logic_terminal'].includes(comp.type)) {
-        localPts = [{ id: `${comp.label}_out`, x: 40, y: 0 }];
+        localPts = [{ id: `${comp.label}_out`, x: GRID_SIZE, y: 0 }];
     }
 
     localPts.forEach(pt => {
@@ -148,7 +148,7 @@ export function getComponentJonctions(comp) {
 export function componentHitTest(comp, mx, my) {
     const dx = Math.abs(mx - comp.x);
     const dy = Math.abs(my - comp.y);
-    if (comp.type === 'logic_terminal') return dx < 38 && dy < 22;
+    if (comp.type === 'logic_terminal') return dx < 24 && dy < 14;
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
     if (comp.type === 'cd4511') return dx < CD4511_HIT_DX && dy < CD4511_HIT_DY;
     if (comp.type === 'ic_74hc90') return dx < IC90_HIT_DX && dy < IC90_HIT_DY;

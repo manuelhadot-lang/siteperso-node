@@ -127,7 +127,7 @@ window.addEventListener('keydown', (e) => {
         clipboard.data.components.forEach(comp => {
             counters[comp.type]++; 
             let pfx = COMPONENT_PREFIX[comp.type] || 'U';
-            const nl = `${pfx}${counters[comp.type]}`; labelMap[comp.label] = nl;
+            const nl = `${pfx}_${counters[comp.type]}`; labelMap[comp.label] = nl;
             const cloned = { ...comp, x: comp.x + 40, y: comp.y + 40, label: nl }; circuit.components.push(cloned); newC.push(cloned);
         });
         clipboard.data.autoJunctions.forEach(aj => {
@@ -286,11 +286,32 @@ function closeCd4511DocModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function openHc90DocModal(componentLabel) {
+    const modal = document.getElementById('hc90-doc-modal');
+    const title = document.getElementById('hc90-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `74HC90 — ${componentLabel}`
+            : '74HC90 — Compteur décade asynchrone';
+    }
+    modal.style.display = 'block';
+}
+
+function closeHc90DocModal() {
+    const modal = document.getElementById('hc90-doc-modal');
+    if (modal) modal.style.display = 'none';
+}
+
 canvas.addEventListener('dblclick', (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
         if (target.type === 'cd4511') {
             openCd4511DocModal(target.label);
+            return;
+        }
+        if (target.type === 'ic_74hc90') {
+            openHc90DocModal(target.label);
             return;
         }
         if (target.type === 'oscilloscope') {
@@ -358,10 +379,10 @@ canvas.addEventListener('drop', (e) => {
     e.preventDefault(); if (!menuDrag.draggedComponentType) return; saveState();
     const gp = toGridCoords(e.clientX, e.clientY); counters[menuDrag.draggedComponentType]++;
     let pfx = COMPONENT_PREFIX[menuDrag.draggedComponentType] || 'U';
-    const nc = { type: menuDrag.draggedComponentType, x: snapToGrid(gp.x), y: snapToGrid(gp.y), label: `${pfx}${counters[menuDrag.draggedComponentType]}`, rotation: 0, state: 0, highVoltage: 5 };
+    const nc = { type: menuDrag.draggedComponentType, x: snapToGrid(gp.x), y: snapToGrid(gp.y), label: `${pfx}_${counters[menuDrag.draggedComponentType]}`, rotation: 0, state: 0, highVoltage: 5 };
     if (menuDrag.draggedComponentType === 'gimp') {
-        nc.frequency = 1000;
-        nc.dutyCycle = 10;
+        nc.frequency = 2;
+        nc.dutyCycle = 50;
         nc.voltageRail = 5;
         nc.flipX = false;
     } else if (menuDrag.draggedComponentType === 'gsin') {
@@ -441,4 +462,7 @@ window.onload = function() {
     const cdDoc = document.getElementById('cd4511-doc-modal');
     document.getElementById('close-cd4511-doc')?.addEventListener('click', closeCd4511DocModal);
     window.addEventListener('click', (e) => { if (e.target === cdDoc) closeCd4511DocModal(); });
+    const hc90Doc = document.getElementById('hc90-doc-modal');
+    document.getElementById('close-hc90-doc')?.addEventListener('click', closeHc90DocModal);
+    window.addEventListener('click', (e) => { if (e.target === hc90Doc) closeHc90DocModal(); });
 };

@@ -162,6 +162,7 @@ export function appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, d
             ...deckOpts,
             srWired,
             rippleClockFromPrev: sl.rippleFromQ ? "q" : null,
+            clockInvert: sl.suffix === "u0",
         });
         if (logicDffDAndQbarShareNode(sub, sliceNodeFor)) {
             /* D et /Q sur Q : diviseur par 2 (comportement 74×90). */

@@ -335,12 +335,20 @@ function appendLogicDffBsourceNetlist(c, nodeFor, vhi, lines, spiceBranchName, o
     // Tirage à 0 V des broches Set/Reset : inactives (état bas) si non câblées.
     lines.push(`${spiceBranchName("R", c.id)}_setpd ${nSet} 0 1e9`);
     lines.push(`${spiceBranchName("R", c.id)}_rstpd ${nReset} 0 1e9`);
-    appendClkEdgeDetector(nClk, nEdge, lines, spiceBranchName, c.id, cEdge, rEdge);
+    const vClk = vhi > 0 ? vhi : 5;
+    let nClkDet = nClk;
+    if (opts.clockInvert && opts.rippleClockFromPrev !== "q") {
+        nClkDet = nodeFor(`${c.id}#__xa_clkinv`);
+        lines.push(
+            `${spiceBranchName("B", c.id)}_clkinv ${nClkDet} 0 V = { ${vClk} - V(${nClk}) }`
+        );
+    }
+    appendClkEdgeDetector(nClkDet, nEdge, lines, spiceBranchName, c.id, cEdge, rEdge);
     lines.push(
         `${spiceBranchName("B", c.id)}_qi ${nQi} 0 V = ${logicDffQiExpression(
             nD,
             nEdge,
-            nClk,
+            nClkDet,
             nQ,
             vhi,
             dAndQbarShared,

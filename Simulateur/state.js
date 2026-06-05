@@ -18,7 +18,7 @@ export let flags = {
     isDraggingFromMenu: false
 };
 
-export let simulationResults = { voltmeters: {}, ammeters: {}, ohmmeters: {}, leds: {}, scopePlots: {}, seg7: {} };
+export let simulationResults = { voltmeters: {}, ammeters: {}, ohmmeters: {}, leds: {}, scopePlots: {}, seg7: {}, logicValues: {} };
 
 export let menuDrag = {
     draggedComponentType: null,

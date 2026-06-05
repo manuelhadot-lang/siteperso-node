@@ -14,6 +14,27 @@ export const IC90_JUNC_R = 3 * G;
 export const IC90_LEFT_PIN_Y = [-3, -2, -1, 0, 1, 2, 3].map((n) => n * G);
 export const IC90_RIGHT_PIN_Y = [-3, -2, -1, 0, 1, 2, 3].map((n) => n * G);
 
+/** Q0…Q3 empilés (même hauteur que A…D du CD4511) pour câblage direct. */
+export const IC90_Q_STACK_INDICES = [0, 1, 2, 3];
+
+/** Numéros de broches DIP 14 (TI 74HC90 / 74LS90). */
+export const IC90_DIP = {
+    CP1: 1,
+    MR1: 2,
+    MR2: 3,
+    NC4: 4,
+    VCC: 5,
+    MS1: 6,
+    MS2: 7,
+    Q2: 8,
+    Q1: 9,
+    GND: 10,
+    Q3: 11,
+    Q0: 12,
+    NC13: 13,
+    CP0: 14,
+};
+
 export const IC90_HIT_DX = 3 * G + G / 2;
 export const IC90_HIT_DY = 3.5 * G + G / 2;
 

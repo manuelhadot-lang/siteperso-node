@@ -59,6 +59,7 @@ import {
 } from "./logic-sequential.mjs";
 import {
     appendIc74hc90Netlist,
+    IC90_PIN,
     ic74hc90GndPinIndex,
     ic74hc90InternalNodeKeys,
     ic74hc90OutputNodeKeys,
@@ -69,6 +70,35 @@ import {
 
 function isLedType(t) {
     return t === "led" || t === "diode_led";
+}
+
+/** Nœud SPICE relié à une masse ou une source « 0 » (borne logique, VCC à 0 V, etc.). */
+function isNodeLikelyLogicLow(nodeName, components, nodeFor) {
+    if (!nodeName || nodeName === "0") return true;
+    for (const g of components) {
+        if (g.type === "ground" && nodeFor(`${g.id}#0`) === nodeName) return true;
+    }
+    for (const g of components) {
+        const key = `${g.id}#0`;
+        if (nodeFor(key) !== nodeName) continue;
+        if (g.type === "logic_state" && parseLogicStateVolts(g.value, g.logicRail) < 0.5) return true;
+        if (g.type === "logic_terminal" && Number(g.state) === 0) return true;
+        if (g.type === "vterm" && parseDcVolts(g.value) < 0.5) return true;
+    }
+    return false;
+}
+
+/** Nœud relié à +5 V (VCC, borne à 1, etc.). */
+function isNodeLikelyLogicHigh(nodeName, components, nodeFor) {
+    if (!nodeName) return false;
+    for (const g of components) {
+        const key = `${g.id}#0`;
+        if (nodeFor(key) !== nodeName) continue;
+        if (g.type === "logic_state" && parseLogicStateVolts(g.value, g.logicRail) > 2.5) return true;
+        if (g.type === "logic_terminal" && Number(g.state) === 1) return true;
+        if (g.type === "vterm" && parseDcVolts(g.value) > 2.5) return true;
+    }
+    return false;
 }
 
 function isTwoTerminalType(t) {
@@ -498,11 +528,26 @@ function parseOffsetVolts(s) {
     return 0;
 }
 
-/** Extrait la fréquence (Hz) d’une chaîne du type « 5V 1kHz ». */
+/** Extrait la fréquence (Hz) d’une chaîne du type « 5V 1kHz », « 5V 60s », « 5V 1/60Hz ». */
 function parseFreqHz(s) {
     if (s == null) return 1000;
     const t = String(s).toLowerCase().replace(/\s/g, "").replace(",", ".");
-    let m = /([\d.]+)\s*khz/.exec(t);
+    let m = /period[e]?=([\d.]+)s/.exec(t);
+    if (m) {
+        const p = parseFloat(m[1]);
+        return Number.isFinite(p) && p > 0 ? 1 / p : 1000;
+    }
+    m = /([\d.]+)s(?:period|per)?$/.exec(t) || /([\d.]+)s(?!\/)/.exec(t);
+    if (m) {
+        const p = parseFloat(m[1]);
+        return Number.isFinite(p) && p > 0 ? 1 / p : 1000;
+    }
+    m = /1\/([\d.]+)\s*hz/.exec(t);
+    if (m) {
+        const p = parseFloat(m[1]);
+        return Number.isFinite(p) && p > 0 ? 1 / p : 1000;
+    }
+    m = /([\d.]+)\s*khz/.exec(t);
     if (m) {
         const n = parseFloat(m[1]);
         return Number.isFinite(n) && n > 0 ? n * 1000 : 1000;
@@ -727,15 +772,20 @@ const TRAN_SCOPE_H_DIVS = 8;
 const TRAN_MAX_TIME_DIV_SEC = 0.1;
 const TRAN_SAMPLES_PER_PERIOD = 200;
 const TRAN_MAX_POINTS = 50000;
+/** Au-delà de cette période (f ≤ 0,5 Hz), .tran court + animation temps réel côté client. */
+const SLOW_CLOCK_PERIOD_SEC = 2;
+const SLOW_CLOCK_TRAN_PERIODS = 6;
+const SLOW_CLOCK_MAX_TSTOP_SEC = 120;
 
 /** Pas et durée de simulation transitoire selon les générateurs AC et la base de temps du scope. */
 function computeTranTiming(components) {
-    let minPeriod = 1;
+    let minPeriod = Infinity;
     for (const c of components) {
         if (c.type !== "vsin" && c.type !== "vsquare" && c.type !== "vpulse") continue;
         const f = parseFreqHz(c.value);
         if (f > 0) minPeriod = Math.min(minPeriod, 1 / f);
     }
+    if (!Number.isFinite(minPeriod) || minPeriod <= 0) minPeriod = 1;
 
     let scopeWindowSec = 0;
     for (const c of components) {
@@ -754,18 +804,39 @@ function computeTranTiming(components) {
     const numFf =
         components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length +
         components.filter((c) => isIc74hc90Type(c.type)).length * 4;
+    const hc90Count = components.filter((c) => isIc74hc90Type(c.type)).length;
     if (numFf > 0) {
         const ripplePeriods = (1 << numFf) + 2;
         tstop = Math.max(tstop, minPeriod * ripplePeriods);
+    }
+    const slowClock = minPeriod >= SLOW_CLOCK_PERIOD_SEC;
+    if (hc90Count > 0) {
+        if (slowClock) {
+            tstop = Math.min(
+                SLOW_CLOCK_MAX_TSTOP_SEC,
+                Math.max(minPeriod * SLOW_CLOCK_TRAN_PERIODS, minPeriod * 4)
+            );
+        } else {
+            tstop = Math.max(tstop, minPeriod * 24);
+        }
     }
 
     if (tstop / tstep > TRAN_MAX_POINTS) {
         tstep = tstop / TRAN_MAX_POINTS;
         const minStep = minPeriod / 40;
-        if (tstep > minStep && minPeriod < 1) {
+        if (tstep > minStep) {
             tstep = minStep;
             if (tstop / tstep > TRAN_MAX_POINTS) {
                 tstop = tstep * TRAN_MAX_POINTS;
+            }
+        }
+    }
+    if (hc90Count > 0 && !slowClock) {
+        const hc90MinTstop = minPeriod * 12;
+        if (tstop < hc90MinTstop) {
+            tstop = hc90MinTstop;
+            if (tstop / tstep > TRAN_MAX_POINTS) {
+                tstep = tstop / TRAN_MAX_POINTS;
             }
         }
     }
@@ -774,6 +845,8 @@ function computeTranTiming(components) {
         tstop,
         tstepStr: formatSpiceTime(tstep),
         tstopStr: formatSpiceTime(tstop),
+        clockPeriodSec: minPeriod,
+        slowClock,
     };
 }
 
@@ -833,6 +906,14 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         terminalWireCount.set(w.fromKey, (terminalWireCount.get(w.fromKey) || 0) + 1);
         terminalWireCount.set(w.toKey, (terminalWireCount.get(w.toKey) || 0) + 1);
         ufUnion(parent, w.fromKey, w.toKey);
+    }
+    for (const c of components) {
+        if (!isIc74hc90Type(c.type)) continue;
+        const q0 = `${c.id}#${ic74hc90ToggleSlices()[0].q}`;
+        const cp1 = `${c.id}#${IC90_PIN.CP1}`;
+        touch(q0);
+        touch(cp1);
+        ufUnion(parent, q0, cp1);
     }
     const virtualKeys = new Set();
     for (const w of wires) {
@@ -1415,8 +1496,21 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     if (useTran) {
-        const { tstepStr, tstopStr } = computeTranTiming(components);
+        const tranTiming = computeTranTiming(components);
+        const { tstepStr, tstopStr, slowClock, clockPeriodSec } = tranTiming;
         analysisTran = true;
+        const hc90InCircuit = components.some((c) => isIc74hc90Type(c.type));
+        if (slowClock && hc90InCircuit) {
+            const periodLabel =
+                clockPeriodSec >= 3600
+                    ? `${(clockPeriodSec / 3600).toFixed(clockPeriodSec % 3600 === 0 ? 0 : 2)} h`
+                    : clockPeriodSec >= 60
+                      ? `${(clockPeriodSec / 60).toFixed(clockPeriodSec % 60 === 0 ? 0 : 2)} min`
+                      : `${clockPeriodSec.toFixed(2)} s`;
+            warnings.push(
+                `Horloge lente (${periodLabel} par impulsion) : SPICE simule ${tstopStr} s de transitoire ; l’affichage suit le GImp en temps réel (1 impulsion = +1 sur le compteur).`
+            );
+        }
         if (lines[0]) lines[0] = "* Circuit Designer - netlist SPICE (.tran)";
         if (components.some(c => isLogicSequentialType(c.type))) {
             lines.push(".options method=gear reltol=1e-3 abstol=1e-9 gmin=1e-15 trtol=50");
@@ -1877,6 +1971,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     `74HC90 ${c.id} : Q0 relié à CP1 — comptage décade 0…9 (horloge sur CP0, broche 14).`
                 );
             }
+            const mr1Key = `${c.id}#1`;
+            const mr2Key = `${c.id}#2`;
+            const mr1High =
+                (terminalWireCount.get(mr1Key) || 0) > 0 &&
+                isNodeLikelyLogicHigh(nodeFor(mr1Key), components, nodeFor);
+            const mr2High =
+                (terminalWireCount.get(mr2Key) || 0) > 0 &&
+                isNodeLikelyLogicHigh(nodeFor(mr2Key), components, nodeFor);
+            if (mr1High && mr2High) {
+                warnings.push(
+                    `74HC90 ${c.id} : MR1 et MR2 au niveau haut — compteur maintenu à 0. Reliez MR1 et MR2 à 0 V (masse).`
+                );
+            }
         }
         if (isLogicCd4511Type(c.type)) {
             const inp = cd4511InputNodeKeys(c);
@@ -1884,6 +1991,24 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             if (unwired.length > 0) {
                 warnings.push(
                     `CD4511 ${c.id} : entrée(s) non reliée(s) (A–D, LE, BI, LT) — valeurs par défaut appliquées.`
+                );
+            }
+            const biKey = `${c.id}#5`;
+            const ltKey = `${c.id}#6`;
+            const leKey = `${c.id}#4`;
+            if ((terminalWireCount.get(biKey) || 0) > 0 && isNodeLikelyLogicLow(nodeFor(biKey), components, nodeFor)) {
+                warnings.push(
+                    `CD4511 ${c.id} : BI relié à la masse (0 V) — afficheur éteint. Reliez BI au +5 V (même rail que VCC).`
+                );
+            }
+            if ((terminalWireCount.get(ltKey) || 0) > 0 && isNodeLikelyLogicLow(nodeFor(ltKey), components, nodeFor)) {
+                warnings.push(
+                    `CD4511 ${c.id} : LT relié à la masse (0 V) — mode test lampe (tous segments allumés). Reliez LT au +5 V en utilisation normale.`
+                );
+            }
+            if ((terminalWireCount.get(leKey) || 0) > 0 && isNodeLikelyLogicHigh(nodeFor(leKey), components, nodeFor)) {
+                warnings.push(
+                    `CD4511 ${c.id} : LE au niveau haut — affichage verrouillé (ne suit plus le compteur). Reliez LE à 0 V pour le suivi en direct.`
                 );
             }
         }

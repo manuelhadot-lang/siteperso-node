@@ -1,6 +1,7 @@
 // simulation.js
 import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
 import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
+import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
 import { draw } from './renderer.js';
 import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
@@ -36,9 +37,17 @@ function formatGsinValue(comp) {
 
 function formatGimpValue(comp) {
     const v = comp.voltageRail ?? 5;
-    const f = comp.frequency ?? 1000;
-    const d = comp.dutyCycle ?? 10;
-    const fStr = f >= 1000 && f % 1000 === 0 ? `${f / 1000}kHz` : `${f}Hz`;
+    const f = comp.frequency ?? 2;
+    const d = comp.dutyCycle ?? 50;
+    let fStr;
+    if (f > 0 && f < 1) {
+        const period = 1 / f;
+        fStr = `${period >= 10 ? Math.round(period * 1000) / 1000 : period}s`;
+    } else if (f >= 1000 && f % 1000 === 0) {
+        fStr = `${f / 1000}kHz`;
+    } else {
+        fStr = `${f}Hz`;
+    }
     return `${v}V ${fStr} ${d}%`;
 }
 
@@ -178,11 +187,28 @@ function buildSimulationState() {
     return { components: simComponents, wires: simWires };
 }
 
+/** URL de POST /api/simulate (Node sur le port 3000, même machine que la page). */
+function resolveSimulationApiBaseUrl() {
+    const { protocol, hostname, port } = window.location;
+    const p = port || (protocol === 'https:' ? '443' : '80');
+    if (p === '3000' || p === '80' || p === '443') return window.location.origin;
+    const host =
+        hostname === 'localhost' || hostname === '127.0.0.1' ? 'localhost' : hostname;
+    return `${protocol}//${host}:3000`;
+}
+
+function showSimulationWarnings(warnings, isSilentUpdate) {
+    if (isSilentUpdate || !Array.isArray(warnings) || !warnings.length) return;
+    const text = warnings.map(String).filter((w) => w.trim()).join('\n');
+    if (!text) return;
+    const critical = warnings.some((w) =>
+        /CD4511|74HC90|XSPICE|digital\.cm|BI relié|LT relié|Q0 relié/i.test(String(w))
+    );
+    if (critical) alert(`Avertissement simulation :\n${text}`);
+}
+
 export async function triggerSimulation(isSilentUpdate = false) {
-    let baseUrl = window.location.origin;
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        if (window.location.port !== '3000') baseUrl = 'http://localhost:3000';
-    }
+    const baseUrl = resolveSimulationApiBaseUrl();
     const payload = { state: buildSimulationState(), gridStep: GRID_SIZE };
     const btnSim = document.getElementById('btn-simulate');
     const btnStop = document.getElementById('btn-stop');
@@ -201,12 +227,14 @@ export async function triggerSimulation(isSilentUpdate = false) {
         }
         const result = await response.json();
         if (result.ok) {
+            showSimulationWarnings(result.warnings, isSilentUpdate);
             simulationResults.voltmeters = result.voltmeterValues || {};
             simulationResults.ammeters = result.ammeterValues || {};
             simulationResults.ohmmeters = result.ohmmeterValues || {};
             simulationResults.leds = result.ledValues || {};
             simulationResults.scopePlots = result.scopePlots || {};
             simulationResults.seg7 = result.seg7Values || {};
+            simulationResults.logicValues = result.logicValues || {};
             const scopePlotKeys = Object.keys(simulationResults.scopePlots);
             if (scopePlotKeys.length > 0) {
                 startScopeAnimation(simulationResults.scopePlots);
@@ -230,8 +258,16 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 const vmPlots = result.voltmeterTranPlots || {};
                 const ledPlots = result.ledTranPlots || {};
                 const seg7Plots = result.seg7TranPlots || {};
-                if (Object.keys(vmPlots).length || Object.keys(ledPlots).length || Object.keys(seg7Plots).length) {
-                    startLedAnimation(ledPlots, vmPlots, seg7Plots);
+                const logicGateTranPlots = result.logicGateTranPlots || {};
+                if (
+                    Object.keys(vmPlots).length ||
+                    Object.keys(ledPlots).length ||
+                    Object.keys(seg7Plots).length ||
+                    Object.keys(logicGateTranPlots).length
+                ) {
+                    startLedAnimation(ledPlots, vmPlots, seg7Plots, logicGateTranPlots, {
+                        keepClock: isSilentUpdate,
+                    });
                 } else {
                     stopLedAnimation();
                 }
@@ -263,7 +299,7 @@ export function stopSimulation() {
     stopLedAnimation();
     stopScopeAnimation();
     flags.isSimulating = false;
-    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.seg7 = {};
+    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.seg7 = {}; simulationResults.logicValues = {};
     const btnSim = document.getElementById('btn-simulate'); const btnStop = document.getElementById('btn-stop');
     if (btnSim) { btnSim.innerText = "🚀 Lancer Simulation"; btnSim.style.background = "#00ca71"; }
     if (btnStop) btnStop.classList.add('disabled');

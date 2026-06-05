@@ -14,6 +14,7 @@ const gsqrFields = () => document.getElementById('gsqr-fields');
 const gimpVoltageEl = () => document.getElementById('gimp-voltage');
 const gimpFreqEl = () => document.getElementById('gimp-freq');
 const gimpDutyEl = () => document.getElementById('gimp-duty');
+const gimpClockPresetEl = () => document.getElementById('gimp-clock-preset');
 
 const gsinAmpEl = () => document.getElementById('gsin-amplitude');
 const gsinFreqEl = () => document.getElementById('gsin-freq');
@@ -97,7 +98,7 @@ function applyFieldsToComponent() {
     if (!activeSource) return;
     if (activeSource.type === 'gimp') {
         activeSource.voltageRail = parseFloat(gimpVoltageEl()?.value) || 5;
-        activeSource.frequency = Math.max(0.1, parseFloat(gimpFreqEl()?.value) || 1000);
+        activeSource.frequency = Math.max(1 / 86400, parseFloat(gimpFreqEl()?.value) || 2);
         activeSource.dutyCycle = Math.min(99, Math.max(1, parseFloat(gimpDutyEl()?.value) || 10));
     } else if (activeSource.type === 'gsin') {
         activeSource.peakAmplitude = Math.max(0, parseFloat(gsinAmpEl()?.value) || 5);
@@ -150,12 +151,23 @@ export function onGimpRemoved(comp) {
     onSourceRemoved(comp);
 }
 
+function formatFreqLabel(f) {
+    if (!(f > 0)) return '?';
+    if (f >= 1000 && f % 1000 === 0) return `${f / 1000} kHz`;
+    if (f < 1) {
+        const p = 1 / f;
+        if (p >= 3600 && Math.abs(p % 3600) < 0.01) return `1/${p / 3600} h`;
+        if (p >= 60 && Math.abs(p % 60) < 0.01) return `1/${p / 60} min`;
+        return `${p >= 10 ? Math.round(p) : p.toFixed(2)} s`;
+    }
+    return `${f} Hz`;
+}
+
 export function formatGimpLabel(comp) {
     const v = comp.voltageRail ?? 5;
-    const f = comp.frequency ?? 1000;
+    const f = comp.frequency ?? 2;
     const d = comp.dutyCycle ?? 10;
-    const fStr = f >= 1000 && f % 1000 === 0 ? `${f / 1000}kHz` : `${f}Hz`;
-    return `0-${v}V ${fStr} ${d}%`;
+    return `0-${v}V ${formatFreqLabel(f)} ${d}%`;
 }
 
 export function formatGsinLabel(comp) {
@@ -180,6 +192,16 @@ export function initSourcePanel() {
     gimpVoltageEl()?.addEventListener('change', onChange);
     gimpFreqEl()?.addEventListener('change', onChange);
     gimpDutyEl()?.addEventListener('change', onChange);
+    gimpClockPresetEl()?.addEventListener('change', () => {
+        const preset = gimpClockPresetEl()?.value;
+        if (!preset || !activeSource || activeSource.type !== 'gimp') return;
+        const f = parseFloat(preset);
+        if (!Number.isFinite(f) || f <= 0) return;
+        if (!flags.isSimulating) saveState();
+        activeSource.frequency = f;
+        if (gimpFreqEl()) gimpFreqEl().value = String(f);
+        applyFieldsToComponent();
+    });
     gsinAmpEl()?.addEventListener('change', onChange);
     gsinFreqEl()?.addEventListener('change', onChange);
     gsinOffsetEl()?.addEventListener('change', onChange);

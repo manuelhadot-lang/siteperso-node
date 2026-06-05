@@ -589,6 +589,13 @@ async function getMergeLogicGateTranFromWrdata() {
     return module.mergeLogicGateTranFromWrdata;
 }
 
+async function getMergeLogicGateTranPlotsFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeLogicGateTranPlotsFromWrdata !== "function")
+        throw new Error("Module mergeLogicGateTranPlotsFromWrdata introuvable.");
+    return module.mergeLogicGateTranPlotsFromWrdata;
+}
+
 async function getMergeOhmmeterMeasurements() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.mergeOhmmeterMeasurements !== "function")
@@ -728,6 +735,7 @@ app.post("/api/simulate", async (req, res) => {
     let mergeLedValuesFromTranPlots;
     let mergeLogicGateMeasurements;
     let mergeLogicGateTranFromWrdata;
+    let mergeLogicGateTranPlotsFromWrdata;
     let mergeOhmmeterMeasurements;
     let mergeOscilloscopeMeasurements;
     let deriveOscilloscopeValuesFromScopePlots;
@@ -750,6 +758,7 @@ app.post("/api/simulate", async (req, res) => {
         mergeLedValuesFromTranPlots = await getMergeLedValuesFromTranPlots();
         mergeLogicGateMeasurements = await getMergeLogicGateMeasurements();
         mergeLogicGateTranFromWrdata = await getMergeLogicGateTranFromWrdata();
+        mergeLogicGateTranPlotsFromWrdata = await getMergeLogicGateTranPlotsFromWrdata();
         mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
         mergeOscilloscopeMeasurements = await getMergeOscilloscopeMeasurements();
         deriveOscilloscopeValuesFromScopePlots = await getDeriveOscilloscopeValuesFromScopePlots();
@@ -863,6 +872,7 @@ app.post("/api/simulate", async (req, res) => {
         let scopePlots = {};
         let seg7Values = mergeSeg7Measurements(combinedLog, built.seg7Displays || []);
         let seg7TranPlots = {};
+        let logicGateTranPlots = {};
         let ledTranPlots = {};
         let voltmeterTranPlots = {};
         let waveDiag = "";
@@ -881,6 +891,7 @@ app.post("/api/simulate", async (req, res) => {
             const fromTran = mergeLedValuesFromTranPlots(ledTranPlots);
             if (Object.keys(fromTran).length > 0) ledValues = fromTran;
             const lgMeta = Array.isArray(built.logicGatesTranMeta) ? built.logicGatesTranMeta : [];
+            logicGateTranPlots = mergeLogicGateTranPlotsFromWrdata(waveTxt, lgMeta);
             const fromTranLg = mergeLogicGateTranFromWrdata(waveTxt, lgMeta);
             if (Object.keys(fromTranLg).length > 0) logicValues = fromTranLg;
             const metersMeta = built.metersTranMeta || {};
@@ -908,6 +919,40 @@ app.post("/api/simulate", async (req, res) => {
             const fromTranSeg7 = mergeSeg7FromTranWrdata(waveTxt, seg7Meta);
             if (Object.keys(fromTranSeg7).length > 0) seg7Values = fromTranSeg7;
             seg7TranPlots = mergeSeg7TranPlotsFromWrdata(waveTxt, seg7Meta);
+            if (seg7Meta.length > 0 && lgMeta.length > 0) {
+                const parserHc90 = await importFresh(ngspiceResultParserModulePath);
+                const groups = parserHc90.groupHc90QTranMeta?.(lgMeta) || {};
+                for (const disp of seg7Meta) {
+                    const segId = disp.id;
+                    if (!segId) continue;
+                    for (const qGroup of Object.values(groups)) {
+                        if (!qGroup?.[0]) continue;
+                        const plotsQ = parserHc90.mergeSeg7TranPlotsFromHc90Q?.(
+                            waveTxt,
+                            qGroup,
+                            segId
+                        );
+                        if (!plotsQ?.[segId]?.time?.length) continue;
+                        /* Priorité compteur : évite afficheur bloqué à 0–1 si CD4511/BI/LT mal câblés. */
+                        seg7TranPlots[segId] = plotsQ[segId];
+                        const valsQ = parserHc90.mergeSeg7FromHc90Q?.(waveTxt, qGroup, segId);
+                        if (valsQ && Object.keys(valsQ).length) {
+                            seg7Values = { ...seg7Values, ...valsQ };
+                        }
+                        const blank = parserHc90.seg7DisplayAppearsBlank?.(
+                            mergeSeg7FromTranWrdata(waveTxt, seg7Meta)[segId]
+                        );
+                        if (blank) {
+                            built.warnings = built.warnings || [];
+                            const msg = `7 segments ${segId} : animation via le compteur 74HC90 (BI et LT du CD4511 au +5 V pour l’affichage réel).`;
+                            if (!built.warnings.some((w) => String(w).includes(segId))) {
+                                built.warnings.push(msg);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
@@ -997,6 +1042,7 @@ app.post("/api/simulate", async (req, res) => {
             scopePlots,
             seg7Values,
             seg7TranPlots,
+            logicGateTranPlots,
             seg7Displays: Array.isArray(built.seg7Displays) ? built.seg7Displays : [],
         });
     } catch (error) {
@@ -1675,9 +1721,27 @@ app.post('/api/save-note', (req, res) => {
 });
 
 server.listen(PORT, LISTEN_HOST, () => {
-    const { exe: ngspiceExe } = resolveNgspiceForServer(__dirname);
+    const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
+    const digitalCm = resolveDigitalCmSourcePath(__dirname);
     console.log(`🔬 Simulateur ngspice : ${ngspiceExe}`);
     console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`);
+    if (LISTEN_HOST === "127.0.0.1" || LISTEN_HOST === "localhost") {
+        console.log(
+            `   ↳ Accès réseau local : définir LISTEN_HOST=0.0.0.0 puis ouvrir http://<IP-de-ce-PC>:${PORT}/Simulateur/`
+        );
+    } else {
+        console.log(`   ↳ Écoute sur ${LISTEN_HOST} (accès LAN : http://<IP-de-ce-PC>:${PORT}/Simulateur/)`);
+    }
+    console.log(
+        `   ↳ CD4511 / bascules XSPICE : digital.cm ${digitalCm ? "OK" : "ABSENT"} — vérifiez avec npm run check-ngspice`
+    );
+    import(pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "ngspice-xspice-probe.mjs")).href)
+        .then((m) => {
+            const env = applyPathPrepend(process.env, prependPath);
+            const xspice = m.ngspiceHasXspice(ngspiceExe, env);
+            console.log(`   ↳ XSPICE dans le binaire ngspice : ${xspice ? "oui" : "non (CD4511 non simulé)"}`);
+        })
+        .catch(() => {});
     if (siteAccessPasswordConfigured()) {
         console.log('🔐 Accès site protégé : visitez n’importe quelle URL pour être redirigé vers /acces-site');
         if (siteAccessLogoutOnPageUnloadEnabled()) {

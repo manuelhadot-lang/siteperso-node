@@ -26,10 +26,27 @@ import {
     IC90_HIT_DY,
     IC90_LEFT_PIN_Y,
     IC90_RIGHT_PIN_Y,
+    IC90_Q_STACK_INDICES,
 } from './ic74hc90-layout.js';
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
-import { getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+
+function hc90SimCount(comp) {
+    if (!flags.isSimulating || !comp?.label) return null;
+    const bcdAnim = getAnimatedHc90Bcd(comp.label);
+    if (bcdAnim != null) return bcdAnim;
+    let n = 0;
+    let any = false;
+    for (let i = 0; i < 4; i++) {
+        const lv = simulationResults.logicValues?.[`${comp.label}_Q${i}`];
+        if (lv && lv.logic === 1) {
+            n |= 1 << i;
+            any = true;
+        } else if (lv && lv.logic === 0) any = true;
+    }
+    return any ? n : null;
+}
 
 export function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -413,21 +430,23 @@ function drawComponentBody(comp) {
         else if (comp.type === 'npn') ctx.strokeRect(-42, -42, 64, 84);
         else if (comp.type === 'opamp') ctx.strokeRect(-44, -40, 88, 80);
         else if (comp.type === 'seg7') ctx.strokeRect(-52, -86, 124, 200);
+        else if (comp.type === 'logic_terminal') ctx.strokeRect(-14, -10, 24, 20);
         else if (comp.type !== 'logic_terminal') ctx.strokeRect(-45, -25, 90, 50);
     }
 
+    const railLead = GRID_SIZE;
     if (comp.type === 'gnd') {
         ctx.strokeStyle = '#9e9e9e'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(40, 0);
-        ctx.moveTo(-20, -15); ctx.lineTo(-20, 15);
-        ctx.moveTo(-27, -9); ctx.lineTo(-27, 9);
-        ctx.moveTo(-34, -4); ctx.lineTo(-34, 4);
+        ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(railLead, 0);
+        ctx.moveTo(-12, -10); ctx.lineTo(-12, 10);
+        ctx.moveTo(-17, -6); ctx.lineTo(-17, 6);
+        ctx.moveTo(-22, -3); ctx.lineTo(-22, 3);
         ctx.stroke(); drawLabels(comp.label, "0V", rot);
     }
     else if (comp.type === 'vcc') {
         ctx.strokeStyle = '#ff3d00'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(40, 0);
-        ctx.moveTo(-20, 0); ctx.lineTo(-5, -10); ctx.lineTo(-5, 10); ctx.closePath(); ctx.fillStyle = '#ff3d00'; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(railLead, 0);
+        ctx.moveTo(-12, 0); ctx.lineTo(-4, -7); ctx.lineTo(-4, 7); ctx.closePath(); ctx.fillStyle = '#ff3d00'; ctx.fill();
         ctx.stroke();
         let val = comp.value !== undefined ? comp.value + "V" : "5V";
         drawLabels(comp.label, val, rot);
@@ -435,18 +454,16 @@ function drawComponentBody(comp) {
     else if (comp.type === 'logic_terminal') {
         if (interaction.selectedComponents.includes(comp)) {
             ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 1.5;
-            ctx.strokeRect(-22, -17, 39, 34);
+            ctx.strokeRect(-14, -10, 24, 20);
         }
         ctx.strokeStyle = '#9c27b0'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(40, 0);
+        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(railLead, 0);
         ctx.stroke();
-        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-20, -15, 35, 30); ctx.strokeRect(-20, -15, 35, 30);
+        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-12, -8, 20, 16); ctx.strokeRect(-12, -8, 20, 16);
         let state = comp.state || 0;
         ctx.fillStyle = state === 1 ? '#00e676' : '#ff1744';
-        ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(state, -2, 1);
-        let highV = comp.highVoltage || 5;
-        drawLabels(null, `V(1)=${highV}V`, rot);
+        ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(state, -2, 0);
     }
     else if (comp.type === 'battery') {
         ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2;
@@ -633,7 +650,7 @@ function drawComponentBody(comp) {
     }
     else if (comp.type === 'ic_74hc90') {
         const leftLbl = ['CP1', 'MR1', 'MR2', '', 'VCC', 'MS1', 'MS2'];
-        const rightLbl = ['CP0', '', 'Q0', 'Q3', 'GND', 'Q1', 'Q2'];
+        const rightLbl = ['Q0', 'Q1', 'Q2', 'Q3', '', 'GND', 'CP0'];
         ctx.strokeStyle = '#26a69a'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
         ctx.fillRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
         ctx.strokeRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
@@ -658,6 +675,24 @@ function drawComponentBody(comp) {
         ctx.fillText('74HC90', 0, -4);
         ctx.font = '8px Arial';
         ctx.fillText('décade', 0, 6);
+        const count = hc90SimCount(comp);
+        if (count != null) {
+            ctx.fillStyle = '#76ff03';
+            ctx.font = 'bold 13px Arial';
+            ctx.fillText(String(count), 0, 20);
+            const qPins = IC90_Q_STACK_INDICES.map((qi) => ({
+                qi,
+                y: IC90_RIGHT_PIN_Y[qi],
+            }));
+            qPins.forEach(({ qi, y }) => {
+                const on = (count >> qi) & 1;
+                ctx.beginPath();
+                ctx.fillStyle = on ? '#76ff03' : '#455a64';
+                ctx.arc(IC90_JUNC_R - 8, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        ctx.fillStyle = '#ffffff';
         ctx.font = '11px Arial';
         ctx.fillText(comp.label, 0, IC90_BOX_T - 12);
     }
