@@ -9,6 +9,8 @@ import { openScopePanel, isScopePanelOpen, getActiveScope } from './scope-panel.
 import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
 
 let liveSimTimer = null;
+let simulationInFlight = false;
+let simulationQueuedSilent = false;
 
 /** Relance ngspice pendant une simulation active (valeurs composants / sources). */
 export function requestLiveSimulation() {
@@ -187,16 +189,61 @@ function buildSimulationState() {
     return { components: simComponents, wires: simWires };
 }
 
-/** URL de POST /api/simulate (Node sur le port 3000, même machine que la page). */
+/** URL de POST /api/simulate (serveur Node, même machine que la page). */
 function resolveSimulationApiBaseUrl() {
-    const { protocol, hostname, port } = window.location;
+    const { protocol, hostname, port, pathname } = window.location;
+    if (protocol === 'file:') return 'http://127.0.0.1:3000';
+    if (pathname.startsWith('/Simulateur')) return window.location.origin;
     const p = port || (protocol === 'https:' ? '443' : '80');
     if (p === '3000' || p === '80' || p === '443') return window.location.origin;
     const host =
-        hostname === 'localhost' || hostname === '127.0.0.1' ? 'localhost' : hostname;
+        hostname === 'localhost' || hostname === '127.0.0.1' ? '127.0.0.1' : hostname;
     return `${protocol}//${host}:3000`;
 }
 
+function formatSimulationNetworkError(err, baseUrl) {
+    const msg = err?.message || String(err);
+    if (/Cannot GET/i.test(msg)) {
+        return (
+            `Le serveur Node ne gère pas cette requête (réponse « Cannot GET »).\n\n` +
+            `1. Dans le dossier du projet : npm start\n` +
+            `2. Ouvrez http://localhost:3000/Simulateur/ (pas le fichier HTML en double-clic)\n\n` +
+            `URL tentée : ${baseUrl}/api/simulate`
+        );
+    }
+    if (/Failed to fetch|NetworkError|ERR_CONNECTION|fetch/i.test(msg)) {
+        return (
+            `Impossible de joindre le serveur (${baseUrl}).\n\n` +
+            `Lancez « npm start », puis ouvrez http://localhost:3000/Simulateur/`
+        );
+    }
+    if (/EPERM|operation not permitted|bloqué|blocked|antivirus/i.test(msg)) {
+        return (
+            `ngspice bloqué par l'antivirus Windows (EPERM).\n\n` +
+            `Les circuits 74HC90 / CD4511 nécessitent ngspice_con.exe dans Simulateur/bin/.\n` +
+            `Demandez une exception pour ce dossier, ou testez : npm run check-ngspice`
+        );
+    }
+    return msg;
+}
+
+function formatSpiceEngineErrors(result) {
+    if (Array.isArray(result?.errors) && result.errors.length) {
+        return result.errors.map(String).filter((e) => e.trim()).join('\n');
+    }
+    return result?.error || result?.message || 'Vérifiez les masses et le câblage (VCC, GND, BI/LT du CD4511, MR du 74HC90).';
+}
+
+function warnDroppedWiresForLogicCircuits(dropped, isSilentUpdate) {
+    if (isSilentUpdate || dropped <= 0) return;
+    const hasLogicIc = circuit.components.some((c) => c.type === 'cd4511' || c.type === 'ic_74hc90');
+    if (!hasLogicIc) return;
+    alert(
+        `${dropped} fil(s) ignoré(s) — le schéma n'est pas entièrement transmis au moteur SPICE.\n\n` +
+            `Vérifiez le câblage (74HC90 : CP0, VCC, GND, MR1/MR2 à 0 V, Q0→CP1, Q0…Q3→CD4511 A…D ; ` +
+            `CD4511 : BI et LT au +5 V, LE à 0 V, a…g → afficheur).`
+    );
+}
 function showSimulationWarnings(warnings, isSilentUpdate) {
     if (isSilentUpdate || !Array.isArray(warnings) || !warnings.length) return;
     const text = warnings.map(String).filter((w) => w.trim()).join('\n');
@@ -208,8 +255,15 @@ function showSimulationWarnings(warnings, isSilentUpdate) {
 }
 
 export async function triggerSimulation(isSilentUpdate = false) {
+    if (simulationInFlight) {
+        if (isSilentUpdate) simulationQueuedSilent = true;
+        return;
+    }
+    simulationInFlight = true;
     const baseUrl = resolveSimulationApiBaseUrl();
     const payload = { state: buildSimulationState(), gridStep: GRID_SIZE };
+    const wiredCount = circuit.wires.filter((w) => w.fromJonctionId && w.toJonctionId).length;
+    warnDroppedWiresForLogicCircuits(wiredCount - payload.state.wires.length, isSilentUpdate);
     const btnSim = document.getElementById('btn-simulate');
     const btnStop = document.getElementById('btn-stop');
     if (btnSim && !isSilentUpdate) { btnSim.innerText = "⚡ Calculs SPICE..."; btnSim.style.background = "#ff9800"; }
@@ -222,8 +276,16 @@ export async function triggerSimulation(isSilentUpdate = false) {
         });
         if (!response.ok) {
             let backendError = "";
-            try { const errJson = await response.json(); backendError = errJson.error || errJson.message; } catch(e) { backendError = await response.text(); }
-            throw new Error(backendError);
+            try {
+                const errJson = await response.json();
+                backendError =
+                    errJson.error ||
+                    errJson.message ||
+                    (Array.isArray(errJson.errors) ? errJson.errors.join('\n') : '');
+            } catch (e) {
+                backendError = await response.text();
+            }
+            throw new Error(formatSimulationNetworkError({ message: backendError }, baseUrl));
         }
         const result = await response.json();
         if (result.ok) {
@@ -284,12 +346,18 @@ export async function triggerSimulation(isSilentUpdate = false) {
             if (btnStop) btnStop.classList.remove('disabled');
             draw();
         } else {
-            if (!isSilentUpdate) alert("Erreur du moteur SPICE :\n" + (result.error || "Vérifiez les masses"));
+            if (!isSilentUpdate) alert("Erreur du moteur SPICE :\n" + formatSpiceEngineErrors(result));
             stopSimulation();
         }
     } catch (err) {
-        if (!isSilentUpdate) alert(`Erreur réseau :\n${err.message}`);
+        if (!isSilentUpdate) alert(`Erreur réseau :\n${formatSimulationNetworkError(err, baseUrl)}`);
         stopSimulation();
+    } finally {
+        simulationInFlight = false;
+        if (simulationQueuedSilent) {
+            simulationQueuedSilent = false;
+            triggerSimulation(true);
+        }
     }
 }
 

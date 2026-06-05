@@ -61,9 +61,14 @@ function probeXspiceViaDevhelp(exe, env) {
  * @param {NodeJS.ProcessEnv} [env] PATH étendu (bin/lib) si bundle portable
  * @returns {boolean}
  */
+function cacheKeyForExe(exe, env) {
+    const pathEnv = env && (env.PATH || env.Path) ? String(env.PATH || env.Path) : "";
+    return `${String(exe).toLowerCase()}|${pathEnv}`;
+}
+
 export function ngspiceHasXspice(exe, env) {
     if (!exe || !existsSync(exe)) return false;
-    const key = exe.toLowerCase();
+    const key = cacheKeyForExe(exe, env);
     if (cachedByExe.has(key)) return cachedByExe.get(key);
 
     let ok = false;

@@ -666,10 +666,20 @@ async function getMergeVoltmeterTranPlotsFromWrdata() {
     return module.mergeVoltmeterTranPlotsFromWrdata;
 }
 
+/** Délai exec ngspice : circuits 74HC90 / CD4511 (.tran jusqu'à ~120 s simulées). */
+function ngspiceExecTimeoutMs(netlistText) {
+    const m = String(netlistText || "").match(/\.tran\s+\S+\s+(\S+)/i);
+    if (!m) return 90000;
+    const tstop = parseFloat(m[1]);
+    if (!Number.isFinite(tstop) || tstop <= 0) return 90000;
+    return Math.min(180000, Math.max(60000, Math.round(tstop * 8000 + 45000)));
+}
+
 function runNgspice(netlistPath, outputPath, opts = {}) {
     const { exe, prependPath } = resolveNgspiceForServer(__dirname);
     const env = applyPathPrepend(process.env, prependPath);
     const cwd = opts.cwd || __dirname;
+    const timeoutMs = opts.timeoutMs ?? 90000;
     // NB : pas de « -f rc ». L'option -f n'existe pas dans ngspice-46 (elle bascule en
     // mode interactif, n'exécute rien et n'écrit pas le -o log). Les codemodels XSPICE
     // (dont digital.cm) sont chargés automatiquement par spinit (../lib/ngspice/digital.cm).
@@ -680,7 +690,7 @@ function runNgspice(netlistPath, outputPath, opts = {}) {
             args,
             {
                 windowsHide: true,
-                timeout: 25000,
+                timeout: timeoutMs,
                 maxBuffer: 8 * 1024 * 1024,
                 env,
                 cwd,
@@ -701,6 +711,17 @@ function runNgspice(netlistPath, outputPath, opts = {}) {
         );
     });
 }
+
+app.get("/api/simulate", (req, res) => {
+    res.status(405).json({
+        ok: false,
+        phase: "method",
+        errors: [
+            "Cette URL accepte uniquement POST (pas GET dans la barre d’adresse).",
+            "Lancez « npm start », puis ouvrez http://localhost:3000/Simulateur/ et cliquez sur « Lancer Simulation ».",
+        ],
+    });
+});
 
 app.post("/api/simulate", async (req, res) => {
     if (
@@ -848,9 +869,11 @@ app.post("/api/simulate", async (req, res) => {
             xspiceRc = path.basename(xspiceRc);
         }
         await writeFile(netlistPath, deckText, "utf8");
+        const spiceTimeoutMs = ngspiceExecTimeoutMs(deckText);
         const runResult = await runNgspice("circuit.cir", "ngspice.log", {
             cwd: tempDir,
             xspiceRc,
+            timeoutMs: spiceTimeoutMs,
         });
         let log = "";
         try {
@@ -981,6 +1004,7 @@ app.post("/api/simulate", async (req, res) => {
                 const ohmRun = await runNgspice("circuit_ohm.cir", "ngspice_ohm.log", {
                     cwd: tempDir,
                     xspiceRc,
+                    timeoutMs: spiceTimeoutMs,
                 });
                 let ohmLog = "";
                 try {

@@ -2144,6 +2144,25 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     const netlistText = lines.join("\n");
 
+    if (hasLogicCd4511 && !usesXspiceCd4511) {
+        return {
+            ok: false,
+            errors: [
+                "CD4511 : ngspice avec XSPICE et digital.cm sont obligatoires (d_dlatch + d_genlut).",
+                "Exécutez « npm run check-ngspice » depuis le dossier du projet — « XSPICE dans le binaire : oui » et digital.cm présent.",
+            ],
+            warnings,
+            netlist: netlistText,
+            voltmeters: [],
+            ammeters: [],
+            ohmeters: [],
+            oscilloscopes: [],
+            nodeMeasures: [],
+            scopesTranMeta: [],
+            analysisTran: false,
+        };
+    }
+
     return {
         ok: true,
         netlist: netlistText,
