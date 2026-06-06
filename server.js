@@ -808,10 +808,14 @@ app.post("/api/simulate", async (req, res) => {
 
     const gs = Number(req.body?.gridStep);
     const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
+    const linuxServer = process.platform !== "win32";
     const deckOpts = {
         repoRoot: __dirname,
         ngspiceExe,
         ngspiceEnv: applyPathPrepend(process.env, prependPath),
+        // ngspice-39 (apt / Render) : d_genlut et parfois d_dff instables → sources B.
+        forceBsourceCd4511: linuxServer,
+        forceBsourceDff: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);

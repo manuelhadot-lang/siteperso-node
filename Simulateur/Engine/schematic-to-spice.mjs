@@ -1065,6 +1065,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const usesXspiceFf =
         (hasLogicDff && useLogicDffXspice(deckOpts)) || (hasLogicJk && useLogicJkXspice(deckOpts));
     const usesXspiceCd4511 = hasLogicCd4511 && useLogicCd4511Xspice(deckOpts);
+    const usesBsourceCd4511 = hasLogicCd4511 && !usesXspiceCd4511;
     const usesXspiceDigital = usesXspiceFf || usesXspiceCd4511;
     const lines = [];
     lines.push("* Circuit Designer - netlist SPICE (.op)");
@@ -1079,23 +1080,16 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         warnings.push(
             `${xParts.length ? xParts.join(", ") : "Circuits logiques"} : modèle XSPICE (digital.cm) — simulation mixte analogique/numérique.`
         );
+    } else if (usesBsourceCd4511) {
+        warnings.push(
+            "CD4511 : modèle sources B (compatibilité ngspice Linux / serveur distant — pas de d_genlut)."
+        );
     } else if (
-        (hasLogicDff || hasLogicJk || hasLogicCd4511) &&
+        (hasLogicDff || hasLogicJk) &&
         isXspiceDffAvailable(deckOpts.repoRoot)
     ) {
-        if (hasLogicCd4511) {
-            warnings.push(
-                "CD4511 : digital.cm présent mais ngspice sans XSPICE — circuit non simulé (voir Simulateur/lib/ngspice/README.txt)."
-            );
-        }
-        if (hasLogicDff || hasLogicJk) {
-            warnings.push(
-                "Bascule(s) : digital.cm présent mais ngspice sans XSPICE — modèle sources B (voir Simulateur/lib/ngspice/README.txt)."
-            );
-        }
-    } else if (hasLogicCd4511) {
         warnings.push(
-            "CD4511 : XSPICE indisponible (digital.cm ou ngspice avec XSPICE requis — voir Simulateur/lib/ngspice/README.txt)."
+            "Bascule(s) : digital.cm présent mais ngspice sans XSPICE — modèle sources B (voir Simulateur/lib/ngspice/README.txt)."
         );
     }
 
@@ -2145,12 +2139,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     const netlistText = lines.join("\n");
 
-    if (hasLogicCd4511 && !usesXspiceCd4511) {
+    if (hasLogicCd4511 && !usesXspiceCd4511 && !usesBsourceCd4511) {
         return {
             ok: false,
             errors: [
-                "CD4511 : ngspice avec XSPICE et digital.cm sont obligatoires (d_dlatch + d_genlut).",
-                "Exécutez « npm run check-ngspice » depuis le dossier du projet — « XSPICE dans le binaire : oui » et digital.cm présent.",
+                "CD4511 : modèle de simulation indisponible (XSPICE ou sources B).",
             ],
             warnings,
             netlist: netlistText,

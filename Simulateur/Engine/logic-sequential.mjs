@@ -1,6 +1,10 @@
 /** Bascules et circuits intégrés logiques — ngspice (XSPICE d_dff ou sources B). */
 
 import {
+    appendLogicCd4511BsourceNetlist,
+    logicCd4511BsourceInternalNodeKeys,
+} from "./logic-cd4511-bsource.mjs";
+import {
     appendLogicCd4511XspiceNetlist,
     cd4511InputNodeKeys,
     cd4511OutputNodeKeys,
@@ -69,7 +73,9 @@ export function logicSequentialInternalNodeKeys(c, opts = {}) {
         return keys;
     }
     if (isLogicCd4511Type(c.type)) {
-        return logicCd4511XspiceInternalNodeKeys(c);
+        return useLogicCd4511Xspice(opts)
+            ? logicCd4511XspiceInternalNodeKeys(c)
+            : logicCd4511BsourceInternalNodeKeys(c);
     }
     return [];
 }
@@ -396,7 +402,9 @@ export function useLogicCd4511Xspice(opts = {}) {
 export function appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, opts = {}) {
     if (useLogicCd4511Xspice(opts)) {
         appendLogicCd4511XspiceNetlist(c, nodeFor, vhi, lines, spiceBranchName, opts);
+        return;
     }
+    appendLogicCd4511BsourceNetlist(c, nodeFor, vhi, lines, spiceBranchName, opts);
 }
 
 export function resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhiFn) {
