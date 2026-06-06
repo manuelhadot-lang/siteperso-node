@@ -321,11 +321,15 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 const ledPlots = result.ledTranPlots || {};
                 const seg7Plots = result.seg7TranPlots || {};
                 const logicGateTranPlots = result.logicGateTranPlots || {};
+                const hasCounterUi = circuit.components.some(
+                    (c) => c.type === 'ic_74hc90' || c.type === 'seg7' || c.type === 'cd4511'
+                );
                 if (
                     Object.keys(vmPlots).length ||
                     Object.keys(ledPlots).length ||
                     Object.keys(seg7Plots).length ||
-                    Object.keys(logicGateTranPlots).length
+                    Object.keys(logicGateTranPlots).length ||
+                    hasCounterUi
                 ) {
                     startLedAnimation(ledPlots, vmPlots, seg7Plots, logicGateTranPlots, {
                         keepClock: isSilentUpdate,

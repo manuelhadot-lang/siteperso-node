@@ -482,6 +482,12 @@ export function getAnimatedSeg7Segments(label) {
     return { segments: seg7LitFromVoltages(segmentV, vCom) };
 }
 
+function hasIdealCounterAnimation() {
+    if (!hasHc90DecadeCounter()) return false;
+    const p = getGimpPeriodSec();
+    return p != null && p > 0;
+}
+
 export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGateTranPlots = {}, opts = {}) {
     const savedStartMs = opts.keepClock === true ? anim.startMs : 0;
     stopLedAnimation();
@@ -492,7 +498,9 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires);
     anim.seg7ToHc90 = buildSeg7ToHc90Map();
     const hasHc90Anim = Object.keys(anim.hc90QPlots).length > 0;
-    if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim) return;
+    const hasSeg7Chip = circuit.components.some((c) => c.type === 'seg7');
+    const hasIdealCounter = hasIdealCounterAnimation();
+    if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim && !hasIdealCounter && !hasSeg7Chip) return;
 
     anim.plots = plots || {};
     anim.vmPlots = vmPlots || {};
@@ -502,7 +510,12 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     if (hasVm) prepareVmTiming(vmPlots);
 
     const needsFrameLoop =
-        Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) || hasVm || hasSeg7 || hasHc90Anim;
+        Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) ||
+        hasVm ||
+        hasSeg7 ||
+        hasHc90Anim ||
+        hasIdealCounter ||
+        (hasSeg7Chip && hasHc90DecadeCounter());
     if (!needsFrameLoop) {
         redraw();
         return;

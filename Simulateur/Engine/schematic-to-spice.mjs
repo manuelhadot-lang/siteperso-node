@@ -772,13 +772,13 @@ const TRAN_SCOPE_H_DIVS = 8;
 const TRAN_MAX_TIME_DIV_SEC = 0.1;
 const TRAN_SAMPLES_PER_PERIOD = 200;
 const TRAN_MAX_POINTS = 50000;
-/** Au-delà de cette période (f ≤ 0,5 Hz), .tran court + animation temps réel côté client. */
-const SLOW_CLOCK_PERIOD_SEC = 2;
+/** Au-delà de cette période (f ≤ 1 Hz), .tran court + animation temps réel côté client. */
+const SLOW_CLOCK_PERIOD_SEC = 1;
 const SLOW_CLOCK_TRAN_PERIODS = 6;
 const SLOW_CLOCK_MAX_TSTOP_SEC = 120;
 
 /** Pas et durée de simulation transitoire selon les générateurs AC et la base de temps du scope. */
-function computeTranTiming(components) {
+function computeTranTiming(components, deckOpts = {}) {
     let minPeriod = Infinity;
     for (const c of components) {
         if (c.type !== "vsin" && c.type !== "vsquare" && c.type !== "vpulse") continue;
@@ -839,6 +839,13 @@ function computeTranTiming(components) {
             if (tstop / tstep > TRAN_MAX_POINTS) {
                 tstep = tstop / TRAN_MAX_POINTS;
             }
+        }
+    }
+    if (deckOpts.quickTran && hc90Count > 0) {
+        const quickPeriods = hc90Count >= 2 ? 8 : 6;
+        tstop = Math.min(tstop, minPeriod * quickPeriods);
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
         }
     }
     return {
@@ -1491,7 +1498,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     if (useTran) {
-        const tranTiming = computeTranTiming(components);
+        const tranTiming = computeTranTiming(components, deckOpts);
         const { tstepStr, tstopStr, slowClock, clockPeriodSec } = tranTiming;
         analysisTran = true;
         const hc90InCircuit = components.some((c) => isIc74hc90Type(c.type));

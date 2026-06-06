@@ -816,6 +816,7 @@ app.post("/api/simulate", async (req, res) => {
         // ngspice-39 (apt / Render) : d_genlut et parfois d_dff instables → sources B.
         forceBsourceCd4511: linuxServer,
         forceBsourceDff: linuxServer,
+        quickTran: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
