@@ -237,13 +237,15 @@
                     <li><strong>Report au chiffre 9</strong> : relier <code>HC90_1</code> <strong>Q0</strong> et <strong>Q3</strong> aux entrées de l’ET, sortie → <code>HC90_2</code> CP0. Au comptage 9 (binaire 1001), Q0 et Q3 sont à 1 → un front horloge sur les dizaines.</li>
                     <li><strong>Ne pas utiliser Q1 + Q3</strong> : en BCD 0…9 ces sorties ne sont jamais hautes en même temps (seul l’état invalide 10 = 1010 les active).</li>
                     <li><code>HC90_2</code> : même câblage décade (Q0 → CP1, MR/MS à 0, VCC/GND).</li>
+                    <li><strong>Affichage 0…99</strong> : si le report est correct (AND Q0+Q3 ou Q3), l’animation utilise un comptage idéal en temps réel (1 impulsion = +1), fiable à toute fréquence du GImp.</li>
                 </ul>
                 <h3>Simulation</h3>
                 <p>
                     Quatre bascules <strong>D</strong> en mode bascule (D relié à /Q, horloges en cascade).
                     Modèle <strong>XSPICE</strong> (<code>d_dff</code>) si ngspice et <code>digital.cm</code> sont disponibles ;
                     sinon repli sur sources comportementales (comme la bascule D du simulateur).
-                    Vérification : <code>node Simulateur/Engine/ic74hc90-decade.test.mjs</code> ou
+                    Vérification : <code>node Simulateur/Engine/ic74hc90-decade.test.mjs</code>,
+                    <code>node Simulateur/Engine/hc90-cascade.test.mjs</code> ou
                     <code>npm run check-ngspice</code>.
                 </p>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>

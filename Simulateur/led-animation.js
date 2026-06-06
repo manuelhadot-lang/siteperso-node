@@ -1,6 +1,12 @@
 // led-animation.js — clignotement LED à partir des courbes .tran (wrdata)
 import { circuit } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
+import {
+    detectHc90Cascade,
+    hc90TranSampleTimeSec,
+    idealHc90BcdForLabel,
+    shouldUseIdealHc90Counting,
+} from './Engine/hc90-cascade.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -35,6 +41,8 @@ let anim = {
     ledPersistence: {},
     /** @type {Record<string, number>} courant moyen si persistance */
     steadyCurrent: {},
+    /** @type {ReturnType<typeof detectHc90Cascade>|null} */
+    hc90Cascade: null,
 };
 
 export function bindLedAnimationRedraw(fn) {
@@ -75,10 +83,6 @@ function hasRippleCounter() {
 /** 74HC90 en mode décade : l’animation doit balayer le .tran, pas figer une phase d’horloge. */
 function hasHc90DecadeCounter() {
     return circuit.components.some((c) => c.type === 'ic_74hc90');
-}
-
-function countHc90Components() {
-    return circuit.components.filter((c) => c.type === 'ic_74hc90').length;
 }
 
 const SEG7_SEGMENT_SUFFIXES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
@@ -169,15 +173,10 @@ function hc90TranSpanSec() {
  * On lit la valeur stabilisée en fin de période d’horloge (comme les tests SPICE).
  */
 function hc90SampleTimeSec(elapsed, compLabel) {
-    const pack = compLabel ? anim.hc90QPlots[compLabel] : null;
-    const plotSpan = pack?.span > 0 ? pack.span : hc90TranSpanSec();
+    const plotSpan = hc90TranSpanSec() || anim.hc90QPlots[compLabel]?.span || 0;
     const clockPeriod = getGimpPeriodSec();
-    const multiHc90 = countHc90Components() > 1;
-    if (!multiHc90 && plotSpan > 0 && clockPeriod > 0) {
-        const tLoop = elapsed % plotSpan;
-        const phase = 0.49;
-        const nPeriods = Math.floor(tLoop / clockPeriod);
-        return Math.min(plotSpan - 1e-12, nPeriods * clockPeriod + clockPeriod * phase);
+    if (plotSpan > 0 && clockPeriod > 0) {
+        return hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan);
     }
     if (plotSpan > 0) return elapsed % plotSpan;
     return elapsed;
@@ -193,16 +192,11 @@ function sampleHc90Bcd(compLabel, tSec) {
     return bcdFromQVoltages(qV, vth);
 }
 
-/** Horloge très lente (≥ 2 s par impulsion) : comptage idéal en temps réel, SPICE ne couvre que quelques fronts. */
-function isSlowHc90Clock() {
-    if (countHc90Components() > 1) return false;
+/** Comptage idéal (temps réel) : 2 chiffres câblés correctement, ou 1 HC90 avec horloge lente. */
+function useIdealHc90Counting() {
     const p = getGimpPeriodSec();
-    return p != null && p >= 2;
-}
-
-function hc90BcdFromElapsed(elapsed, clockPeriod) {
-    if (!(clockPeriod > 0)) return null;
-    return Math.floor(elapsed / clockPeriod) % 10;
+    if (p == null || p <= 0) return false;
+    return shouldUseIdealHc90Counting(anim.hc90Cascade, p);
 }
 
 /** Valeur BCD 0–9 animée pour un 74HC90 (courbes Q0…Q3 du .tran). */
@@ -210,8 +204,9 @@ export function getAnimatedHc90Bcd(compLabel) {
     if (!compLabel || !hasHc90DecadeCounter()) return null;
     const clockPeriod = getGimpPeriodSec();
     const elapsed = (performance.now() - anim.startMs) / 1000;
-    if (isSlowHc90Clock() && clockPeriod > 0) {
-        return hc90BcdFromElapsed(elapsed, clockPeriod);
+    if (useIdealHc90Counting() && clockPeriod > 0) {
+        const ideal = idealHc90BcdForLabel(compLabel, anim.hc90Cascade, elapsed, clockPeriod);
+        if (ideal != null) return ideal;
     }
     if (!anim.hc90QPlots[compLabel]) return null;
     return sampleHc90Bcd(compLabel, hc90SampleTimeSec(elapsed, compLabel));
@@ -494,6 +489,7 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
     const hasSeg7 = seg7Plots && Object.keys(seg7Plots).length > 0;
     anim.hc90QPlots = indexHc90QPlots(logicGateTranPlots);
+    anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires);
     anim.seg7ToHc90 = buildSeg7ToHc90Map();
     const hasHc90Anim = Object.keys(anim.hc90QPlots).length > 0;
     if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim) return;
@@ -542,6 +538,7 @@ export function stopLedAnimation() {
     anim.vmPlots = {};
     anim.seg7Plots = {};
     anim.hc90QPlots = {};
+    anim.hc90Cascade = null;
     anim.ledPeriods = {};
     anim.vmPeriods = {};
     anim.ledPersistence = {};

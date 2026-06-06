@@ -817,7 +817,8 @@ function computeTranTiming(components) {
                 Math.max(minPeriod * SLOW_CLOCK_TRAN_PERIODS, minPeriod * 4)
             );
         } else {
-            tstop = Math.max(tstop, minPeriod * 24);
+            const minRipplePeriods = hc90Count >= 2 ? 100 : 24;
+            tstop = Math.max(tstop, minPeriod * minRipplePeriods);
         }
     }
 
