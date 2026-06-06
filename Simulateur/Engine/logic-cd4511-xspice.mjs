@@ -18,14 +18,21 @@ const BCD_SEGMENTS = [
     [1, 1, 1, 1, 0, 1, 1],
 ];
 
-/** table_values pour d_genlut : 4 entrées [A B C D], 7 sorties a…g. */
+/** table_values pour d_genlut : 4 entrées [A B C D], 7 sorties a…g (concaténées). */
 export function cd4511BcdToSegGenlutTable() {
     let table = "";
     for (let seg = 0; seg < 7; seg++) {
-        for (let val = 0; val < 16; val++) {
-            if (val <= 9 && BCD_SEGMENTS[val][seg]) table += "1";
-            else table += "0";
-        }
+        table += cd4511SegGenlutTable(seg);
+    }
+    return table;
+}
+
+/** Une sortie 7-seg : 16 bits (2⁴ entrées BCD) pour compatibilité ngspice-39 (1 sortie / d_genlut). */
+export function cd4511SegGenlutTable(segIndex) {
+    let table = "";
+    for (let val = 0; val < 16; val++) {
+        if (val <= 9 && BCD_SEGMENTS[val][segIndex]) table += "1";
+        else table += "0";
     }
     return table;
 }
@@ -145,14 +152,16 @@ export function appendLogicCd4511XspiceNetlist(c, nodeFor, vhi, lines, spiceBran
     const ndLc = latchBit("c", ndC);
     const ndLd = latchBit("d", ndD);
 
-    const mDecode = `${c.id}_m_bcd7`;
-    const ndSeg = SEG_NAMES.map((s) => nodeFor(`${c.id}#__xd_seg_${s}`));
-    lines.push(
-        `.model ${mDecode} d_genlut(table_values="${cd4511BcdToSegGenlutTable()}")`
-    );
-    lines.push(
-        `${spiceBranchName("A", c.id)}_dec [${ndLa} ${ndLb} ${ndLc} ${ndLd}] [${ndSeg.join(" ")}] ${mDecode}`
-    );
+    // 7× d_genlut 4→1 (évite « Defaulted array parameter… » sur ngspice Linux / Render).
+    const ndSeg = SEG_NAMES.map((s, segIdx) => {
+        const mSeg = `${c.id}_m_lut_${s}`;
+        const ndOut = nodeFor(`${c.id}#__xd_seg_${s}`);
+        lines.push(`.model ${mSeg} d_genlut(table_values="${cd4511SegGenlutTable(segIdx)}")`);
+        lines.push(
+            `${spiceBranchName("A", c.id)}_dec${s} [${ndLa} ${ndLb} ${ndLc} ${ndLd}] [${ndOut}] ${mSeg}`
+        );
+        return ndOut;
+    });
 
     const mOr = `${c.id}_m_or`;
     const mAnd = `${c.id}_m_and`;
