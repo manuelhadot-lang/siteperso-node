@@ -3,8 +3,10 @@ import { circuit } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
 import {
     detectHc90Cascade,
+    hc90LabelForSeg7,
     hc90TranSampleTimeSec,
     idealHc90BcdForLabel,
+    isHc90MasterResetActive,
     shouldUseIdealHc90Counting,
 } from './Engine/hc90-cascade.mjs';
 
@@ -32,8 +34,10 @@ let anim = {
     seg7Plots: {},
     /** @type {Record<string, { q: Array<{ time: number[]; voltage: number[]; vth?: number } | null>; span: number }>} */
     hc90QPlots: {},
-    /** @type {Record<string, string>} label SEG7 → label 74HC90 amont */
-    seg7ToHc90: {},
+    /** Dernier BCD valide 0–9 par HC90 (filtre états transitoires > 9). */
+    hc90LastBcd: {},
+    /** MR1·MR2 actifs (reset asynchrone) sur le circuit courant. */
+    hc90MrActive: false,
     /** @type {Record<string, number>} période (s) propre à chaque LED */
     ledPeriods: {},
     vmPeriods: {},
@@ -85,66 +89,6 @@ function hasHc90DecadeCounter() {
     return circuit.components.some((c) => c.type === 'ic_74hc90');
 }
 
-const SEG7_SEGMENT_SUFFIXES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
-const CD4511_BCD_SUFFIXES = ['A', 'B', 'C', 'D'];
-const HC90_Q_SUFFIXES = ['Q0', 'Q1', 'Q2', 'Q3'];
-
-function parseJonctionId(jonctionId) {
-    if (!jonctionId) return null;
-    const i = jonctionId.lastIndexOf('_');
-    if (i <= 0) return null;
-    return { label: jonctionId.slice(0, i), suffix: jonctionId.slice(i + 1) };
-}
-
-function wireNeighbors(jonctionId) {
-    const out = [];
-    for (const w of circuit.wires) {
-        if (w.fromJonctionId === jonctionId) out.push(w.toJonctionId);
-        else if (w.toJonctionId === jonctionId) out.push(w.fromJonctionId);
-    }
-    return out;
-}
-
-/** SEG → CD4511 (segments) → 74HC90 (Q0…Q3 vers A…D). */
-function resolveHc90LabelForSeg7(segLabel) {
-    if (!segLabel) return null;
-    let cd4511Label = null;
-    for (const seg of SEG7_SEGMENT_SUFFIXES) {
-        for (const nb of wireNeighbors(`${segLabel}_${seg}`)) {
-            const p = parseJonctionId(nb);
-            if (!p) continue;
-            const comp = circuit.components.find((c) => c.label === p.label);
-            if (comp?.type === 'cd4511' && SEG7_SEGMENT_SUFFIXES.includes(p.suffix)) {
-                cd4511Label = p.label;
-                break;
-            }
-        }
-        if (cd4511Label) break;
-    }
-    if (!cd4511Label) return null;
-    for (const ab of CD4511_BCD_SUFFIXES) {
-        for (const nb of wireNeighbors(`${cd4511Label}_${ab}`)) {
-            const p = parseJonctionId(nb);
-            if (!p) continue;
-            const comp = circuit.components.find((c) => c.label === p.label);
-            if (comp?.type === 'ic_74hc90' && HC90_Q_SUFFIXES.includes(p.suffix)) {
-                return p.label;
-            }
-        }
-    }
-    return null;
-}
-
-function buildSeg7ToHc90Map() {
-    const map = {};
-    for (const comp of circuit.components) {
-        if (comp.type !== 'seg7' || !comp.label) continue;
-        const hc90 = resolveHc90LabelForSeg7(comp.label);
-        if (hc90) map[comp.label] = hc90;
-    }
-    return map;
-}
-
 function indexHc90QPlots(logicGateTranPlots) {
     const byComp = {};
     for (const [id, plot] of Object.entries(logicGateTranPlots || {})) {
@@ -172,6 +116,21 @@ function hc90TranSpanSec() {
  * Temps simulé pour l’échantillon HC90 : 1 impulsion GImp = 1 pas de comptage (temps réel).
  * On lit la valeur stabilisée en fin de période d’horloge (comme les tests SPICE).
  */
+/**
+ * Synchronise l’horloge d’animation avec le reset MR :
+ * - MR actif → affichage 0 ;
+ * - MR relâché → repartir de t=0 (nouvelle .tran SPICE).
+ */
+function syncHc90MasterResetClock() {
+    const mrActive = isHc90MasterResetActive(circuit.components, circuit.wires, circuit.autoJunctions);
+    if (anim.hc90MrActive && !mrActive) {
+        anim.startMs = performance.now();
+        anim.hc90LastBcd = {};
+    }
+    anim.hc90MrActive = mrActive;
+    return mrActive;
+}
+
 function hc90SampleTimeSec(elapsed, compLabel) {
     const plotSpan = hc90TranSpanSec() || anim.hc90QPlots[compLabel]?.span || 0;
     const clockPeriod = getGimpPeriodSec();
@@ -189,23 +148,24 @@ function sampleHc90Bcd(compLabel, tSec) {
     const qV = pack.q.map((plot) =>
         plot?.time?.length ? interpolateSeries(plot.time, plot.voltage, tSec) : 0
     );
-    return bcdFromQVoltages(qV, vth);
+    const raw = bcdFromQVoltages(qV, vth);
+    if (raw > 9) {
+        const last = anim.hc90LastBcd[compLabel];
+        return last != null ? last : null;
+    }
+    anim.hc90LastBcd[compLabel] = raw;
+    return raw;
 }
 
-/** Comptage idéal (temps réel) : 2 chiffres câblés correctement, ou 1 HC90 avec horloge lente. */
-function useIdealHc90Counting() {
-    const p = getGimpPeriodSec();
-    if (p == null || p <= 0) return false;
-    return shouldUseIdealHc90Counting(anim.hc90Cascade, p);
-}
-
-/** Valeur BCD 0–9 animée pour un 74HC90 (courbes Q0…Q3 du .tran). */
+/** Valeur BCD 0–9 animée pour un 74HC90 (comptage idéal ou courbes Q0…Q3 du .tran). */
 export function getAnimatedHc90Bcd(compLabel) {
     if (!compLabel || !hasHc90DecadeCounter()) return null;
-    const clockPeriod = getGimpPeriodSec();
+    if (syncHc90MasterResetClock()) return 0;
     const elapsed = (performance.now() - anim.startMs) / 1000;
-    if (useIdealHc90Counting() && clockPeriod > 0) {
-        const ideal = idealHc90BcdForLabel(compLabel, anim.hc90Cascade, elapsed, clockPeriod);
+    const clockPeriod = getGimpPeriodSec();
+    const cascade = anim.hc90Cascade ?? detectHc90Cascade(circuit.components, circuit.wires, circuit.autoJunctions);
+    if (shouldUseIdealHc90Counting(cascade, clockPeriod)) {
+        const ideal = idealHc90BcdForLabel(compLabel, cascade, elapsed, clockPeriod);
         if (ideal != null) return ideal;
     }
     if (!anim.hc90QPlots[compLabel]) return null;
@@ -456,51 +416,40 @@ export function hasSeg7Animation() {
 
 /** Segments allumés à l'instant courant de la simulation live (.tran). */
 export function getAnimatedSeg7Segments(label) {
-    if (hasHc90DecadeCounter()) {
-        const hc90Label =
-            anim.seg7ToHc90[label] ||
-            resolveHc90LabelForSeg7(label) ||
-            circuit.components.find((c) => c.type === 'ic_74hc90')?.label;
-        if (hc90Label) {
-            const digit = getAnimatedHc90Bcd(hc90Label);
-            if (digit != null) return { segments: bcdDigitToSeg7Segments(digit) };
-        }
-    }
     const plot = anim.seg7Plots[label];
     if (!plot?.time?.length) return null;
+    if (syncHc90MasterResetClock()) return { segments: bcdDigitToSeg7Segments(0) };
+    const hc90Label = hc90LabelForSeg7(label, circuit.components, circuit.wires, circuit.autoJunctions);
+    if (hc90Label) {
+        const bcd = getAnimatedHc90Bcd(hc90Label);
+        if (bcd != null) return { segments: bcdDigitToSeg7Segments(bcd) };
+    }
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const clockPeriod = getGimpPeriodSec() ?? 1;
     const elapsed = (performance.now() - anim.startMs) / 1000;
-    const animPeriod =
-        hasHc90DecadeCounter() && plotSpan > 0 ? plotSpan : clockPeriod;
-    const tSample = hasHc90DecadeCounter()
-        ? plotTimeOrigin(elapsed, animPeriod)
-        : sampleTimeSec(elapsed, clockPeriod);
+    const tSample =
+        hasHc90DecadeCounter() && plotSpan > 0 && clockPeriod > 0
+            ? hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan)
+            : sampleTimeSec(elapsed, clockPeriod);
     const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
     const vCom = interpolateSeries(plot.time, plot.common, tAbs);
     const segmentV = SEG7_NAMES.map((n) => interpolateSeries(plot.time, plot.segments[n], tAbs));
     return { segments: seg7LitFromVoltages(segmentV, vCom) };
 }
 
-function hasIdealCounterAnimation() {
-    if (!hasHc90DecadeCounter()) return false;
-    const p = getGimpPeriodSec();
-    return p != null && p > 0;
-}
-
 export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGateTranPlots = {}, opts = {}) {
-    const savedStartMs = opts.keepClock === true ? anim.startMs : 0;
+    const mrActive = isHc90MasterResetActive(circuit.components, circuit.wires, circuit.autoJunctions);
+    const mrReleased = anim.hc90MrActive && !mrActive;
+    const savedStartMs = opts.keepClock === true && !mrReleased ? anim.startMs : 0;
     stopLedAnimation();
     const hasLeds = plots && Object.keys(plots).length > 0;
     const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
     const hasSeg7 = seg7Plots && Object.keys(seg7Plots).length > 0;
     anim.hc90QPlots = indexHc90QPlots(logicGateTranPlots);
-    anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires);
-    anim.seg7ToHc90 = buildSeg7ToHc90Map();
+    anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires, circuit.autoJunctions);
+    anim.hc90MrActive = mrActive;
     const hasHc90Anim = Object.keys(anim.hc90QPlots).length > 0;
-    const hasSeg7Chip = circuit.components.some((c) => c.type === 'seg7');
-    const hasIdealCounter = hasIdealCounterAnimation();
-    if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim && !hasIdealCounter && !hasSeg7Chip) return;
+    if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim) return;
 
     anim.plots = plots || {};
     anim.vmPlots = vmPlots || {};
@@ -513,9 +462,7 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
         Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) ||
         hasVm ||
         hasSeg7 ||
-        hasHc90Anim ||
-        hasIdealCounter ||
-        (hasSeg7Chip && hasHc90DecadeCounter());
+        hasHc90Anim;
     if (!needsFrameLoop) {
         redraw();
         return;
@@ -551,6 +498,8 @@ export function stopLedAnimation() {
     anim.vmPlots = {};
     anim.seg7Plots = {};
     anim.hc90QPlots = {};
+    anim.hc90LastBcd = {};
+    anim.hc90MrActive = false;
     anim.hc90Cascade = null;
     anim.ledPeriods = {};
     anim.vmPeriods = {};

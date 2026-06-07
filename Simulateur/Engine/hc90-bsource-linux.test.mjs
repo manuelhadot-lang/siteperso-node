@@ -1,5 +1,8 @@
 /**
- * 74HC90 en sources B (mode serveur Linux) — décade 0…9.
+ * 74HC90 dans la config serveur Linux (forceBsourceDff + forceBsourceCd4511).
+ * Les sections ÷2/÷5 sont modélisées par des bascules JK : XSPICE d_jkff est conservé
+ * (les sources B ne convergent pas à travers les fronts). On vérifie ici que la décade
+ * compte bien 0…9 dans l'ordre (garde anti-régression « repart de 4 »).
  * node Simulateur/Engine/hc90-bsource-linux.test.mjs
  */
 import { join, dirname } from "path";
@@ -56,4 +59,36 @@ if (/Simulation interrupted/i.test(log)) {
     throw new Error(`ngspice HC90 B-source:\n${log.slice(-1500)}`);
 }
 
-console.log("hc90-bsource-linux.test.mjs : OK");
+const rows = readFileSync(wave, "utf8")
+    .split(/\r?\n/)
+    .filter((l) => l.trim() && !l.startsWith("*"))
+    .map((l) => l.trim().split(/\s+/).map(Number).filter(Number.isFinite));
+if (rows.length < 2) throw new Error("aucune donnée transitoire (.tran avorté)");
+
+const qMeta = (built.logicGatesTranMeta || [])
+    .filter((m) => /^U1_Q\d$/.test(m.id))
+    .sort((a, b) => parseInt(a.id.replace("U1_Q", ""), 10) - parseInt(b.id.replace("U1_Q", ""), 10));
+
+function sampleAt(tTarget) {
+    let best = rows[0];
+    for (const row of rows) {
+        if (row[0] <= tTarget) best = row;
+        else break;
+    }
+    let n = 0;
+    qMeta.forEach((m, i) => {
+        if (best[(m.wrIndex ?? 0) + 1] > 2.5) n |= 1 << i;
+    });
+    return n;
+}
+
+const tEnd = rows[rows.length - 1][0];
+let fails = 0;
+for (let pulse = 1; pulse <= 12; pulse++) {
+    const t = (pulse - 1) * 0.5 + 0.49;
+    if (t >= tEnd) break;
+    if (sampleAt(t) !== pulse % 10) fails++;
+}
+if (fails > 0) throw new Error(`${fails} échantillon(s) hors séquence décade 0…9 (« repart de 4 » ?)`);
+
+console.log("hc90-bsource-linux.test.mjs : OK — décade 0…9 conforme");

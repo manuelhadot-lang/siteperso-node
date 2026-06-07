@@ -3,9 +3,10 @@
  * Brochage TI : CP1=1, MR1=2, MR2=3, VCC=5, MS1=6, MS2=7, Q2=8, Q1=9, GND=10, Q3=11, Q0=12, CP0=14.
  */
 import {
-    appendLogicDffNetlist,
-    logicDffDAndQbarShareNode,
+    appendLogicJkNetlist,
+    useLogicJkXspice,
 } from "./logic-sequential.mjs";
+import { logicJkXspiceInternalNodeKeys } from "./logic-xspice.mjs";
 
 export const IC90_PIN = {
     CP1: 0,
@@ -61,33 +62,34 @@ export function ic74hc90InputNodeKeys(c) {
     ];
 }
 
+/** Sous-bascules JK internes (suffixes) — voir appendIc74hc90Netlist. */
+const IC90_JK_SUFFIXES = ["u0", "u1", "u2", "u3"];
+
+/** Nœuds internes d'une sous-bascule JK selon le moteur (XSPICE d_jkff ou source B). */
+function ic90JkSubInternalKeys(subId, opts) {
+    if (useLogicJkXspice(opts)) {
+        return logicJkXspiceInternalNodeKeys({ id: subId }, {});
+    }
+    return [`${subId}#__qi`, `${subId}#__clkedge`, `${subId}#__qbar`];
+}
+
 export function ic74hc90InternalNodeKeys(c, opts = {}) {
     const keys = [
         `${c.id}#__mr`,
         `${c.id}#__ms`,
         `${c.id}#__rst_mid`,
         `${c.id}#__set_lo`,
-        `${c.id}#__dec_ovf`,
-        `${c.id}#__mr_eff`,
-        `${c.id}#__rst_mid_eff`,
+        `${c.id}#__one`,
+        `${c.id}#__jb`,
+        `${c.id}#__jd`,
+        `${c.id}#__clka`,
+        `${c.id}#__clkbd`,
+        `${c.id}#__clkc`,
     ];
-    for (const sl of ic74hc90ToggleSlices()) {
-        const sub = { id: `${c.id}_${sl.suffix}`, type: "logic_dff" };
-        keys.push(`${sub.id}#__dq`);
-        keys.push(
-            `${sub.id}#__qi`,
-            `${sub.id}#__clkedge`,
-            `${sub.id}#__xd_d`,
-            `${sub.id}#__xd_clk`,
-            `${sub.id}#__xd_set`,
-            `${sub.id}#__xd_rst`,
-            `${sub.id}#__xd_q`,
-            `${sub.id}#__xd_qbar`,
-            `${sub.id}#__xa_zero`,
-            `${sub.id}#__xd_zero`
-        );
-        if (sl.rippleFromQ) keys.push(`${sub.id}#__xa_clkinv`);
-    }
+    IC90_JK_SUFFIXES.forEach((sfx, i) => {
+        keys.push(`${c.id}#__qb${i}`);
+        for (const k of ic90JkSubInternalKeys(`${c.id}_${sfx}`, opts)) keys.push(k);
+    });
     return keys;
 }
 
@@ -95,79 +97,101 @@ function stepGt(node, th) {
     return `u(V(${node})-${th})`;
 }
 
-/** Remappe les nœuds d'une bascule interne vers les broches du CI. */
-function makeSliceNodeFor(c, sl, nodeFor, nMrEff, nMs, nRstMidEff) {
-    const subId = `${c.id}_${sl.suffix}`;
-    const qKey = `${c.id}#${sl.q}`;
-    const clkKey = `${c.id}#${sl.clk}`;
-    const isMid = sl.suffix === "u1" || sl.suffix === "u2";
-    const dqKey = `${subId}#__dq`;
-    return (key) => {
-        // D et /Q : nœud interne (rétroaction dacqb→adc), distinct de la broche Q.
-        if (key === `${subId}#0` || key === `${subId}#3`) return nodeFor(dqKey);
-        if (key === `${subId}#1`) return nodeFor(clkKey);
-        if (key === `${subId}#2`) return nodeFor(qKey);
-        if (key === `${subId}#4`) return isMid ? nodeFor(`${c.id}#__set_lo`) : nMs;
-        if (key === `${subId}#5`) return isMid ? nRstMidEff : nMrEff;
-        if (key.startsWith(`${subId}#`)) return nodeFor(key);
-        return nodeFor(key);
-    };
-}
-
 /**
+ * 74HC90 modélisé avec 4 bascules JK (datasheet) :
+ *   - FFA (Q0) : diviseur par 2, J=K=1, horloge CP0 (front descendant).
+ *   - Section ÷5 SYNCHRONE (CP1) :
+ *       FFB (Q1) : J=/Q3, K=1, horloge CP1↓
+ *       FFC (Q2) : J=K=1, horloge Q1↓ (ripple interne ÷5)
+ *       FFD (Q3) : J=Q1·Q2, K=1, horloge CP1↓
+ * Aucune remise à zéro « décade » asynchrone auto-effaçante : la section ÷5
+ * boucle naturellement (0→4→0), ce qui supprime la course qui faisait
+ * « repartir de 4 » dès qu'on prélevait Q0/Q3 (report cascade).
+ * MR1·MR2 force 0000 ; MS1·MS2 force 1001 (=9).
  * @param {object} c composant ic_74hc90
  */
 export function appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, deckOpts = {}) {
     const th = vhi > 0 ? vhi / 2 : 2.5;
     const v = vhi > 0 ? vhi : 5;
+    const B = (suffix) => `${spiceBranchName("B", c.id)}${suffix}`;
+
     const nMr1 = nodeFor(`${c.id}#${IC90_PIN.MR1}`);
     const nMr2 = nodeFor(`${c.id}#${IC90_PIN.MR2}`);
     const nMs1 = nodeFor(`${c.id}#${IC90_PIN.MS1}`);
     const nMs2 = nodeFor(`${c.id}#${IC90_PIN.MS2}`);
     const nMr = nodeFor(`${c.id}#__mr`);
     const nMs = nodeFor(`${c.id}#__ms`);
-    lines.push(
-        `${spiceBranchName("B", c.id)}_mr ${nMr} 0 V = { ${stepGt(nMr1, th)}*${stepGt(nMr2, th)}*${v} }`
-    );
-    lines.push(
-        `${spiceBranchName("B", c.id)}_ms ${nMs} 0 V = { ${stepGt(nMs1, th)}*${stepGt(nMs2, th)}*${v} }`
-    );
     const nRstMid = nodeFor(`${c.id}#__rst_mid`);
-    lines.push(
-        `${spiceBranchName("B", c.id)}_rstm ${nRstMid} 0 V = { (${stepGt(nMr, th)}+${stepGt(nMs, th)}-${stepGt(nMr, th)}*${stepGt(nMs, th)})*${v} }`
-    );
     const nSetLo = nodeFor(`${c.id}#__set_lo`);
+    const nOne = nodeFor(`${c.id}#__one`);
+
+    lines.push(`${B("_mr")} ${nMr} 0 V = { ${stepGt(nMr1, th)}*${stepGt(nMr2, th)}*${v} }`);
+    lines.push(`${B("_ms")} ${nMs} 0 V = { ${stepGt(nMs1, th)}*${stepGt(nMs2, th)}*${v} }`);
+    // Reset des bascules Q1/Q2 : MR OU MS (le 9 a Q1=Q2=0).
+    lines.push(
+        `${B("_rstm")} ${nRstMid} 0 V = { (${stepGt(nMr, th)}+${stepGt(nMs, th)}-${stepGt(nMr, th)}*${stepGt(nMs, th)})*${v} }`
+    );
     lines.push(`${spiceBranchName("V", c.id)}_setlo ${nSetLo} 0 DC 0`);
+    lines.push(`${B("_one")} ${nOne} 0 V = { ${v} }`);
 
+    const nCp0 = nodeFor(`${c.id}#${IC90_PIN.CP0}`);
+    const nCp1 = nodeFor(`${c.id}#${IC90_PIN.CP1}`);
+    const nQ0 = nodeFor(`${c.id}#${IC90_PIN.Q0}`);
     const nQ1 = nodeFor(`${c.id}#${IC90_PIN.Q1}`);
+    const nQ2 = nodeFor(`${c.id}#${IC90_PIN.Q2}`);
     const nQ3 = nodeFor(`${c.id}#${IC90_PIN.Q3}`);
-    const nDecOvf = nodeFor(`${c.id}#__dec_ovf`);
+
+    // Entrées J combinatoires de la section ÷5.
+    const nJb = nodeFor(`${c.id}#__jb`); // FFB : J = /Q3
+    lines.push(`${B("_jb")} ${nJb} 0 V = { (1-${stepGt(nQ3, th)})*${v} }`);
+    const nJd = nodeFor(`${c.id}#__jd`); // FFD : J = Q1·Q2
+    lines.push(`${B("_jd")} ${nJd} 0 V = { ${stepGt(nQ1, th)}*${stepGt(nQ2, th)}*${v} }`);
+
+    // Horloges inversées : déclenchement sur front descendant (74HC90 = négatif).
+    const nClkA = nodeFor(`${c.id}#__clka`); // /CP0
+    const nClkBD = nodeFor(`${c.id}#__clkbd`); // /CP1
+    const nClkC = nodeFor(`${c.id}#__clkc`); // /Q1 (ripple FFC)
+    // Pendant MR actif, geler toutes les horloges : sinon Q1↓ lors du reset asynchrone
+    // horloge FFC (J=K=1) et le compteur se fige à 4 ; un front CP0 résiduel
+    // (report cascade) peut aussi corrompre l'état juste après le reset.
+    const mrOn = stepGt(nMr, th);
     lines.push(
-        `${spiceBranchName("B", c.id)}_dec ${nDecOvf} 0 V = { ${stepGt(nQ3, th)}*${stepGt(nQ1, th)}*${v} }`
+        `${B("_clka")} ${nClkA} 0 V = { (1-(${mrOn}))*(${v} - V(${nCp0})) + (${mrOn})*${v} }`
     );
-    const nMrEff = nodeFor(`${c.id}#__mr_eff`);
     lines.push(
-        `${spiceBranchName("B", c.id)}_mreff ${nMrEff} 0 V = { (${stepGt(nMr, th)}+${stepGt(nDecOvf, th)}-${stepGt(nMr, th)}*${stepGt(nDecOvf, th)})*${v} }`
+        `${B("_clkbd")} ${nClkBD} 0 V = { (1-(${mrOn}))*(${v} - V(${nCp1})) + (${mrOn})*${v} }`
     );
-    const nRstMidEff = nodeFor(`${c.id}#__rst_mid_eff`);
     lines.push(
-        `${spiceBranchName("B", c.id)}_rstmeff ${nRstMidEff} 0 V = { (${stepGt(nRstMid, th)}+${stepGt(nDecOvf, th)}-${stepGt(nRstMid, th)}*${stepGt(nDecOvf, th)})*${v} }`
+        `${B("_clkc")} ${nClkC} 0 V = { (1-(${mrOn}))*(${v} - V(${nQ1})) + (${mrOn})*${v} }`
     );
 
-    for (const sl of ic74hc90ToggleSlices()) {
-        const sub = { id: `${c.id}_${sl.suffix}`, type: "logic_dff" };
-        const sliceNodeFor = makeSliceNodeFor(c, sl, nodeFor, nMrEff, nMs, nRstMidEff);
-        const srWired = { set: true, reset: true };
-        appendLogicDffNetlist(sub, sliceNodeFor, v, lines, spiceBranchName, {
+    const slices = [
+        { sfx: "u0", q: nQ0, clk: nClkA, j: nOne, k: nOne, set: nMs, reset: nMr, srWired: { set: true, reset: true } },
+        { sfx: "u1", q: nQ1, clk: nClkBD, j: nJb, k: nOne, set: nSetLo, reset: nRstMid, srWired: { set: false, reset: true } },
+        { sfx: "u2", q: nQ2, clk: nClkC, j: nOne, k: nOne, set: nSetLo, reset: nMr, srWired: { set: false, reset: true } },
+        { sfx: "u3", q: nQ3, clk: nClkBD, j: nJd, k: nOne, set: nMs, reset: nMr, srWired: { set: true, reset: true } },
+    ];
+
+    slices.forEach((sl, i) => {
+        const subId = `${c.id}_${sl.sfx}`;
+        const nQbar = nodeFor(`${c.id}#__qb${i}`);
+        // Remap des broches JK (#0 J, #1 K, #2 CLK, #3 Q, #4 /Q, #5 Set, #6 Reset).
+        const sub = { id: subId, type: "logic_jk" };
+        const sliceNodeFor = (key) => {
+            if (key === `${subId}#0`) return sl.j;
+            if (key === `${subId}#1`) return sl.k;
+            if (key === `${subId}#2`) return sl.clk;
+            if (key === `${subId}#3`) return sl.q;
+            if (key === `${subId}#4`) return nQbar;
+            if (key === `${subId}#5`) return sl.set;
+            if (key === `${subId}#6`) return sl.reset;
+            return nodeFor(key);
+        };
+        appendLogicJkNetlist(sub, sliceNodeFor, v, lines, spiceBranchName, {
             ...deckOpts,
-            srWired,
-            rippleClockFromPrev: sl.rippleFromQ ? "q" : null,
-            clockInvert: sl.suffix === "u0",
+            srWired: sl.srWired,
         });
-        if (logicDffDAndQbarShareNode(sub, sliceNodeFor)) {
-            /* D et /Q sur Q : diviseur par 2 (comportement 74×90). */
-        }
-    }
+    });
 }
 
 export function resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhiFn) {

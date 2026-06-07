@@ -816,6 +816,9 @@ app.post("/api/simulate", async (req, res) => {
         // ngspice-39 (apt / Render) : d_genlut et parfois d_dff instables → sources B.
         forceBsourceCd4511: linuxServer,
         forceBsourceDff: linuxServer,
+        // Le 74HC90 (sections ÷2/÷5) est modélisé par des bascules JK : on garde XSPICE
+        // (d_jkff, primitive stable) même sur Linux — les sources B ne convergent pas
+        // à travers les fronts d'horloge. Repli automatique en source B si XSPICE absent.
         quickTran: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
@@ -950,40 +953,6 @@ app.post("/api/simulate", async (req, res) => {
             const fromTranSeg7 = mergeSeg7FromTranWrdata(waveTxt, seg7Meta);
             if (Object.keys(fromTranSeg7).length > 0) seg7Values = fromTranSeg7;
             seg7TranPlots = mergeSeg7TranPlotsFromWrdata(waveTxt, seg7Meta);
-            if (seg7Meta.length > 0 && lgMeta.length > 0) {
-                const parserHc90 = await importFresh(ngspiceResultParserModulePath);
-                const groups = parserHc90.groupHc90QTranMeta?.(lgMeta) || {};
-                for (const disp of seg7Meta) {
-                    const segId = disp.id;
-                    if (!segId) continue;
-                    for (const qGroup of Object.values(groups)) {
-                        if (!qGroup?.[0]) continue;
-                        const plotsQ = parserHc90.mergeSeg7TranPlotsFromHc90Q?.(
-                            waveTxt,
-                            qGroup,
-                            segId
-                        );
-                        if (!plotsQ?.[segId]?.time?.length) continue;
-                        /* Priorité compteur : évite afficheur bloqué à 0–1 si CD4511/BI/LT mal câblés. */
-                        seg7TranPlots[segId] = plotsQ[segId];
-                        const valsQ = parserHc90.mergeSeg7FromHc90Q?.(waveTxt, qGroup, segId);
-                        if (valsQ && Object.keys(valsQ).length) {
-                            seg7Values = { ...seg7Values, ...valsQ };
-                        }
-                        const blank = parserHc90.seg7DisplayAppearsBlank?.(
-                            mergeSeg7FromTranWrdata(waveTxt, seg7Meta)[segId]
-                        );
-                        if (blank) {
-                            built.warnings = built.warnings || [];
-                            const msg = `7 segments ${segId} : animation via le compteur 74HC90 (BI et LT du CD4511 au +5 V pour l’affichage réel).`;
-                            if (!built.warnings.some((w) => String(w).includes(segId))) {
-                                built.warnings.push(msg);
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);

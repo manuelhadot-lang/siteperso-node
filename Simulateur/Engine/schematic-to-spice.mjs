@@ -67,6 +67,7 @@ import {
     ic74hc90VccPinIndex,
     resolveIc74hc90Vhi,
 } from "./logic-74hc90.mjs";
+import { detectHc90Mod60FromGraphicalState } from "./hc90-cascade.mjs";
 
 function isLedType(t) {
     return t === "led" || t === "diode_led";
@@ -203,6 +204,28 @@ function terminalKeysForComponent(c) {
     return [];
 }
 
+/** Fréquence de résonance d’un circuit LC parallèle (bobine + condensateur). */
+function estimateParallelLcResonantHz(components) {
+    let cFarad = 0;
+    let lHenry = 0;
+    for (const c of components) {
+        if (c.type === "capacitor") cFarad = Math.max(cFarad, parseCapacitanceFarad(c.value));
+        if (c.type === "inductor") lHenry = Math.max(lHenry, parseInductanceHenry(c.value));
+    }
+    if (cFarad <= 0 || lHenry <= 0) return 0;
+    return 1 / (2 * Math.PI * Math.sqrt(lHenry * cFarad));
+}
+
+/** AOP + LC + oscilloscope, sans générateur externe : oscillateur autonome. */
+function circuitHasAutonomousLcOscillator(components) {
+    return (
+        components.some((c) => c.type === "oscilloscope") &&
+        components.some((c) => isOpampType(c.type)) &&
+        components.some((c) => c.type === "inductor") &&
+        components.some((c) => c.type === "capacitor")
+    );
+}
+
 /** Comparateur / Schmitt (boucle + ou boucle ouverte) : bascule dure. Amplificateur (boucle −) : tanh raide. */
 function opampUsesComparatorModel(c, parent, components) {
     const topo = new Map(parent);
@@ -215,11 +238,19 @@ function opampUsesComparatorModel(c, parent, components) {
     const negRoot = ufFind(topo, negKey);
     const positiveFeedback = outRoot === posRoot;
     const negativeFeedback = outRoot === negRoot;
+    if (
+        positiveFeedback &&
+        negativeFeedback &&
+        components.some((x) => x.type === "inductor") &&
+        components.some((x) => x.type === "capacitor")
+    ) {
+        return false;
+    }
     return positiveFeedback || !negativeFeedback;
 }
 
 /** Source comportementale AOP : saturation aux rails (comparateur, hystérésis, amplif.). */
-function formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode = false } = {}) {
+function formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode = false, gain = 1e5 } = {}) {
     const vp = parseOpampVp(c);
     const vn = parseOpampVn(c);
     const bname = spiceBranchName("BAOP", c.id);
@@ -229,7 +260,6 @@ function formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode = false
     }
     const vmid = (vp + vn) / 2;
     const vhalf = (vp - vn) / 2;
-    const gain = 1e5;
     return `${bname} ${nOut} 0 V={${vmid}+${vhalf}*tanh(${gain}*(${diff}))}`;
 }
 
@@ -774,7 +804,11 @@ const TRAN_SAMPLES_PER_PERIOD = 200;
 const TRAN_MAX_POINTS = 50000;
 /** Au-delà de cette période (f ≤ 1 Hz), .tran court + animation temps réel côté client. */
 const SLOW_CLOCK_PERIOD_SEC = 1;
-const SLOW_CLOCK_TRAN_PERIODS = 6;
+/** Un seul HC90 : 2 cycles décade (0…9 × 2). */
+const SLOW_CLOCK_TRAN_PERIODS = 20;
+/** Deux HC90 en cascade : cycle complet 0…99 (100 impulsions) ou 0…59 (60) si reset mod-60. */
+const SLOW_CLOCK_TWO_DIGIT_PERIODS = 100;
+const SLOW_CLOCK_MOD60_PERIODS = 60;
 const SLOW_CLOCK_MAX_TSTOP_SEC = 120;
 
 /** Pas et durée de simulation transitoire selon les générateurs AC et la base de temps du scope. */
@@ -786,6 +820,16 @@ function computeTranTiming(components, deckOpts = {}) {
         if (f > 0) minPeriod = Math.min(minPeriod, 1 / f);
     }
     if (!Number.isFinite(minPeriod) || minPeriod <= 0) minPeriod = 1;
+
+    const lcHz = estimateParallelLcResonantHz(components);
+    const hasAcGenerator = components.some(
+        (c) => c.type === "vsin" || c.type === "vsquare" || c.type === "vpulse"
+    );
+    const opampOscillator = lcHz > 0 && !hasAcGenerator && components.some((c) => isOpampType(c.type));
+
+    if (opampOscillator) {
+        minPeriod = 1 / lcHz;
+    }
 
     let scopeWindowSec = 0;
     for (const c of components) {
@@ -805,6 +849,8 @@ function computeTranTiming(components, deckOpts = {}) {
         components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length +
         components.filter((c) => isIc74hc90Type(c.type)).length * 4;
     const hc90Count = components.filter((c) => isIc74hc90Type(c.type)).length;
+    const hc90Mod60 = deckOpts.hc90Mod60 === true;
+    const twoDigitPeriods = hc90Mod60 ? SLOW_CLOCK_MOD60_PERIODS : SLOW_CLOCK_TWO_DIGIT_PERIODS;
     if (numFf > 0) {
         const ripplePeriods = (1 << numFf) + 2;
         tstop = Math.max(tstop, minPeriod * ripplePeriods);
@@ -812,12 +858,14 @@ function computeTranTiming(components, deckOpts = {}) {
     const slowClock = minPeriod >= SLOW_CLOCK_PERIOD_SEC;
     if (hc90Count > 0) {
         if (slowClock) {
+            const slowPeriods =
+                hc90Count >= 2 ? twoDigitPeriods : SLOW_CLOCK_TRAN_PERIODS;
             tstop = Math.min(
                 SLOW_CLOCK_MAX_TSTOP_SEC,
-                Math.max(minPeriod * SLOW_CLOCK_TRAN_PERIODS, minPeriod * 4)
+                Math.max(minPeriod * slowPeriods, minPeriod * 8)
             );
         } else {
-            const minRipplePeriods = hc90Count >= 2 ? 100 : 24;
+            const minRipplePeriods = hc90Count >= 2 ? twoDigitPeriods : 24;
             tstop = Math.max(tstop, minPeriod * minRipplePeriods);
         }
     }
@@ -841,7 +889,15 @@ function computeTranTiming(components, deckOpts = {}) {
             }
         }
     }
-    if (deckOpts.quickTran && hc90Count > 0) {
+    if (opampOscillator) {
+        tstop = Math.max(tstop, minPeriod * 50);
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
+        }
+    }
+    // quickTran (serveur Linux) : ne pas tronquer les compteurs 2 chiffres à horloge lente
+    // (sinon 1 Hz → 8 s → affichage bloqué à ~07 et modulo faux au-delà).
+    if (deckOpts.quickTran && hc90Count > 0 && !(slowClock && hc90Count >= 2)) {
         const quickPeriods = hc90Count >= 2 ? 8 : 6;
         tstop = Math.min(tstop, minPeriod * quickPeriods);
         if (tstop / tstep > TRAN_MAX_POINTS) {
@@ -915,14 +971,6 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         terminalWireCount.set(w.toKey, (terminalWireCount.get(w.toKey) || 0) + 1);
         ufUnion(parent, w.fromKey, w.toKey);
     }
-    for (const c of components) {
-        if (!isIc74hc90Type(c.type)) continue;
-        const q0 = `${c.id}#${ic74hc90ToggleSlices()[0].q}`;
-        const cp1 = `${c.id}#${IC90_PIN.CP1}`;
-        touch(q0);
-        touch(cp1);
-        ufUnion(parent, q0, cp1);
-    }
     const virtualKeys = new Set();
     for (const w of wires) {
         if (!w || !w.solid) continue;
@@ -960,7 +1008,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             c.type === "oscilloscope"
     );
 
-    if (needsDcSupply && !powerSrc && !hasVtermPower) {
+    const hasAutonomousLcOscillator = circuitHasAutonomousLcOscillator(components);
+    if (needsDcSupply && !powerSrc && !hasVtermPower && !hasAutonomousLcOscillator) {
         return {
             ok: false,
             errors: [
@@ -1103,6 +1152,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const declaredDiodeModels = new Set();
     const declaredBjtModels = new Set();
 
+    let oscillatorCapKickDone = false;
+    let oscillatorTankNode = null;
     for (const c of components) {
         if (c.type === "resistor") {
             const n0 = nodeFor(`${c.id}#0`);
@@ -1113,7 +1164,13 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
             const farad = parseCapacitanceFarad(c.value);
-            lines.push(`${spiceBranchName("C", c.id)} ${n0} ${n1} ${farad}`);
+            let icSuffix = "";
+            if (hasAutonomousLcOscillator && !oscillatorCapKickDone) {
+                icSuffix = " IC=50m";
+                oscillatorTankNode = n0 !== "0" ? n0 : n1;
+                oscillatorCapKickDone = true;
+            }
+            lines.push(`${spiceBranchName("C", c.id)} ${n0} ${n1} ${farad}${icSuffix}`);
         } else if (c.type === "inductor") {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
@@ -1186,7 +1243,16 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const nMinus = nodeFor(`${c.id}#1`);
             const nOut = nodeFor(`${c.id}#2`);
             const comparatorMode = opampUsesComparatorModel(c, parent, components);
-            lines.push(formatOpampBsourceLine(c, nOut, nPlus, nMinus, { comparatorMode }));
+            const topo = new Map(parent);
+            ufUnionPassiveInternals(topo, components);
+            const outEqualsPlus = ufFind(topo, `${c.id}#2`) === ufFind(topo, `${c.id}#0`);
+            let bOut = nOut;
+            if (outEqualsPlus) {
+                touch(`${c.id}#__obuf`);
+                bOut = nodeFor(`${c.id}#__obuf`);
+                lines.push(`${spiceBranchName("R", c.id)}_iso ${nOut} ${bOut} 1`);
+            }
+            lines.push(formatOpampBsourceLine(c, bOut, nPlus, nMinus, { comparatorMode }));
         } else if (isLogicGateComponentType(c.type)) {
             const inKeys = logicGateInputNodeKeys(c);
             const inNodes = inKeys.map(k => nodeFor(k));
@@ -1437,6 +1503,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const useTran =
         hasPulseSource ||
         hasLogicGates ||
+        hasAutonomousLcOscillator ||
         (acSources.length > 0 &&
             (oscilloscopes.length > 0 ||
                 voltmetersRms.length > 0 ||
@@ -1447,9 +1514,18 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             "Comparateur / hystérésis dynamique : ajoutez un oscilloscope sur la sortie de l'AOP et un générateur sinus (ou carré) sur l'entrée pour voir les seuils en simulation transitoire."
         );
     }
-    if (hasOpamp && acSources.length === 0 && oscilloscopes.length > 0) {
+    if (hasOpamp && acSources.length === 0 && oscilloscopes.length > 0 && !hasAutonomousLcOscillator) {
         warnings.push(
             "AOP en régime DC (.op) : seuils de comparateur visibles au voltmètre ; pour l'hystérésis en fonction du temps, excitez l'entrée avec un générateur sinus."
+        );
+    }
+    let lcKickPeriodSec = null;
+    if (hasAutonomousLcOscillator) {
+        const fHz = estimateParallelLcResonantHz(components);
+        const periodMs = fHz > 0 ? (1000 / fHz).toFixed(2) : "?";
+        if (fHz > 0) lcKickPeriodSec = 1 / fHz;
+        warnings.push(
+            `Oscillateur LC autonome : fréquence LC théorique ≈ ${fHz > 0 ? `${Math.round(fHz)} Hz` : "?"} (période ≈ ${periodMs} ms). SPICE est lancé en transitoire réel avec impulsion d'excitation périodique de test.`
         );
     }
     if ((voltmetersRms.length > 0 || ammetersRms.length > 0) && !useTran) {
@@ -1498,7 +1574,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     if (useTran) {
-        const tranTiming = computeTranTiming(components, deckOpts);
+        const hc90Mod60 = detectHc90Mod60FromGraphicalState(components, wires);
+        const tranTiming = computeTranTiming(components, { ...deckOpts, hc90Mod60 });
         const { tstepStr, tstopStr, slowClock, clockPeriodSec } = tranTiming;
         analysisTran = true;
         const hc90InCircuit = components.some((c) => isIc74hc90Type(c.type));
@@ -1510,20 +1587,47 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                       ? `${(clockPeriodSec / 60).toFixed(clockPeriodSec % 60 === 0 ? 0 : 2)} min`
                       : `${clockPeriodSec.toFixed(2)} s`;
             warnings.push(
-                `Horloge lente (${periodLabel} par impulsion) : SPICE simule ${tstopStr} s de transitoire ; l’affichage suit le GImp en temps réel (1 impulsion = +1 sur le compteur).`
+                `Horloge lente (${periodLabel} par impulsion) : SPICE simule ${tstopStr} s de transitoire.`
             );
         }
         if (lines[0]) lines[0] = "* Circuit Designer - netlist SPICE (.tran)";
-        if (components.some(c => isLogicSequentialType(c.type))) {
-            lines.push(".options method=gear reltol=1e-3 abstol=1e-9 gmin=1e-15 trtol=50");
+        if (hasAutonomousLcOscillator && oscillatorTankNode) {
+            const kickPeriod = lcKickPeriodSec && lcKickPeriodSec > 0 ? lcKickPeriodSec : 1e-3;
+            const kickPw = Math.max(1e-6, Math.min(100e-6, kickPeriod * 0.05));
+            lines.push(
+                `${spiceBranchName("V", "lckick")} ${oscillatorTankNode} 0 PULSE(0 3 0 1n 1n ${formatSpiceTime(kickPw)} ${formatSpiceTime(kickPeriod)})`
+            );
         }
-        lines.push(`.tran ${tstepStr} ${tstopStr}`);
+        // Bascules internes (D, JK, 74HC90 ÷2÷5, 74LS74) : boucles logiques raides →
+        // options de convergence (method=gear). Ne PAS forcer UIC ici : les ponts
+        // numériques XSPICE (d_dff/d_jkff) gèrent mal les conditions initiales et
+        // produiraient une séquence fausse.
+        const hasInternalFlipFlops = components.some(
+            (c) =>
+                isLogicSequentialType(c.type) ||
+                isIc74hc90Type(c.type) ||
+                isIc74ls74Type(c.type)
+        );
+        if (hasInternalFlipFlops) {
+            lines.push(".options method=gear reltol=1e-3 abstol=1e-9 gmin=1e-15 trtol=50");
+        } else if (hasAutonomousLcOscillator) {
+            lines.push(".options method=gear reltol=1e-3 abstol=1e-12 gmin=1e-12 trtol=10");
+        }
+        lines.push(
+            hasAutonomousLcOscillator
+                ? `.tran ${tstepStr} ${tstopStr} UIC`
+                : `.tran ${tstepStr} ${tstopStr}`
+        );
         lines.push(".control");
-        if (components.some(c => isLogicSequentialType(c.type))) {
+        if (hasInternalFlipFlops) {
             lines.push("set method=gear");
         }
         lines.push("set wr_singlescale");
-        lines.push(`tran ${tstepStr} ${tstopStr}`);
+        lines.push(
+            hasAutonomousLcOscillator
+                ? `tran ${tstepStr} ${tstopStr} UIC`
+                : `tran ${tstepStr} ${tstopStr}`
+        );
 
         const wrVars = ["time"];
         const nodeCol = new Map();
@@ -1968,9 +2072,23 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             }
             const q0Key = `${c.id}#11`;
             const cp1Key = `${c.id}#0`;
-            if (nodeFor(q0Key) === nodeFor(cp1Key)) {
+            const q0ToCp1 = nodeFor(q0Key) === nodeFor(cp1Key);
+            if (q0ToCp1) {
                 warnings.push(
                     `74HC90 ${c.id} : Q0 relié à CP1 — comptage décade 0…9 (horloge sur CP0, broche 14).`
+                );
+            }
+            const cp0Key = `${c.id}#13`;
+            const cp0Wired = (terminalWireCount.get(cp0Key) || 0) > 0;
+            const cp1Wired = (terminalWireCount.get(cp1Key) || 0) > 0;
+            if (!cp0Wired && cp1Wired) {
+                warnings.push(
+                    `74HC90 ${c.id} : horloge détectée sur CP1 alors que CP0 n'est pas relié — compteur en mode /5 (0→4). Pour 0→9 : horloge sur CP0 + Q0 relié à CP1.`
+                );
+            }
+            if (cp1Wired && !q0ToCp1) {
+                warnings.push(
+                    `74HC90 ${c.id} : CP1 n'est pas relié à Q0 — le mode décade 0→9 est invalide (comptage typiquement bloqué à 0→4). Reliez Q0 à CP1.`
                 );
             }
             const mr1Key = `${c.id}#1`;
