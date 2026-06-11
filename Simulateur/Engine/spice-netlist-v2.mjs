@@ -20,7 +20,7 @@ function normalizeSpiceNetlistForNgspiceBatch(text) {
     // par ex. « V_V1 … » : elle est alors ignorée comme titre → circuit faux (0 V, etc.).
     // Remplacer par une ligne titre minimale (ASCII) — ngspice accepte tout commentaire *.
     s = s.replace(
-        /^\* Circuit Designer - netlist SPICE \(\.(?:op|tran)\)[^\r\n]*\r?\n(?:\s*\r?\n)?/i,
+        /^\* Circuit Designer - netlist SPICE \(\.(?:op|tran|ac)\)[^\r\n]*\r?\n(?:\s*\r?\n)?/i,
         "* CD\n"
     );
     // Ne PAS forcer CRLF tout le fichier : sur certaines installs ngspice-46 sous Windows,

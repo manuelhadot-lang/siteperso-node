@@ -400,9 +400,13 @@ export function getAnimatedLedCurrent(label) {
     }
     const period = anim.ledPeriods[label] ?? 1;
     const elapsed = (performance.now() - anim.startMs) / 1000;
-    const tSample = sampleTimeSec(elapsed, period);
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
-    const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
+    const clockPeriod = getGimpPeriodSec();
+    const tSample =
+        hasHc90DecadeCounter() && plotSpan > 0 && clockPeriod > 0
+            ? hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan)
+            : sampleTimeSec(elapsed, period);
+    const tAbs = plot.time[0] + (plotSpan > 0 ? Math.min(tSample, plotSpan - 1e-12) : tSample);
     return interpolatePlot(plot, tAbs);
 }
 

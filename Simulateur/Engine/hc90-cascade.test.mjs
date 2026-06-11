@@ -38,10 +38,15 @@ assert(cascade.carryValid, "report valide");
 assert(cascade.carryKind === "and_q0_q3", "AND Q0 Q3");
 
 assert(shouldUseIdealHc90Counting(cascade, 1), "idéal à 1 Hz");
+assert(
+    shouldUseIdealHc90Counting({ mode: "single", units: "HC90_1", clockSource: false }, 0.5),
+    "idéal pour un seul HC90 même si CP0 non détecté"
+);
 
 assert(Math.abs(hc90TranSampleTimeSec(10, 1, 100) - 9.49) < 1e-9, "pulse 10 → t=9.49");
-assert(hc90TranSampleTimeSec(100, 1, 100) === 0, "pulse 100 → t=0 (rollover 00)");
+assert(Math.abs(hc90TranSampleTimeSec(100, 1, 100) - 99.49) < 1e-9, "pulse 100 → fin de span");
 assert(hc90TranSampleTimeSec(0, 1, 24) === 0, "démarrage à 0");
+assert(Math.abs(hc90TranSampleTimeSec(12, 0.5, 12) - 11.99) < 0.02, "pulse 24 → dernière impulsion du span");
 
 const badWires = [
     { fromJonctionId: "GImp_1_out", toJonctionId: "HC90_1_CP0" },

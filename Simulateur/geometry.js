@@ -43,8 +43,20 @@ export function getComponentJonctions(comp) {
     const rad = (comp.rotation || 0) * Math.PI / 180;
     let localPts = [];
 
-    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'led'].includes(comp.type)) {
+    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'bode_analyzer', 'speaker', 'led'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
+    } else if (comp.type === 'potentiometer') {
+        localPts = [
+            { id: `${comp.label}_in`, x: -40, y: 0 },
+            { id: `${comp.label}_wip`, x: 0, y: -22 },
+            { id: `${comp.label}_out`, x: 40, y: 0 },
+        ];
+    } else if (comp.type === 'switch_spdt') {
+        localPts = [
+            { id: `${comp.label}_a`, x: -40, y: -18 },
+            { id: `${comp.label}_com`, x: -40, y: 0 },
+            { id: `${comp.label}_b`, x: -40, y: 18 },
+        ];
     } else if (comp.type === 'gimp') {
         localPts = [
             { id: `${comp.label}_in`, x: 0, y: 40 },
@@ -157,7 +169,35 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'seg7') return dx < 60 && dy < 110;
     if (comp.type === 'opamp') return dx < 44 && dy < 42;
     if (comp.type === 'npn') return dx < 44 && dy < 44;
+    if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;
+    if (comp.type === 'potentiometer') return dx < 34 && dy < 38;
     return dx < 30 && dy < 30;
+}
+
+export function compLocalCoords(comp, mx, my) {
+    const dx = mx - comp.x;
+    const dy = my - comp.y;
+    const rad = -(comp.rotation || 0) * Math.PI / 180;
+    return {
+        x: dx * Math.cos(rad) - dy * Math.sin(rad),
+        y: dx * Math.sin(rad) + dy * Math.cos(rad),
+    };
+}
+
+/** Clic sur ◀ / ▶ du potentiomètre. */
+export function potentiometerControlHit(comp, mx, my) {
+    if (comp.type !== 'potentiometer') return null;
+    const { x, y } = compLocalCoords(comp, mx, my);
+    if (x >= -16 && x <= -2 && y >= 11 && y <= 25) return 'dec';
+    if (x >= 2 && x <= 16 && y >= 11 && y <= 25) return 'inc';
+    return null;
+}
+
+/** Zone du levier (clic = bascule A ↔ B). */
+export function switchSpdtToggleHit(comp, mx, my) {
+    if (comp.type !== 'switch_spdt') return false;
+    const { x, y } = compLocalCoords(comp, mx, my);
+    return x >= -12 && x <= 12 && y >= -18 && y <= 18;
 }
 
 export function isJonctionConnected(jonctionId) {

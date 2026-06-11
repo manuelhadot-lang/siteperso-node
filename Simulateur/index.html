@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simulateur de Circuits Électroniques</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=theme1">
 </head>
-<body>
+<body class="theme-dark">
 
     <header class="navbar">
         <div class="menu-item">
@@ -22,7 +22,9 @@
         <div class="menu-item">
             <span class="menu-icon">⚙️</span> Éditeur
             <div class="dropdown">
-                <div class="dropdown-item" id="btn-commands">⌨️ Commandes</div>
+                <div class="dropdown-item" id="btn-commands">Commandes</div>
+                <div class="dropdown-item" id="btn-theme-dark">Sombre</div>
+                <div class="dropdown-item" id="btn-theme-light">Clair</div>
             </div>
         </div>
 
@@ -41,18 +43,21 @@
         <div class="menu-item">
             <span class="menu-icon">🔌</span> Composants
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="resistor">🟦 Résistance</div>
-                <div class="dropdown-item" draggable="true" data-component="capacitor">⚡ Condensateur</div>
-                <div class="dropdown-item" draggable="true" data-component="inductor">🌀 Bobine</div>
-                <div class="dropdown-item" draggable="true" data-component="diode">🔺 Diode</div>
+                <div class="dropdown-item" draggable="true" data-component="resistor">Résistance</div>
+                <div class="dropdown-item" draggable="true" data-component="capacitor">Condensateur</div>
+                <div class="dropdown-item" draggable="true" data-component="inductor">Bobine</div>
+                <div class="dropdown-item" draggable="true" data-component="diode">Diode</div>
+                <div class="dropdown-item" draggable="true" data-component="potentiometer">Potentiomètre</div>
+                <div class="dropdown-item" draggable="true" data-component="switch_spdt">Interrupteur 3 broches</div>
+                <div class="dropdown-item" draggable="true" data-component="speaker" title="Charge 8 Ω — son via la carte son (générateur Sin, ex. 440 Hz)">Haut-parleur</div>
                 <div class="dropdown-submenu">
-                    <span class="dropdown-item submenu-title">Transistors ▸</span>
+                    <span class="dropdown-item submenu-title">Transistors</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="npn">2N2222</div>
                     </div>
                 </div>
                 <div class="dropdown-submenu">
-                    <span class="dropdown-item submenu-title">AOP ▸</span>
+                    <span class="dropdown-item submenu-title">AOP</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="opamp">uA741</div>
                     </div>
@@ -63,26 +68,26 @@
         <div class="menu-item">
             <span class="menu-icon">🧠</span> Logique
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="logic_terminal">🎛️ Borne Numérique (0/1)</div>
+                <div class="dropdown-item" draggable="true" data-component="logic_terminal">Borne Numérique (0/1)</div>
                 <div class="dropdown-submenu">
-                    <span class="dropdown-item submenu-title">Portes ▸</span>
+                    <span class="dropdown-item submenu-title">Portes</span>
                     <div class="submenu">
-                        <div class="dropdown-item" draggable="true" data-component="not">↩️ Porte NOT (NON)</div>
-                        <div class="dropdown-item" draggable="true" data-component="and">🔗 Porte AND (ET)</div>
-                        <div class="dropdown-item" draggable="true" data-component="nand">👾 Porte NAND (NON-ET)</div>
-                        <div class="dropdown-item" draggable="true" data-component="or">➕ Porte OR (OU)</div>
-                        <div class="dropdown-item" draggable="true" data-component="nor">⛔ Porte NOR (NON-OU)</div>
-                        <div class="dropdown-item" draggable="true" data-component="xor">✖️ Porte XOR</div>
-                        <div class="dropdown-item" draggable="true" data-component="xnor">🟰 Porte XNOR</div>
+                        <div class="dropdown-item" draggable="true" data-component="not">Porte NOT (NON)</div>
+                        <div class="dropdown-item" draggable="true" data-component="and">Porte AND (ET)</div>
+                        <div class="dropdown-item" draggable="true" data-component="nand">Porte NAND (NON-ET)</div>
+                        <div class="dropdown-item" draggable="true" data-component="or">Porte OR (OU)</div>
+                        <div class="dropdown-item" draggable="true" data-component="nor">Porte NOR (NON-OU)</div>
+                        <div class="dropdown-item" draggable="true" data-component="xor">Porte XOR</div>
+                        <div class="dropdown-item" draggable="true" data-component="xnor">Porte XNOR</div>
                     </div>
                 </div>
-                <div class="dropdown-item" draggable="true" data-component="d_flipflop">💾 Bascule D (Flip-Flop)</div>
-                <div class="dropdown-item" draggable="true" data-component="jk_flipflop">🔁 Bascule JK (Flip-Flop)</div>
+                <div class="dropdown-item" draggable="true" data-component="d_flipflop">Bascule D (Flip-Flop)</div>
+                <div class="dropdown-item" draggable="true" data-component="jk_flipflop">Bascule JK (Flip-Flop)</div>
                 <div class="dropdown-submenu">
-                    <span class="dropdown-item submenu-title">Circuits ▸</span>
+                    <span class="dropdown-item submenu-title">Circuits</span>
                     <div class="submenu">
-                        <div class="dropdown-item" draggable="true" data-component="cd4511">🔢 CD4511 (BCD → 7 seg)</div>
-                        <div class="dropdown-item" draggable="true" data-component="ic_74hc90">🔟 74HC90 (compteur décade)</div>
+                        <div class="dropdown-item" draggable="true" data-component="cd4511">CD4511 (BCD → 7 seg)</div>
+                        <div class="dropdown-item" draggable="true" data-component="ic_74hc90">74HC90 (compteur décade)</div>
                     </div>
                 </div>
             </div>
@@ -91,18 +96,19 @@
         <div class="menu-item">
             <span class="menu-icon">🚨</span> Opto
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="led">🔴 LED (Rouge)</div>
-                <div class="dropdown-item" draggable="true" data-component="seg7">🔢 Afficheur 7 segments</div>
+                <div class="dropdown-item" draggable="true" data-component="led">LED (Rouge)</div>
+                <div class="dropdown-item" draggable="true" data-component="seg7">Afficheur 7 segments</div>
             </div>
         </div>
 
         <div class="menu-item">
             <span class="menu-icon">📊</span> Mesures
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="voltmeter">📟 Voltmètre</div>
-                <div class="dropdown-item" draggable="true" data-component="ammeter">⚡ Ampèremètre</div>
-                <div class="dropdown-item" draggable="true" data-component="ohmmeter">🔧 Ohmmètre</div>
-                <div class="dropdown-item" draggable="true" data-component="oscilloscope">📈 Oscilloscope</div>
+                <div class="dropdown-item" draggable="true" data-component="voltmeter">Voltmètre</div>
+                <div class="dropdown-item" draggable="true" data-component="ammeter">Ampèremètre</div>
+                <div class="dropdown-item" draggable="true" data-component="ohmmeter">Ohmmètre</div>
+                <div class="dropdown-item" draggable="true" data-component="oscilloscope">Oscilloscope</div>
+                <div class="dropdown-item" draggable="true" data-component="bode_analyzer" title="Glisser-déposer sur le schéma, puis Lancer Simulation (avec un générateur Sin)">Analyse fréquentielle</div>
             </div>
         </div>
 
@@ -400,6 +406,15 @@
         <canvas id="scope-popup-canvas" width="640" height="360"></canvas>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <div id="bode-popup" class="scope-floating hidden">
+        <div class="scope-floating-header" id="bode-popup-drag-handle">
+            <span id="bode-popup-title">Analyse fréquentielle</span>
+            <button type="button" id="bode-popup-close" class="panel-close" title="Fermer">&times;</button>
+        </div>
+        <div id="bode-popup-info" class="bode-popup-info"></div>
+        <canvas id="bode-popup-canvas" width="640" height="380"></canvas>
+    </div>
+
+    <script type="module" src="app.js?v=labels1"></script>
 </body>
 </html>

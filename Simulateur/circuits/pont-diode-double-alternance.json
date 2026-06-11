@@ -1,0 +1,465 @@
+{
+    "components": [
+        {
+            "type": "gsin",
+            "label": "Sin_1",
+            "x": 0,
+            "y": 120,
+            "rotation": 0,
+            "peakAmplitude": 5,
+            "frequency": 50,
+            "offset": 0
+        },
+        {
+            "type": "gnd",
+            "label": "GND_1",
+            "x": 0,
+            "y": 200,
+            "rotation": 0
+        },
+        {
+            "type": "diode",
+            "label": "D_1",
+            "x": 240,
+            "y": 110,
+            "rotation": -90,
+            "value": "1N4007"
+        },
+        {
+            "type": "diode",
+            "label": "D_2",
+            "x": 200,
+            "y": 110,
+            "rotation": -90,
+            "value": "1N4007"
+        },
+        {
+            "type": "diode",
+            "label": "D_3",
+            "x": 240,
+            "y": 170,
+            "rotation": -90,
+            "value": "1N4007"
+        },
+        {
+            "type": "diode",
+            "label": "D_4",
+            "x": 200,
+            "y": 170,
+            "rotation": -90,
+            "value": "1N4007"
+        },
+        {
+            "type": "resistor",
+            "label": "R_1",
+            "x": 360,
+            "y": 120,
+            "rotation": 90,
+            "value": "1k"
+        },
+        {
+            "type": "capacitor",
+            "label": "C_1",
+            "x": 360,
+            "y": 180,
+            "rotation": 0,
+            "value": "100u"
+        },
+        {
+            "type": "voltmeter",
+            "label": "V_1",
+            "x": 420,
+            "y": 150,
+            "rotation": 90,
+            "value": ""
+        },
+        {
+            "type": "oscilloscope",
+            "label": "Osci_1",
+            "x": 520,
+            "y": 140,
+            "rotation": 0,
+            "timeDivSec": 0.005,
+            "ch1VoltsPerDiv": 2,
+            "ch2VoltsPerDiv": 2
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "Sin_1_out",
+            "toJonctionId": "__t#120#140",
+            "points": [
+                {
+                    "x": 40,
+                    "y": 120
+                },
+                {
+                    "x": 120,
+                    "y": 140
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "Sin_1_in",
+            "toJonctionId": "GND_1_out",
+            "points": [
+                {
+                    "x": 0,
+                    "y": 160
+                },
+                {
+                    "x": 20,
+                    "y": 200
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "GND_1_out",
+            "toJonctionId": "__t#120#180",
+            "points": [
+                {
+                    "x": 20,
+                    "y": 200
+                },
+                {
+                    "x": 120,
+                    "y": 180
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#120#140",
+            "toJonctionId": "D_1_in",
+            "points": [
+                {
+                    "x": 120,
+                    "y": 140
+                },
+                {
+                    "x": 240,
+                    "y": 160
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "D_1_out",
+            "toJonctionId": "__t#300#80",
+            "points": [
+                {
+                    "x": 240,
+                    "y": 80
+                },
+                {
+                    "x": 300,
+                    "y": 80
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#120#180",
+            "toJonctionId": "D_2_in",
+            "points": [
+                {
+                    "x": 120,
+                    "y": 180
+                },
+                {
+                    "x": 200,
+                    "y": 160
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "D_2_out",
+            "toJonctionId": "__t#300#80",
+            "points": [
+                {
+                    "x": 200,
+                    "y": 80
+                },
+                {
+                    "x": 200,
+                    "y": 80
+                },
+                {
+                    "x": 300,
+                    "y": 80
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#200",
+            "toJonctionId": "D_3_in",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 200
+                },
+                {
+                    "x": 240,
+                    "y": 220
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "D_3_out",
+            "toJonctionId": "__t#120#140",
+            "points": [
+                {
+                    "x": 240,
+                    "y": 140
+                },
+                {
+                    "x": 120,
+                    "y": 140
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#200",
+            "toJonctionId": "D_4_in",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 200
+                },
+                {
+                    "x": 200,
+                    "y": 220
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "D_4_out",
+            "toJonctionId": "__t#120#180",
+            "points": [
+                {
+                    "x": 200,
+                    "y": 140
+                },
+                {
+                    "x": 120,
+                    "y": 180
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#80",
+            "toJonctionId": "R_1_in",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 80
+                },
+                {
+                    "x": 360,
+                    "y": 80
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "R_1_out",
+            "toJonctionId": "__t#300#200",
+            "points": [
+                {
+                    "x": 360,
+                    "y": 160
+                },
+                {
+                    "x": 300,
+                    "y": 200
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#80",
+            "toJonctionId": "C_1_in",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 80
+                },
+                {
+                    "x": 340,
+                    "y": 80
+                },
+                {
+                    "x": 320,
+                    "y": 180
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "C_1_out",
+            "toJonctionId": "__t#300#200",
+            "points": [
+                {
+                    "x": 400,
+                    "y": 180
+                },
+                {
+                    "x": 340,
+                    "y": 200
+                },
+                {
+                    "x": 300,
+                    "y": 200
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#80",
+            "toJonctionId": "V_1_in",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 80
+                },
+                {
+                    "x": 380,
+                    "y": 80
+                },
+                {
+                    "x": 420,
+                    "y": 120
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "V_1_out",
+            "toJonctionId": "__t#300#200",
+            "points": [
+                {
+                    "x": 420,
+                    "y": 200
+                },
+                {
+                    "x": 380,
+                    "y": 200
+                },
+                {
+                    "x": 300,
+                    "y": 200
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "Osci_1_GND",
+            "toJonctionId": "__t#120#180",
+            "points": [
+                {
+                    "x": 520,
+                    "y": 200
+                },
+                {
+                    "x": 520,
+                    "y": 180
+                },
+                {
+                    "x": 120,
+                    "y": 180
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#80",
+            "toJonctionId": "Osci_1_CH1",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 80
+                },
+                {
+                    "x": 460,
+                    "y": 80
+                },
+                {
+                    "x": 460,
+                    "y": 120
+                },
+                {
+                    "x": 460,
+                    "y": 120
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#300#200",
+            "toJonctionId": "Osci_1_CH2",
+            "points": [
+                {
+                    "x": 300,
+                    "y": 200
+                },
+                {
+                    "x": 460,
+                    "y": 200
+                },
+                {
+                    "x": 460,
+                    "y": 160
+                },
+                {
+                    "x": 460,
+                    "y": 160
+                }
+            ]
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "__t#120#140",
+            "x": 120,
+            "y": 140
+        },
+        {
+            "id": "__t#120#180",
+            "x": 120,
+            "y": 180
+        },
+        {
+            "id": "__t#300#80",
+            "x": 300,
+            "y": 80
+        },
+        {
+            "id": "__t#300#200",
+            "x": 300,
+            "y": 200
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 4,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 1,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "bode_analyzer": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 0
+    }
+}

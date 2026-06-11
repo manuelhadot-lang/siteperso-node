@@ -1161,3 +1161,98 @@ export function seg7DisplayAppearsBlank(seg7Entry) {
     return !Object.values(seg).some(Boolean);
 }
 
+function vdbFromNodeChannel(row, ch) {
+    if (!ch || ch.isGnd) return 0;
+    if (ch.dbCol == null) return NaN;
+    const db = row[ch.dbCol];
+    return Number.isFinite(db) ? db : NaN;
+}
+
+/** Gain en dB : différence des vdb si les références sont sur la masse. */
+function gainDbFromChannels(row, outPlus, outMinus, inPlus, inMinus) {
+    const vdbOut = vdbFromNodeChannel(row, outPlus) - vdbFromNodeChannel(row, outMinus);
+    const vdbIn = vdbFromNodeChannel(row, inPlus) - vdbFromNodeChannel(row, inMinus);
+    if (!Number.isFinite(vdbOut) || !Number.isFinite(vdbIn)) return NaN;
+    return vdbOut - vdbIn;
+}
+
+/**
+ * Fréquences de coupure à −3 dB (interpolation linéaire en échelle log).
+ * @param {number[]} frequency
+ * @param {number[]} gainDb
+ * @returns {number[]}
+ */
+export function computeCutoffFrequencies(frequency, gainDb) {
+    if (!frequency?.length || frequency.length !== gainDb?.length || frequency.length < 2) return [];
+    let refGain = gainDb[0];
+    for (let i = 0; i < Math.min(5, gainDb.length); i++) {
+        if (Number.isFinite(gainDb[i])) refGain = Math.max(refGain, gainDb[i]);
+    }
+    const target = refGain - 3;
+    const cutoffs = [];
+    for (let i = 1; i < gainDb.length; i++) {
+        const g0 = gainDb[i - 1];
+        const g1 = gainDb[i];
+        const f0 = frequency[i - 1];
+        const f1 = frequency[i];
+        if (!Number.isFinite(g0) || !Number.isFinite(g1) || f0 <= 0 || f1 <= 0) continue;
+        const crossesDown = g0 >= target && g1 < target;
+        const crossesUp = g0 < target && g1 >= target;
+        if (!crossesDown && !crossesUp) continue;
+        const t = (target - g0) / (g1 - g0);
+        const logF = Math.log10(f0) + t * (Math.log10(f1) - Math.log10(f0));
+        cutoffs.push(Math.pow(10, logF));
+    }
+    return cutoffs;
+}
+
+/**
+ * @param {string} waveTxt — sortie ngspice wrdata (analyse .ac)
+ * @param {{ id: string; freqCol?: number; fMin?: number; fMax?: number; outPlus: object; outMinus: object; inPlus: object; inMinus: object }[]} meta
+ */
+export function mergeBodePlotsFromAcWrdata(waveTxt, meta) {
+    const out = {};
+    const rows = parseWrdataNumericRows(waveTxt);
+    if (!rows.length || !Array.isArray(meta) || meta.length === 0) return out;
+
+    for (const m of meta) {
+        if (!m?.id) continue;
+        const freqCol = m.freqCol ?? 0;
+        const frequency = [];
+        const gainDb = [];
+        for (const row of rows) {
+            if (row.length <= freqCol) continue;
+            const f = row[freqCol];
+            if (!Number.isFinite(f) || f <= 0) continue;
+            const gain = gainDbFromChannels(row, m.outPlus, m.outMinus, m.inPlus, m.inMinus);
+            if (!Number.isFinite(gain)) continue;
+            frequency.push(f);
+            gainDb.push(gain);
+        }
+        if (frequency.length === 0) continue;
+        const cutoffHz = computeCutoffFrequencies(frequency, gainDb);
+        let responseHint = null;
+        const gLo = gainDb[0];
+        const gHi = gainDb[gainDb.length - 1];
+        if (Number.isFinite(gLo) && Number.isFinite(gHi)) {
+            if (gHi > gLo + 6) {
+                responseHint =
+                    "Courbe type passe-haut : reliez + sur la jonction R/C (sortie du filtre) et − sur la masse (GND), pas aux bornes de la résistance.";
+            } else if (gLo > 1 && gHi < gLo - 6) {
+                responseHint = "Filtre passe-bas détecté.";
+            }
+        }
+        out[m.id] = {
+            frequency,
+            gainDb,
+            fMin: m.fMin ?? frequency[0],
+            fMax: m.fMax ?? frequency[frequency.length - 1],
+            cutoffHz,
+            unit: "dB",
+            label: "Gain",
+            responseHint,
+        };
+    }
+    return out;
+}
+

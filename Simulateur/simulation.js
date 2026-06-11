@@ -7,6 +7,8 @@ import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOverc
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
 import { openScopePanel, isScopePanelOpen, getActiveScope } from './scope-panel.js';
 import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
+import { isBodePopupOpen, openBodePopup, refreshBodePopup } from './bode-popup.js';
+import { startSpeakerAudio, stopSpeakerAudio } from './speaker-audio.js';
 
 let liveSimTimer = null;
 let simulationInFlight = false;
@@ -123,6 +125,14 @@ function jonctionIdToTerminalKey(jonctionId) {
         } else if (comp.type === 'ic_74hc90') {
             const key = ic74hc90JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
+        } else if (comp.type === 'potentiometer') {
+            if (jonctionId === `${id}_in`) return `${id}#0`;
+            if (jonctionId === `${id}_wip`) return `${id}#1`;
+            if (jonctionId === `${id}_out`) return `${id}#2`;
+        } else if (comp.type === 'switch_spdt') {
+            if (jonctionId === `${id}_com`) return `${id}#0`;
+            if (jonctionId === `${id}_a`) return `${id}#1`;
+            if (jonctionId === `${id}_b`) return `${id}#2`;
         } else {
             if (jonctionId === `${id}_in`) return `${id}#0`;
             if (jonctionId === `${id}_out`) return `${id}#1`;
@@ -151,9 +161,15 @@ function buildSimulationState() {
             out.value = formatGsqrValue(comp);
         }
         if (comp.type === 'resistor') out.value = comp.value || '1k';
+        if (comp.type === 'potentiometer') {
+            out.value = comp.value || '10k';
+            out.position = comp.position ?? 50;
+        }
+        if (comp.type === 'switch_spdt') out.state = comp.state ?? 0;
         if (comp.type === 'capacitor') out.value = comp.value || '1u';
         if (comp.type === 'inductor') out.value = comp.value || '1m';
         if (comp.type === 'diode') out.value = comp.value || '1N4148';
+        if (comp.type === 'speaker') out.value = comp.value || '8';
         if (comp.type === 'npn') out.value = comp.value || '2N2222';
         if (comp.type === 'opamp') {
             out.value = comp.value || 'uA741';
@@ -249,7 +265,7 @@ function showSimulationWarnings(warnings, isSilentUpdate) {
     const text = warnings.map(String).filter((w) => w.trim()).join('\n');
     if (!text) return;
     const critical = warnings.some((w) =>
-        /CD4511|74HC90|XSPICE|digital\.cm|BI relié|LT relié|Q0 relié/i.test(String(w))
+        /CD4511|74HC90|XSPICE|digital\.cm|BI relié|LT relié|Q0 relié|fréquentielle|Analyse fréquentielle|Bode/i.test(String(w))
     );
     if (critical) alert(`Avertissement simulation :\n${text}`);
 }
@@ -295,6 +311,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
             simulationResults.ohmmeters = result.ohmmeterValues || {};
             simulationResults.leds = result.ledValues || {};
             simulationResults.scopePlots = result.scopePlots || {};
+            simulationResults.bodePlots = result.bodePlots || {};
             simulationResults.seg7 = result.seg7Values || {};
             simulationResults.logicValues = result.logicValues || {};
             const scopePlotKeys = Object.keys(simulationResults.scopePlots);
@@ -316,6 +333,14 @@ export async function triggerSimulation(isSilentUpdate = false) {
                     refreshScopePopup();
                 }
             }
+            const bodeComp = circuit.components.find((c) => c.type === 'bode_analyzer');
+            if (bodeComp && (result.analysisAc || Object.keys(simulationResults.bodePlots).length > 0)) {
+                if (!isSilentUpdate) {
+                    openBodePopup(bodeComp);
+                } else if (isBodePopupOpen()) {
+                    refreshBodePopup();
+                }
+            }
             if (result.analysisTran) {
                 const vmPlots = result.voltmeterTranPlots || {};
                 const ledPlots = result.ledTranPlots || {};
@@ -333,8 +358,15 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 } else {
                     stopLedAnimation();
                 }
+                const speakerPlots = result.speakerTranPlots || {};
+                if (Object.keys(speakerPlots).length > 0) {
+                    startSpeakerAudio(speakerPlots);
+                } else {
+                    stopSpeakerAudio();
+                }
             } else {
                 stopLedAnimation();
+                stopSpeakerAudio();
             }
             const hasBurntLed = Object.values(simulationResults.leds).some((m) => {
                 const i = m && typeof m === 'object' ? m.current : m;
@@ -366,8 +398,9 @@ export function stopSimulation() {
     liveSimTimer = null;
     stopLedAnimation();
     stopScopeAnimation();
+    stopSpeakerAudio();
     flags.isSimulating = false;
-    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.seg7 = {}; simulationResults.logicValues = {};
+    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.bodePlots = {}; simulationResults.seg7 = {}; simulationResults.logicValues = {};
     const btnSim = document.getElementById('btn-simulate'); const btnStop = document.getElementById('btn-stop');
     if (btnSim) { btnSim.innerText = "🚀 Lancer Simulation"; btnSim.style.background = "#00ca71"; }
     if (btnStop) btnStop.classList.add('disabled');

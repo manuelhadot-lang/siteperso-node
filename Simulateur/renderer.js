@@ -31,6 +31,8 @@ import {
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
 import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { isSpeakerAudioPlaying } from './speaker-audio.js';
+import { COLORS } from './theme.js';
 
 function hc90SimCount(comp) {
     if (!flags.isSimulating || !comp?.label) return null;
@@ -54,18 +56,41 @@ export function resizeCanvas() {
     draw();
 }
 
-function drawLabels(name, value, angle) {
+function drawUprightText(angle, fn) {
     ctx.save();
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (angle % 180 !== 0) {
-        ctx.rotate(-angle * Math.PI / 180);
-        if (name) { ctx.fillStyle = '#ffffff'; ctx.font = '12px Arial'; ctx.textAlign = 'right'; ctx.fillText(name, -28, 0); }
-        if (value) { ctx.fillStyle = '#aaaaaa'; ctx.font = '11px Arial'; ctx.textAlign = 'left'; ctx.fillText(value, 28, 0); }
-    } else {
-        if (name) { ctx.fillStyle = '#ffffff'; ctx.font = '12px Arial'; ctx.fillText(name, 0, -25); }
-        if (value) { ctx.fillStyle = '#aaaaaa'; ctx.font = '11px Arial'; ctx.fillText(value, 0, 25); }
-    }
+    if (angle) ctx.rotate(-angle * Math.PI / 180);
+    fn();
     ctx.restore();
+}
+
+function formatDisplayValue(val) {
+    if (val == null || val === '') return '';
+    return String(val).trim()
+        .replace(/Kohm/gi, 'K')
+        .replace(/Mohm/gi, 'M')
+        .replace(/ohm/gi, '');
+}
+
+function drawLabels(name, value, angle) {
+    const labelX = -38;
+    const nameY = -36;
+    drawUprightText(angle, () => {
+        if (name) {
+            ctx.fillStyle = COLORS.ink;
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(name, labelX, nameY);
+        }
+        const display = formatDisplayValue(value);
+        if (display) {
+            ctx.fillStyle = COLORS.inkMuted;
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(display, labelX, name ? nameY + 14 : nameY);
+        }
+    });
 }
 
 function formatMeterValue(num, decimals = 1) {
@@ -114,7 +139,7 @@ function drawWirePlusLabel(wireEndX = 40, wireY = 0) {
 }
 
 function drawMeterBody(color = '#00bcd4', showPlus = true) {
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fillStyle = '#2a3b4c';
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fillStyle = COLORS.meterFill;
     ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = color;
     ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-20, 0); ctx.moveTo(20, 0); ctx.lineTo(40, 0); ctx.stroke();
@@ -123,9 +148,9 @@ function drawMeterBody(color = '#00bcd4', showPlus = true) {
 
 function drawOscilloscopeScreen(comp) {
     const x0 = -42, y0 = -24, w = 84, h = 48;
-    ctx.fillStyle = '#050a0e';
+    ctx.fillStyle = COLORS.scopeBg;
     ctx.fillRect(x0, y0, w, h);
-    ctx.strokeStyle = '#1a3a4a';
+    ctx.strokeStyle = COLORS.scopeGrid;
     ctx.lineWidth = 1;
     const divW = w / 8;
     const divH = h / 8;
@@ -135,7 +160,7 @@ function drawOscilloscopeScreen(comp) {
     for (let j = 1; j < 8; j++) {
         ctx.beginPath(); ctx.moveTo(x0, y0 + j * divH); ctx.lineTo(x0 + w, y0 + j * divH); ctx.stroke();
     }
-    ctx.fillStyle = '#3a5a6a';
+    ctx.fillStyle = COLORS.scopeLabel;
     ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -143,7 +168,7 @@ function drawOscilloscopeScreen(comp) {
     ctx.strokeStyle = '#00bcd4';
     ctx.lineWidth = 2;
     ctx.strokeRect(x0, y0, w, h);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = COLORS.ink;
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -196,7 +221,7 @@ function drawSeg7Display(comp) {
     ctx.stroke();
 
     // Boîtier droit (non incliné)
-    ctx.strokeStyle = '#bdbdbd';
+    ctx.strokeStyle = COLORS.componentStroke;
     ctx.lineWidth = 2;
     ctx.strokeRect(boxL, boxT, boxR - boxL, boxB - boxT);
 
@@ -232,7 +257,7 @@ function drawSeg7Display(comp) {
     ctx.restore();
 
     // Étiquettes des broches a..g, au-dessus de chaque patte près du boîtier
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = COLORS.ink;
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
@@ -247,7 +272,7 @@ function drawSeg7Display(comp) {
     ctx.fillText(comp.label, 26, boxT - 6);
 }
 
-function drawLogicGateSymbol(gateType, label) {
+function drawLogicGateSymbol(gateType) {
     const inTopY = -20;
     const inBottomY = 20;
     const inMidY = 0;
@@ -260,7 +285,7 @@ function drawLogicGateSymbol(gateType, label) {
 
     ctx.strokeStyle = '#00ca71';
     ctx.lineWidth = 2;
-    ctx.fillStyle = '#1e1e1e';
+    ctx.fillStyle = COLORS.componentFill;
 
     if (isNot) {
         ctx.beginPath();
@@ -332,17 +357,11 @@ function drawLogicGateSymbol(gateType, label) {
         ctx.beginPath();
         ctx.arc(cx, 0, outBubbleR, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = '#1e1e1e';
+        ctx.fillStyle = COLORS.componentFill;
         ctx.fill();
     }
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 0, -26);
-
-    ctx.fillStyle = '#aaaaaa';
+    ctx.fillStyle = COLORS.inkMuted;
     ctx.font = '10px Arial';
     ctx.textAlign = 'left';
     if (isNot) {
@@ -360,7 +379,7 @@ function drawMeterDisplay(valuePart, unitPart, rot) {
     ctx.font = 'bold 7px monospace';
     const textW = ctx.measureText(text).width;
     const boxW = Math.max(28, Math.min(46, textW + 10));
-    ctx.fillStyle = '#0d1b1e';
+    ctx.fillStyle = COLORS.meterDisplayBg;
     ctx.fillRect(-boxW / 2, -7, boxW, 14);
     ctx.fillStyle = '#00ff66';
     ctx.textAlign = 'center';
@@ -380,7 +399,7 @@ function getLedCurrentAmps(comp) {
 
 function drawLedSmoke(phase) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(170, 170, 170, 0.75)';
+    ctx.strokeStyle = COLORS.ledSmoke;
     ctx.lineWidth = 1.5;
     for (let i = 0; i < 3; i++) {
         const xOff = -6 + i * 6 + Math.sin(phase + i * 1.3) * 3;
@@ -403,7 +422,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
     ctx.moveTo(0, setJuncY); ctx.lineTo(0, boxTopY);
     ctx.moveTo(0, resetJuncY); ctx.lineTo(0, boxBottomY);
     ctx.stroke();
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = COLORS.ink;
     ctx.font = '10px Arial';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
@@ -436,7 +455,7 @@ function drawComponentBody(comp) {
 
     const railLead = GRID_SIZE;
     if (comp.type === 'gnd') {
-        ctx.strokeStyle = '#9e9e9e'; ctx.lineWidth = 2;
+        ctx.strokeStyle = COLORS.inkDim; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(railLead, 0);
         ctx.moveTo(-12, -10); ctx.lineTo(-12, 10);
         ctx.moveTo(-17, -6); ctx.lineTo(-17, 6);
@@ -459,7 +478,7 @@ function drawComponentBody(comp) {
         ctx.strokeStyle = '#9c27b0'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(railLead, 0);
         ctx.stroke();
-        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-12, -8, 20, 16); ctx.strokeRect(-12, -8, 20, 16);
+        ctx.fillStyle = COLORS.componentFill; ctx.fillRect(-12, -8, 20, 16); ctx.strokeRect(-12, -8, 20, 16);
         let state = comp.state || 0;
         ctx.fillStyle = state === 1 ? '#00e676' : '#ff1744';
         ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -479,10 +498,55 @@ function drawComponentBody(comp) {
         drawLabels(comp.label, val, rot);
     }
     else if (comp.type === 'resistor') {
-        ctx.strokeStyle = '#007acc'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#007acc'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(-20, -10, 40, 20); ctx.strokeRect(-20, -10, 40, 20);
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-20, 0); ctx.moveTo(20, 0); ctx.lineTo(40, 0); ctx.stroke();
-        drawLabels(comp.label, comp.value || "1Kohm", rot);
+        drawLabels(comp.label, comp.value || '1K', rot);
+    }
+    else if (comp.type === 'potentiometer') {
+        const pos = Math.min(100, Math.max(0, comp.position ?? 50));
+        const wx = -20 + (pos / 100) * 40;
+        ctx.strokeStyle = '#007acc'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
+        ctx.fillRect(-20, -10, 40, 20); ctx.strokeRect(-20, -10, 40, 20);
+        ctx.beginPath();
+        ctx.moveTo(-40, 0); ctx.lineTo(-20, 0);
+        ctx.moveTo(20, 0); ctx.lineTo(40, 0);
+        ctx.moveTo(wx, -10); ctx.lineTo(wx, -22);
+        ctx.moveTo(0, -22); ctx.lineTo(wx, -22);
+        ctx.stroke();
+        ctx.fillStyle = '#ff9800';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('◀', -9, 18);
+        ctx.fillText('▶', 9, 18);
+        const potValue = `${formatDisplayValue(comp.value || '10k')} (${Math.round(pos)}%)`;
+        drawLabels(comp.label, potValue, rot);
+    }
+    else if (comp.type === 'switch_spdt') {
+        const onA = (comp.state ?? 0) !== 1;
+        ctx.strokeStyle = COLORS.componentStroke; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-40, -18); ctx.lineTo(-14, -18);
+        ctx.moveTo(-40, 0); ctx.lineTo(-14, 0);
+        ctx.moveTo(-40, 18); ctx.lineTo(-14, 18);
+        ctx.stroke();
+        ctx.fillStyle = COLORS.componentFill;
+        ctx.fillRect(-12, -18, 24, 36);
+        ctx.strokeStyle = COLORS.componentStroke;
+        ctx.strokeRect(-12, -18, 24, 36);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        if (onA) ctx.lineTo(0, -14);
+        else ctx.lineTo(0, 14);
+        ctx.stroke();
+        ctx.fillStyle = COLORS.inkDim;
+        ctx.font = '9px Arial';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('COM', -44, 0);
+        ctx.fillText('B', -44, 18);
+        drawLabels(comp.label, null, rot);
     }
     else if (comp.type === 'capacitor') {
         ctx.strokeStyle = '#66bb6a'; ctx.lineWidth = 2;
@@ -506,7 +570,7 @@ function drawComponentBody(comp) {
         drawLabels(comp.label, comp.value || '1m', rot);
     }
     else if (comp.type === 'diode') {
-        ctx.strokeStyle = '#ef5350'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#ef5350'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.beginPath();
         ctx.moveTo(-40, 0); ctx.lineTo(-12, 0);
         ctx.moveTo(-12, -12); ctx.lineTo(12, 0); ctx.lineTo(-12, 12); ctx.closePath();
@@ -524,7 +588,7 @@ function drawComponentBody(comp) {
         const fx = (x) => (comp.flipX ? -x : x);
         ctx.save();
         if (comp.flipX) ctx.scale(-1, 1);
-        ctx.strokeStyle = '#cccccc';
+        ctx.strokeStyle = COLORS.strokeLight;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(bx, -20); ctx.lineTo(bx, 20);
@@ -545,12 +609,12 @@ function drawComponentBody(comp) {
         ctx.lineTo(ax - ux * 1.5 - px * wing, ay - uy * 1.5 - py * wing);
         ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = '#aaaaaa'; ctx.font = '11px Arial'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = COLORS.inkMuted; ctx.font = '11px Arial'; ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
         ctx.fillText('b', fx(-34), -10);
         ctx.fillText('c', fx(4), -32);
         ctx.fillText('e', fx(4), 32);
-        ctx.fillStyle = '#ffffff'; ctx.font = '12px Arial';
+        ctx.fillStyle = COLORS.ink; ctx.font = '12px Arial';
         ctx.fillText(comp.label, fx(-36), -24);
         ctx.textAlign = 'center';
         ctx.fillText('2N2222', fx(34), 2);
@@ -562,33 +626,34 @@ function drawComponentBody(comp) {
         ctx.save();
         if (comp.flipX) ctx.scale(-1, 1);
         if (comp.flipY) ctx.scale(1, -1);
-        ctx.fillStyle = '#d8d8d8';
-        ctx.strokeStyle = '#666666';
+        ctx.fillStyle = COLORS.opampFill;
+        ctx.strokeStyle = COLORS.strokeMuted;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.moveTo(tLeft, tTop); ctx.lineTo(tLeft, tBot); ctx.lineTo(tApex, 0); ctx.closePath();
         ctx.fill(); ctx.stroke();
-        ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 2;
+        ctx.strokeStyle = COLORS.strokeLight; ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(-40, -inY); ctx.lineTo(tLeft, -inY);
         ctx.moveTo(-40, inY); ctx.lineTo(tLeft, inY);
         ctx.moveTo(tApex, 0); ctx.lineTo(40, 0);
         ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = '#222222'; ctx.font = 'bold 10px Arial';
+        ctx.fillStyle = COLORS.ink; ctx.font = 'bold 10px Arial';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('+', fx(-8), fy(-inY));
         ctx.fillText('−', fx(-8), fy(inY));
-        ctx.fillStyle = '#ffffff'; ctx.font = '12px Arial';
+        ctx.fillStyle = COLORS.ink; ctx.font = '12px Arial';
         ctx.fillText(comp.label, fx(8), fy(-38));
-        ctx.fillStyle = '#aaaaaa';
+        ctx.fillStyle = COLORS.inkMuted;
         ctx.fillText(comp.value || 'uA741', fx(8), fy(42));
     }
     else if (['not', 'and', 'nand', 'or', 'nor', 'xor', 'xnor'].includes(comp.type)) {
-        drawLogicGateSymbol(comp.type, comp.label);
+        drawLogicGateSymbol(comp.type);
+        drawLabels(comp.label, null, rot);
     }
     else if (comp.type === 'd_flipflop') {
-        ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(-30, -30, 60, 60); ctx.strokeRect(-30, -30, 60, 60);
         ctx.beginPath();
         ctx.moveTo(-40, -20); ctx.lineTo(-30, -20);   // D
@@ -597,14 +662,14 @@ function drawComponentBody(comp) {
         ctx.moveTo(30, 20); ctx.lineTo(40, 20);       // /Q
         ctx.stroke();
         drawFlipFlopSetReset(ctx, -30, 30);
-        ctx.fillStyle = '#ffffff'; ctx.font = '10px Arial'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = COLORS.ink; ctx.font = '10px Arial'; ctx.textBaseline = 'middle';
         ctx.textAlign = 'left'; ctx.fillText('D', -27, -20); ctx.fillText('>', -27, 20);
         ctx.textAlign = 'right'; ctx.fillText('Q', 27, -20); ctx.fillText('Q', 27, 20);
         ctx.beginPath(); ctx.moveTo(20, 13); ctx.lineTo(27, 13); ctx.stroke();
-        ctx.font = '12px Arial'; ctx.fillStyle = '#ffffff'; ctx.fillText(comp.label, 0, -62);
+        ctx.font = '12px Arial'; ctx.fillStyle = COLORS.ink; ctx.fillText(comp.label, 0, -62);
     }
     else if (comp.type === 'jk_flipflop') {
-        ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(-30, -35, 60, 70); ctx.strokeRect(-30, -35, 60, 70);
         ctx.beginPath();
         ctx.moveTo(-40, -20); ctx.lineTo(-30, -20);   // J
@@ -614,16 +679,16 @@ function drawComponentBody(comp) {
         ctx.moveTo(30, 20); ctx.lineTo(40, 20);       // /Q
         ctx.stroke();
         drawFlipFlopSetReset(ctx, -35, 35);
-        ctx.fillStyle = '#ffffff'; ctx.font = '10px Arial'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = COLORS.ink; ctx.font = '10px Arial'; ctx.textBaseline = 'middle';
         ctx.textAlign = 'left'; ctx.fillText('J', -27, -20); ctx.fillText('>', -27, 0); ctx.fillText('K', -27, 20);
         ctx.textAlign = 'right'; ctx.fillText('Q', 27, -20); ctx.fillText('Q', 27, 20);
         ctx.beginPath(); ctx.moveTo(20, 13); ctx.lineTo(27, 13); ctx.stroke();
-        ctx.font = '12px Arial'; ctx.fillStyle = '#ffffff'; ctx.fillText(comp.label, 0, -64);
+        ctx.font = '12px Arial'; ctx.fillStyle = COLORS.ink; ctx.fillText(comp.label, 0, -64);
     }
     else if (comp.type === 'cd4511') {
         const inLbl = ['A', 'B', 'C', 'D', 'LE', 'BI', 'LT'];
         const outLbl = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
-        ctx.strokeStyle = '#ab47bc'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#ab47bc'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(CD4511_BOX_L, CD4511_BOX_T, CD4511_BOX_R - CD4511_BOX_L, CD4511_BOX_B - CD4511_BOX_T);
         ctx.strokeRect(CD4511_BOX_L, CD4511_BOX_T, CD4511_BOX_R - CD4511_BOX_L, CD4511_BOX_B - CD4511_BOX_T);
         ctx.beginPath();
@@ -636,7 +701,7 @@ function drawComponentBody(comp) {
             ctx.lineTo(CD4511_JUNC_R, y);
         });
         ctx.stroke();
-        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px Arial'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = COLORS.ink; ctx.font = 'bold 9px Arial'; ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
         inLbl.forEach((t, i) => ctx.fillText(t, CD4511_LABEL_L, CD4511_PIN_Y[i]));
         ctx.textAlign = 'right';
@@ -651,7 +716,7 @@ function drawComponentBody(comp) {
     else if (comp.type === 'ic_74hc90') {
         const leftLbl = ['CP1', 'MR1', 'MR2', '', 'VCC', 'MS1', 'MS2'];
         const rightLbl = ['Q0', 'Q1', 'Q2', 'Q3', '', 'GND', 'CP0'];
-        ctx.strokeStyle = '#26a69a'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#26a69a'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
         ctx.strokeRect(IC90_BOX_L, IC90_BOX_T, IC90_BOX_R - IC90_BOX_L, IC90_BOX_B - IC90_BOX_T);
         ctx.beginPath();
@@ -666,7 +731,7 @@ function drawComponentBody(comp) {
             ctx.lineTo(IC90_JUNC_R, y);
         });
         ctx.stroke();
-        ctx.fillStyle = '#ffffff'; ctx.font = '8px Arial'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = COLORS.ink; ctx.font = '8px Arial'; ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
         leftLbl.forEach((t, i) => { if (t) ctx.fillText(t, IC90_LABEL_L, IC90_LEFT_PIN_Y[i]); });
         ctx.textAlign = 'right';
@@ -692,7 +757,7 @@ function drawComponentBody(comp) {
                 ctx.fill();
             });
         }
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = COLORS.ink;
         ctx.font = '11px Arial';
         ctx.fillText(comp.label, 0, IC90_BOX_T - 12);
     }
@@ -743,14 +808,14 @@ function drawComponentBody(comp) {
         ctx.moveTo(8, 0); ctx.lineTo(40, 0);
         ctx.moveTo(0, 18); ctx.lineTo(0, 40);
         ctx.stroke();
-        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-18, -18, 26, 36); ctx.strokeRect(-18, -18, 26, 36);
+        ctx.fillStyle = COLORS.componentFill; ctx.fillRect(-18, -18, 26, 36); ctx.strokeRect(-18, -18, 26, 36);
         ctx.fillStyle = '#ce93d8'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('G', -5, 0);
         ctx.restore();
         drawLabels(comp.label, null, 0);
     }
     else if (comp.type === 'gsin') {
-        ctx.strokeStyle = '#26c6da'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#26c6da'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(-18, -14, 36, 28); ctx.strokeRect(-18, -14, 36, 28);
         ctx.strokeStyle = '#4dd0e1'; ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -767,7 +832,7 @@ function drawComponentBody(comp) {
         drawLabels(comp.label, null, 0);
     }
     else if (comp.type === 'gsqr') {
-        ctx.strokeStyle = '#29b6f6'; ctx.lineWidth = 2; ctx.fillStyle = '#1e1e1e';
+        ctx.strokeStyle = '#29b6f6'; ctx.lineWidth = 2; ctx.fillStyle = COLORS.componentFill;
         ctx.fillRect(-18, -14, 36, 28); ctx.strokeRect(-18, -14, 36, 28);
         ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -812,6 +877,42 @@ function drawComponentBody(comp) {
         drawMeterDisplay(displayValue, ' V', rot);
         drawLabels(comp.label, null, rot);
     }
+    else if (comp.type === 'bode_analyzer') {
+        drawMeterBody('#7cff6b');
+        drawMeterDisplay('Bode', '', rot);
+        drawLabels(comp.label, null, rot);
+    }
+    else if (comp.type === 'speaker') {
+        const playing = flags.isSimulating && isSpeakerAudioPlaying();
+        ctx.strokeStyle = playing ? '#ffeb3b' : '#ab47bc';
+        ctx.lineWidth = 2;
+        ctx.fillStyle = '#2a3b4c';
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = playing ? '#ffeb3b' : '#ab47bc';
+        ctx.beginPath();
+        ctx.moveTo(-40, 0);
+        ctx.lineTo(-20, 0);
+        ctx.moveTo(20, 0);
+        ctx.lineTo(40, 0);
+        ctx.stroke();
+        if (playing) {
+            ctx.strokeStyle = '#ffeb3b';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 3; i++) {
+                const r = 10 + i * 5;
+                ctx.beginPath();
+                ctx.arc(22, 0, r, -Math.PI / 4, Math.PI / 4);
+                ctx.stroke();
+            }
+        }
+        drawWirePlusLabel(40, 0);
+        const z = comp.value ? `${comp.value}Ω` : '8Ω';
+        drawMeterDisplay(playing ? '♪' : 'HP', playing ? '' : z, rot);
+        drawLabels(comp.label, null, rot);
+    }
     else if (comp.type === 'ammeter') {
         let displayValue = '0.0';
         let unit = 'A';
@@ -854,7 +955,7 @@ function drawWires() {
     circuit.wires.forEach(w => {
         if (w === interaction.selectedWire) { ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 4.0; } 
         else if (w === interaction.hoveredWire) { ctx.strokeStyle = '#ffeb3b'; ctx.lineWidth = 3.5; } 
-        else { ctx.strokeStyle = '#00ffaa'; ctx.lineWidth = 2.5; } 
+        else { ctx.strokeStyle = COLORS.wireDefault; ctx.lineWidth = 2.5; } 
         ctx.beginPath(); ctx.moveTo(w.points[0].x, w.points[0].y);
         for (let i = 1; i < w.points.length; i++) ctx.lineTo(w.points[i].x, w.points[i].y);
         ctx.stroke();
@@ -870,14 +971,14 @@ function drawWires() {
     circuit.autoJunctions.forEach(aj => {
         ctx.save(); const isHovered = interaction.hoverJonction && interaction.hoverJonction.id === aj.id;
         const isSelected = interaction.selectedAutoJunctions.includes(aj);
-        if (isSelected) { ctx.fillStyle = '#00bcd4'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; } 
-        else { ctx.fillStyle = '#00ffaa'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = isHovered ? 2 : 1; }
+        if (isSelected) { ctx.fillStyle = '#00bcd4'; ctx.strokeStyle = COLORS.junctionStroke; ctx.lineWidth = 2; } 
+        else { ctx.fillStyle = COLORS.wireDefault; ctx.strokeStyle = COLORS.junctionStroke; ctx.lineWidth = isHovered ? 2 : 1; }
         ctx.beginPath(); ctx.arc(aj.x, aj.y, (isHovered || isSelected) ? 6 : 4.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     });
 }
 
 function drawGrid() {
-    ctx.strokeStyle = '#262626'; ctx.lineWidth = 1 / scale.value;
+    ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1 / scale.value;
     const startLeft = Math.floor(-pan.x / scale.value / GRID_SIZE) * GRID_SIZE;
     const startTop = Math.floor(-pan.y / scale.value / GRID_SIZE) * GRID_SIZE;
     const endRight = startLeft + canvas.width / scale.value + GRID_SIZE;
@@ -889,7 +990,8 @@ function drawGrid() {
 }
 
 export function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = COLORS.canvasBg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save(); ctx.translate(pan.x, pan.y); ctx.scale(scale.value, scale.value);
     drawGrid(); drawWires(); circuit.components.forEach(comp => drawComponentBody(comp)); 
     if (flags.isSelectingZone) {

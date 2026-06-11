@@ -1,22 +1,40 @@
 ﻿// app.js (Nouveau fichier principal)
 import { canvas, GRID_SIZE, scale, pan, flags, counters, circuit, interaction, zone, menuDrag, clipboard, undoStack, redoStack, emptyDragImage, snapToGrid, toGridCoords, saveState } from './state.js';
-import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest } from './geometry.js';
+import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest, potentiometerControlHit, switchSpdtToggleHit } from './geometry.js';
 import { resizeCanvas, draw } from './renderer.js';
 import { triggerSimulation, stopSimulation, requestLiveSimulation } from './simulation.js';
 import { openSourcePanel, closeSourcePanel, onSourceRemoved, initSourcePanel } from './source-panel.js';
 import { openScopePanel, closeScopePanelFully, onScopeRemoved, initScopePanel, onScopePopupClosed } from './scope-panel.js';
 import { initScopePopup, refreshScopePopup, setScopePopupCloseCallback } from './scope-popup.js';
+import { initBodePopup, openBodePopup } from './bode-popup.js';
 import { bindLedAnimationRedraw } from './led-animation.js';
+import { bindSpeakerAudioRedraw } from './speaker-audio.js';
 import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animation.js';
+import { initEditorTheme, setEditorTheme } from './theme.js';
 
 const COMPONENT_PREFIX = {
-    battery: 'VDC', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D',
+    battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', opamp: 'AOP',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
     d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', led: 'LED', seg7: 'SEG',
-    voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
+    voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
 const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
+function ensureComponentCounter(type) {
+    if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
+    counters[type]++;
+    return counters[type];
+}
+function newComponentLabel(type) {
+    const pfx = COMPONENT_PREFIX[type] || 'U';
+    return `${pfx}${ensureComponentCounter(type)}`;
+}
+function ensureAllCounters() {
+    for (const type of Object.keys(COMPONENT_PREFIX)) {
+        if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
+    }
+    if (counters.junction == null || !Number.isFinite(counters.junction)) counters.junction = 0;
+}
 let fileHandle = null;
 let lastMouseGridPos = { x: 0, y: 0 };
 let liveDragMoved = false;
@@ -67,7 +85,7 @@ function loadCircuitFromJSON(jsonText) {
     try {
         const data = JSON.parse(jsonText);
         circuit.components = data.components || []; circuit.wires = data.wires || []; circuit.autoJunctions = data.autoJunctions || [];
-        Object.assign(counters, data.counters || {}); interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
+        Object.assign(counters, data.counters || {}); ensureAllCounters(); interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
         undoStack.length = 0; redoStack.length = 0; stopSimulation(); closeSourcePanel(); draw();
     } catch (e) { alert("Erreur lors de la lecture du fichier JSON."); }
 }
@@ -125,9 +143,7 @@ window.addEventListener('keydown', (e) => {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de coller."); return; }
         saveState(); const labelMap = {}, juncMap = {}, newC = [], newJ = [], newW = [];
         clipboard.data.components.forEach(comp => {
-            counters[comp.type]++; 
-            let pfx = COMPONENT_PREFIX[comp.type] || 'U';
-            const nl = `${pfx}_${counters[comp.type]}`; labelMap[comp.label] = nl;
+            const nl = newComponentLabel(comp.type); labelMap[comp.label] = nl;
             const cloned = { ...comp, x: comp.x + 40, y: comp.y + 40, label: nl }; circuit.components.push(cloned); newC.push(cloned);
         });
         clipboard.data.autoJunctions.forEach(aj => {
@@ -177,6 +193,26 @@ canvas.addEventListener('mousedown', (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const sX = snapToGrid(mousePos.x), sY = snapToGrid(mousePos.y);
     lastMouseGridPos = { x: sX, y: sY }; updateMouseState(e);
     if (e.button === 0) {
+        const hitComp = circuit.components.find((c) => componentHitTest(c, mousePos.x, mousePos.y));
+        if (hitComp?.type === 'potentiometer') {
+            const ctrl = potentiometerControlHit(hitComp, mousePos.x, mousePos.y);
+            if (ctrl) {
+                if (!flags.isSimulating) saveState();
+                const step = 5;
+                const pos = hitComp.position ?? 50;
+                hitComp.position = ctrl === 'inc' ? Math.min(100, pos + step) : Math.max(0, pos - step);
+                draw();
+                if (flags.isSimulating) requestLiveSimulation();
+                return;
+            }
+        }
+        if (hitComp?.type === 'switch_spdt' && !interaction.hoverJonction && switchSpdtToggleHit(hitComp, mousePos.x, mousePos.y)) {
+            if (!flags.isSimulating) saveState();
+            hitComp.state = hitComp.state === 1 ? 0 : 1;
+            draw();
+            if (flags.isSimulating) requestLiveSimulation();
+            return;
+        }
         if (interaction.hoveredComponent && interaction.hoveredComponent.type === 'logic_terminal' && flags.isSimulating) {
             saveState(); interaction.hoveredComponent.state = interaction.hoveredComponent.state === 1 ? 0 : 1; draw();
             triggerSimulation(true); return;
@@ -206,6 +242,14 @@ canvas.addEventListener('mousedown', (e) => {
             if (hc.type === 'oscilloscope') {
                 closeSourcePanel();
                 openScopePanel(hc);
+                interaction.selectedComponents = [hc];
+                draw();
+                return;
+            }
+            if (hc.type === 'bode_analyzer') {
+                closeSourcePanel();
+                closeScopePanelFully();
+                openBodePopup(hc);
                 interaction.selectedComponents = [hc];
                 draw();
                 return;
@@ -319,6 +363,12 @@ canvas.addEventListener('dblclick', (e) => {
             openScopePanel(target);
             return;
         }
+        if (target.type === 'bode_analyzer') {
+            closeSourcePanel();
+            closeScopePanelFully();
+            openBodePopup(target);
+            return;
+        }
         if (target.type === 'gimp' || target.type === 'gsin' || target.type === 'gsqr') {
             closeScopePanelFully();
             openSourcePanel(target);
@@ -329,8 +379,25 @@ canvas.addEventListener('dblclick', (e) => {
             let v = prompt(`Valeur de ${target.label} :`, target.value || "1k");
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
+        else if (target.type === 'potentiometer') {
+            let v = prompt(`Résistance totale de ${target.label} (ex. 10k) :`, target.value || '10k');
+            if (v) {
+                if (!live) saveState();
+                target.value = v.trim();
+                const p = prompt('Position du curseur (0–100 %) :', String(target.position ?? 50));
+                if (p !== null && p.trim() !== '' && !isNaN(parseFloat(p))) {
+                    target.position = Math.min(100, Math.max(0, parseFloat(p)));
+                }
+                draw();
+                if (live) requestLiveSimulation();
+            }
+        }
         else if (target.type === 'capacitor') {
             let v = prompt(`Capacité de ${target.label} (ex. 1u, 100n, 10p, 1m) :`, target.value || "1u");
+            if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+        }
+        else if (target.type === 'speaker') {
+            let v = prompt(`Impédance de ${target.label} (Ω, ex. 8) :`, target.value || '8');
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'inductor') {
@@ -377,17 +444,24 @@ canvas.addEventListener('dragover', (e) => { e.preventDefault(); if (!flags.isDr
 canvas.addEventListener('dragend', () => { flags.isDraggingFromMenu = false; menuDrag.draggedComponentType = null; draw(); });
 canvas.addEventListener('drop', (e) => {
     e.preventDefault(); if (!menuDrag.draggedComponentType) return; saveState();
-    const gp = toGridCoords(e.clientX, e.clientY); counters[menuDrag.draggedComponentType]++;
-    let pfx = COMPONENT_PREFIX[menuDrag.draggedComponentType] || 'U';
-    const nc = { type: menuDrag.draggedComponentType, x: snapToGrid(gp.x), y: snapToGrid(gp.y), label: `${pfx}_${counters[menuDrag.draggedComponentType]}`, rotation: 0, state: 0, highVoltage: 5 };
+    const gp = toGridCoords(e.clientX, e.clientY);
+    const type = menuDrag.draggedComponentType;
+    const nc = { type, x: snapToGrid(gp.x), y: snapToGrid(gp.y), label: newComponentLabel(type), rotation: 0, state: 0, highVoltage: 5 };
     if (menuDrag.draggedComponentType === 'gimp') {
         nc.frequency = 2;
         nc.dutyCycle = 50;
         nc.voltageRail = 5;
         nc.flipX = false;
+    } else if (menuDrag.draggedComponentType === 'potentiometer') {
+        nc.value = '10k';
+        nc.position = 50;
+    } else if (menuDrag.draggedComponentType === 'switch_spdt') {
+        nc.state = 0;
+    } else if (menuDrag.draggedComponentType === 'speaker') {
+        nc.value = '8';
     } else if (menuDrag.draggedComponentType === 'gsin') {
         nc.peakAmplitude = 5;
-        nc.frequency = 1000;
+        nc.frequency = 440;
         nc.offset = 0;
     } else if (menuDrag.draggedComponentType === 'gsqr') {
         nc.peakAmplitude = 5;
@@ -420,8 +494,30 @@ canvas.addEventListener('drop', (e) => {
     else if (nc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(nc); }
 });
 
+/** Retire les emoji / symboles décoratifs des entrées de menu déroulant. */
+function stripMenuDecorations(text) {
+    return String(text || '')
+        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '')
+        .replace(/[\u{2190}-\u{21FF}\u{2300}-\u{23FF}\u{2460}-\u{24FF}\u{25A0}-\u{25FF}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeSubmenuLabels() {
+    document.querySelectorAll('.dropdown .dropdown-item').forEach((el) => {
+        const label = el.getAttribute('data-label') || el.textContent;
+        const clean = stripMenuDecorations(label);
+        if (clean) el.textContent = clean;
+    });
+}
+
 // --- CHARGEMENT INITIAL ---
 window.onload = function() {
+    initEditorTheme();
+    document.getElementById('btn-theme-dark')?.addEventListener('click', () => { setEditorTheme('dark'); draw(); });
+    document.getElementById('btn-theme-light')?.addEventListener('click', () => { setEditorTheme('light'); draw(); });
+    normalizeSubmenuLabels();
+    ensureAllCounters();
     resizeCanvas(); window.addEventListener('resize', resizeCanvas);
     document.querySelectorAll('.dropdown-item[draggable=true]').forEach(item => {
         item.addEventListener('dragstart', (e) => {
@@ -450,12 +546,14 @@ window.onload = function() {
     initSourcePanel();
     initScopePanel();
     initScopePopup();
+    initBodePopup();
     setScopePopupCloseCallback(onScopePopupClosed);
     document.getElementById('source-panel-close')?.addEventListener('click', () => {
         closeSourcePanel();
         closeScopePanelFully();
     });
     bindLedAnimationRedraw(draw);
+    bindSpeakerAudioRedraw(draw);
     bindScopeAnimationRedraw(draw);
     bindScopePopupRedraw(refreshScopePopup);
     const m = document.getElementById('commands-modal'); document.getElementById('btn-commands').addEventListener('click', () => m.style.display = 'block'); document.getElementById('close-commands').addEventListener('click', () => m.style.display = 'none'); window.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });

@@ -5,6 +5,7 @@
 /** Indices broche HC90 (#pin SPICE) — local pour ne pas importer logic-74hc90 (fs) côté navigateur. */
 const HC90_PIN_Q1 = 8;
 const HC90_PIN_Q2 = 7;
+const HC90_PIN_Q3 = 10;
 const HC90_PIN_MR1 = 1;
 const HC90_PIN_MR2 = 2;
 
@@ -350,15 +351,17 @@ export function idealHc90BcdForLabel(compLabel, cascade, elapsedSec, clockPeriod
 }
 
 /**
- * Temps .tran pour lire l’état après N impulsions (N = pulseInSpan).
- * pulseInSpan=0 → t=0 (affichage 0 après rollover 10/20/…/100).
+ * Temps .tran pour lire l’état stabilisé après N impulsions dans la fenêtre simulée.
+ * Quand totalPulses est un multiple de pulsesPerSpan, on lit la dernière impulsion
+ * du span (pas t=0 qui est l’état initial avant tout front).
  */
 export function hc90TranSampleTimeSec(elapsedSec, clockPeriodSec, plotSpanSec, phase = 0.49) {
     if (!(clockPeriodSec > 0) || !(plotSpanSec > 0)) return elapsedSec;
     const totalPulses = hc90PulseCount(elapsedSec, clockPeriodSec);
+    if (totalPulses === 0) return 0;
     const pulsesPerSpan = Math.max(1, Math.floor(plotSpanSec / clockPeriodSec));
-    const pulseInSpan = totalPulses % pulsesPerSpan;
-    if (pulseInSpan === 0) return 0;
+    let pulseInSpan = totalPulses % pulsesPerSpan;
+    if (pulseInSpan === 0) pulseInSpan = pulsesPerSpan;
     return Math.min(
         plotSpanSec - 1e-12,
         (pulseInSpan - 1) * clockPeriodSec + clockPeriodSec * phase
@@ -397,10 +400,14 @@ export function hc90LabelForSeg7(segLabel, components, wires, autoJunctions = []
     return null;
 }
 
-/** Animation fiable dès qu’un GImp horloge le HC90 unités (toute fréquence). */
+/** Animation fiable dès qu’un GImp horloge le HC90 (toute fréquence). */
 export function shouldUseIdealHc90Counting(cascade, clockPeriodSec) {
-    if (!cascade?.clockSource || !(clockPeriodSec > 0)) return false;
-    if (cascade.mode === "two_digit" && cascade.units && cascade.tens) return true;
+    if (!cascade || !(clockPeriodSec > 0)) return false;
+    if (cascade.mode === "two_digit" && cascade.units && cascade.tens) {
+        return cascade.clockSource !== false;
+    }
+    // Un seul HC90 : comptage idéal dès qu’une horloge est présente (évite les erreurs
+    // de relecture .tran après le rollover 9→0).
     if (cascade.mode === "single" && cascade.units) return true;
     return false;
 }
@@ -481,6 +488,29 @@ function combinatorialKeyDrivesMr(outputKey, mrKeys, components, wires, visited 
         if (!engineGateInKeys(comp).some((inK) => outNet.has(inK))) continue;
         visited.add(id);
         if (combinatorialKeyDrivesMr(engineGateOutKey(comp), mrKeys, components, wires, visited)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * AND(Q1,Q3) du même HC90 qui pilote MR1/MR2 — provoque des resets pendant les transitions.
+ * (Le report dizaines utilise AND(Q0,Q3) → CP0 du 2e HC90, pas MR.)
+ */
+export function detectHc90MrAndQ1Q3OnSameChip(hc90Id, components, wires) {
+    if (!hc90Id) return false;
+    const q1 = `${hc90Id}#${HC90_PIN_Q1}`;
+    const q3 = `${hc90Id}#${HC90_PIN_Q3}`;
+    const mrKeys = [`${hc90Id}#${HC90_PIN_MR1}`, `${hc90Id}#${HC90_PIN_MR2}`];
+    for (const comp of components) {
+        if (!isEngineAndGate(comp)) continue;
+        const cid = comp.id || comp.label;
+        const inA = reachableTerminalKeys(`${cid}#0`, wires);
+        const inB = reachableTerminalKeys(`${cid}#1`, wires);
+        const hasQ1Q3 = (inA.has(q1) && inB.has(q3)) || (inA.has(q3) && inB.has(q1));
+        if (!hasQ1Q3) continue;
+        if (combinatorialKeyDrivesMr(engineGateOutKey(comp), mrKeys, components, wires)) {
             return true;
         }
     }

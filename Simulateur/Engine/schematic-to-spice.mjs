@@ -67,7 +67,10 @@ import {
     ic74hc90VccPinIndex,
     resolveIc74hc90Vhi,
 } from "./logic-74hc90.mjs";
-import { detectHc90Mod60FromGraphicalState } from "./hc90-cascade.mjs";
+import {
+    detectHc90Mod60FromGraphicalState,
+    detectHc90MrAndQ1Q3OnSameChip,
+} from "./hc90-cascade.mjs";
 
 function isLedType(t) {
     return t === "led" || t === "diode_led";
@@ -78,6 +81,11 @@ function isNodeLikelyLogicLow(nodeName, components, nodeFor) {
     if (!nodeName || nodeName === "0") return true;
     for (const g of components) {
         if (g.type === "ground" && nodeFor(`${g.id}#0`) === nodeName) return true;
+    }
+    for (const g of components) {
+        if ((g.type === "vsin" || g.type === "vsquare") && nodeFor(`${g.id}#0`) === nodeName) {
+            return true;
+        }
     }
     for (const g of components) {
         const key = `${g.id}#0`;
@@ -115,8 +123,18 @@ function isTwoTerminalType(t) {
         t === "ammeter" ||
         t === "voltmeter_rms" ||
         t === "ammeter_rms" ||
-        t === "ohmmeter"
+        t === "ohmmeter" ||
+        t === "bode_analyzer" ||
+        t === "speaker"
     );
+}
+
+function isBodeAnalyzerType(t) {
+    return t === "bode_analyzer";
+}
+
+function isSpeakerType(t) {
+    return t === "speaker";
 }
 
 function isVoltmeterRmsType(t) {
@@ -156,7 +174,7 @@ function isOpampType(t) {
 }
 
 function isThreeTerminalType(t) {
-    return t === "npn" || t === "opamp";
+    return t === "npn" || t === "opamp" || t === "potentiometer" || t === "switch_spdt";
 }
 
 function isSeg7Type(t) {
@@ -841,9 +859,18 @@ function computeTranTiming(components, deckOpts = {}) {
 
     let tstep = minPeriod / TRAN_SAMPLES_PER_PERIOD;
     const hasScope = components.some((c) => c.type === "oscilloscope");
+    const hasSpeaker = components.some((c) => isSpeakerType(c.type));
     let tstop = hasScope
         ? Math.max(scopeWindowSec, minPeriod * 2)
         : Math.max(minPeriod * 8, scopeWindowSec);
+    if (hasSpeaker) {
+        tstop = Math.max(tstop, minPeriod * 20, 0.25);
+        // Durée = nombre entier de périodes du générateur → boucle audio sans « toc ».
+        if (minPeriod > 0 && Number.isFinite(minPeriod)) {
+            const periods = Math.max(20, Math.ceil(tstop / minPeriod));
+            tstop = periods * minPeriod;
+        }
+    }
 
     const numFf =
         components.filter((c) => c.type === "logic_dff" || c.type === "logic_jk").length +
@@ -1005,7 +1032,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             c.type === "ammeter" ||
             c.type === "voltmeter_rms" ||
             c.type === "ammeter_rms" ||
-            c.type === "oscilloscope"
+            c.type === "oscilloscope" ||
+            isBodeAnalyzerType(c.type) ||
+            isSpeakerType(c.type)
     );
 
     const hasAutonomousLcOscillator = circuitHasAutonomousLcOscillator(components);
@@ -1048,7 +1077,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     if (groundComponents.length > 0) {
         gndKey = `${groundComponents[0].id}#0`;
     } else if (powerSrc) {
-        gndKey = `${powerSrc.id}#1`;
+        if (powerSrc.type === "vsin" || powerSrc.type === "vsquare") {
+            gndKey = `${powerSrc.id}#0`;
+        } else {
+            gndKey = `${powerSrc.id}#1`;
+        }
     } else if (ohmeterComponents.length > 0) {
         gndKey = `${ohmeterComponents[0].id}#1`;
     } else {
@@ -1058,6 +1091,13 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     touch(gndKey);
     for (const g of groundComponents) {
         ufUnion(parent, `${g.id}#0`, gndKey);
+    }
+    if (
+        powerSrc &&
+        (powerSrc.type === "vsin" || powerSrc.type === "vsquare") &&
+        groundComponents.length > 0
+    ) {
+        ufUnion(parent, `${powerSrc.id}#0`, gndKey);
     }
     const gndRoot = ufFind(parent, gndKey);
     if (powerSrc) {
@@ -1115,6 +1155,39 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     const logicVhiByTerminal = computeLogicVhiByTerminalKey(components, parent);
 
+    const bodeAnalyzerComponents = components.filter((c) => isBodeAnalyzerType(c.type));
+    const hasBodeAnalyzer = bodeAnalyzerComponents.length > 0;
+    const hasBlockingTranForBode =
+        components.some((c) => c.type === "vpulse") ||
+        components.some((c) => isLogicGateComponentType(c.type) || isLogicDigitalSimType(c.type)) ||
+        hasAutonomousLcOscillator;
+    const useAcForBode = hasBodeAnalyzer && !hasBlockingTranForBode;
+    if (hasBodeAnalyzer && hasBlockingTranForBode) {
+        warnings.push(
+            "Analyse fréquentielle : incompatible avec les impulsions GImp, la logique numérique ou l’oscillateur LC autonome."
+        );
+    }
+    if (useAcForBode && !components.some((c) => c.type === "vsin")) {
+        return {
+            ok: false,
+            errors: [
+                "Analyse fréquentielle : ajoutez un générateur sinus (Sin) comme source d’entrée du filtre.",
+            ],
+            warnings,
+            netlist: "",
+            voltmeters: [],
+            ammeters: [],
+            ohmeters: [],
+            oscilloscopes: [],
+            bodeAnalyzers: [],
+            nodeMeasures: [],
+            scopesTranMeta: [],
+            bodeAcMeta: [],
+            analysisTran: false,
+            analysisAc: false,
+        };
+    }
+
     const hasLogicDff = components.some((c) => c.type === "logic_dff");
     const hasLogicJk = components.some((c) => c.type === "logic_jk");
     const hasLogicCd4511 = components.some((c) => isLogicCd4511Type(c.type));
@@ -1160,6 +1233,25 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n1 = nodeFor(`${c.id}#1`);
             const ohms = parseResistanceOhm(c.value);
             lines.push(`${spiceBranchName("R", c.id)} ${n0} ${n1} ${ohms}`);
+        } else if (c.type === "potentiometer") {
+            const n0 = nodeFor(`${c.id}#0`);
+            const n1 = nodeFor(`${c.id}#1`);
+            const n2 = nodeFor(`${c.id}#2`);
+            const total = Math.max(parseResistanceOhm(c.value), 1);
+            const pos = Math.min(100, Math.max(0, Number(c.position) || 50)) / 100;
+            const r1 = Math.max(1e-3, total * pos);
+            const r2 = Math.max(1e-3, total * (1 - pos));
+            lines.push(`${spiceBranchName("R", c.id)}a ${n0} ${n1} ${r1}`);
+            lines.push(`${spiceBranchName("R", c.id)}b ${n1} ${n2} ${r2}`);
+        } else if (c.type === "switch_spdt") {
+            const nCom = nodeFor(`${c.id}#0`);
+            const nA = nodeFor(`${c.id}#1`);
+            const nB = nodeFor(`${c.id}#2`);
+            const rOn = 0.01;
+            const rOff = 1e9;
+            const toB = Number(c.state) === 1;
+            lines.push(`${spiceBranchName("R", c.id)}a ${nCom} ${nA} ${toB ? rOff : rOn}`);
+            lines.push(`${spiceBranchName("R", c.id)}b ${nCom} ${nB} ${toB ? rOn : rOff}`);
         } else if (c.type === "capacitor") {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
@@ -1176,6 +1268,23 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n1 = nodeFor(`${c.id}#1`);
             const henry = parseInductanceHenry(c.value);
             lines.push(`${spiceBranchName("L", c.id)} ${n0} ${n1} ${henry}`);
+        } else if (isSpeakerType(c.type)) {
+            const nMinus = nodeFor(`${c.id}#0`);
+            const nPlus = nodeFor(`${c.id}#1`);
+            const kp = `${c.id}#0`;
+            const km = `${c.id}#1`;
+            if ((terminalWireCount.get(kp) || 0) === 0 || (terminalWireCount.get(km) || 0) === 0) {
+                warnings.push(
+                    `Haut-parleur ${c.id} : reliez les deux bornes (+ et −) au circuit.`
+                );
+            }
+            if (nPlus === nMinus) {
+                warnings.push(
+                    `Haut-parleur ${c.id} : les deux bornes sont sur le même nœud (${nPlus}).`
+                );
+            }
+            const ohms = parseResistanceOhm(c.value) > 0 ? parseResistanceOhm(c.value) : 8;
+            lines.push(`${spiceBranchName("R", c.id)} ${nMinus} ${nPlus} ${ohms}`);
         } else if (c.type === "diode") {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
@@ -1328,11 +1437,15 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         } else if (c.type === "vsin") {
             const nMinus = nodeFor(`${c.id}#0`);
             const nPlus = nodeFor(`${c.id}#1`);
-            const vpk = parseSinusAmplitudeVolts(c.value);
-            const freq = parseFreqHz(c.value);
             const voff = parseOffsetVolts(c.value);
-            const phi = parsePhaseDeg(c.value);
-            lines.push(`${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} SIN(${voff} ${vpk} ${freq} 0 0 ${phi})`);
+            if (useAcForBode) {
+                lines.push(`${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} DC ${voff} AC 1`);
+            } else {
+                const vpk = parseSinusAmplitudeVolts(c.value);
+                const freq = parseFreqHz(c.value);
+                const phi = parsePhaseDeg(c.value);
+                lines.push(`${spiceBranchName("V", c.id)} ${nPlus} ${nMinus} SIN(${voff} ${vpk} ${freq} 0 0 ${phi})`);
+            }
         } else if (c.type === "vsquare") {
             const nMinus = nodeFor(`${c.id}#0`);
             const nPlus = nodeFor(`${c.id}#1`);
@@ -1375,10 +1488,14 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     for (const c of components) {
-        if (c.type !== "voltmeter" && !isVoltmeterRmsType(c.type)) continue;
+        if (c.type !== "voltmeter" && !isVoltmeterRmsType(c.type) && !isBodeAnalyzerType(c.type)) continue;
         const kp = `${c.id}#0`;
         const km = `${c.id}#1`;
-        const label = isVoltmeterRmsType(c.type) ? "Voltmètre (eff.)" : "Voltmètre";
+        const label = isBodeAnalyzerType(c.type)
+            ? "Analyse fréquentielle"
+            : isVoltmeterRmsType(c.type)
+              ? "Voltmètre (eff.)"
+              : "Voltmètre";
         if ((terminalWireCount.get(kp) || 0) === 0 || (terminalWireCount.get(km) || 0) === 0) {
             warnings.push(`${label} ${c.id} : au moins une borne n’est reliée à aucun fil.`);
         }
@@ -1450,6 +1567,69 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         });
     }
 
+    const bodeAnalyzers = [];
+    const vsinForBode = components.find((c) => c.type === "vsin");
+    for (const c of bodeAnalyzerComponents) {
+        const kp = `${c.id}#0`;
+        const km = `${c.id}#1`;
+        if ((terminalWireCount.get(kp) || 0) === 0 || (terminalWireCount.get(km) || 0) === 0) {
+            warnings.push(
+                `Analyse fréquentielle ${c.id} : reliez les deux bornes (+ et −) au circuit.`
+            );
+        }
+        const n0 = nodeFor(kp);
+        const n1 = nodeFor(km);
+        if (n0 === n1) {
+            warnings.push(
+                `Analyse fréquentielle ${c.id} : les deux bornes sont sur le même nœud (${n0}).`
+            );
+        }
+        const n0IsGnd = n0 === "0" || isNodeLikelyLogicLow(n0, components, nodeFor);
+        const n1IsGnd = n1 === "0" || isNodeLikelyLogicLow(n1, components, nodeFor);
+        if (!n0IsGnd && !n1IsGnd) {
+            warnings.push(
+                `Analyse fréquentielle ${c.id} : reliez la borne − à la masse (symbole GND relié au même fil). Sans référence masse, la courbe peut ressembler à un passe-haut.`
+            );
+        }
+        let nodeOutPlus;
+        let nodeOutMinus;
+        if (n1IsGnd && !n0IsGnd) {
+            nodeOutPlus = n0;
+            nodeOutMinus = n1;
+        } else if (n0IsGnd && !n1IsGnd) {
+            nodeOutPlus = n1;
+            nodeOutMinus = n0;
+        } else {
+            nodeOutPlus = n1;
+            nodeOutMinus = n0;
+        }
+        let nodeInPlus = "0";
+        let nodeInMinus = "0";
+        if (vsinForBode) {
+            const sin0 = nodeFor(`${vsinForBode.id}#0`);
+            const sin1 = nodeFor(`${vsinForBode.id}#1`);
+            const sin0Gnd = sin0 === "0" || isNodeLikelyLogicLow(sin0, components, nodeFor);
+            const sin1Gnd = sin1 === "0" || isNodeLikelyLogicLow(sin1, components, nodeFor);
+            if (sin1Gnd && !sin0Gnd) {
+                nodeInPlus = sin0;
+                nodeInMinus = sin1;
+            } else if (sin0Gnd && !sin1Gnd) {
+                nodeInPlus = sin1;
+                nodeInMinus = sin0;
+            } else {
+                nodeInPlus = sin1;
+                nodeInMinus = sin0;
+            }
+        }
+        bodeAnalyzers.push({
+            id: c.id,
+            nodeOutPlus,
+            nodeOutMinus,
+            nodeInPlus,
+            nodeInMinus,
+        });
+    }
+
     for (const c of components) {
         if (!isOpampType(c.type)) continue;
         const kOut = `${c.id}#2`;
@@ -1497,10 +1677,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     const hasLeds = components.some(c => isLedType(c.type));
+    const hasSpeakers = components.some((c) => isSpeakerType(c.type));
     const hasLogicGates = components.some(
         c => isLogicGateComponentType(c.type) || isLogicDigitalSimType(c.type)
     );
-    const useTran =
+    let useTran =
         hasPulseSource ||
         hasLogicGates ||
         hasAutonomousLcOscillator ||
@@ -1508,7 +1689,24 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             (oscilloscopes.length > 0 ||
                 voltmetersRms.length > 0 ||
                 ammetersRms.length > 0 ||
-                hasLeds));
+                hasLeds ||
+                hasSpeakers));
+    if (hasSpeakers && acSources.length === 0) {
+        warnings.push(
+            "Haut-parleur : ajoutez un générateur sinus ou carré pour activer la restitution sonore."
+        );
+    }
+    if (hasSpeakers && useAcForBode) {
+        warnings.push(
+            "Haut-parleur inactif en mode analyse fréquentielle (Bode) — retirez l’analyseur Bode pour entendre le signal."
+        );
+    }
+    if (useAcForBode && useTran) {
+        warnings.push(
+            "Analyse fréquentielle active : l’oscilloscope et les mesures temporelles sont ignorés pour cette simulation."
+        );
+        useTran = false;
+    }
     if (hasOpamp && acSources.length > 0 && oscilloscopes.length === 0) {
         warnings.push(
             "Comparateur / hystérésis dynamique : ajoutez un oscilloscope sur la sortie de l'AOP et un générateur sinus (ou carré) sur l'entrée pour voir les seuils en simulation transitoire."
@@ -1537,8 +1735,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const ledsTranMeta = [];
     const seg7TranMeta = [];
     const logicGatesTranMeta = [];
-    const metersTranMeta = { voltmetersRms: [], ammetersRms: [], voltmeters: [], ammeters: [], ohmmeters: [] };
+    const metersTranMeta = { voltmetersRms: [], ammetersRms: [], voltmeters: [], ammeters: [], ohmmeters: [], speakers: [] };
     let analysisTran = false;
+    let analysisAc = false;
+    const bodeAcMeta = [];
 
     lines.push("");
 
@@ -1559,6 +1759,18 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         });
     }
 
+    const speakers = [];
+    for (const c of components) {
+        if (!isSpeakerType(c.type)) continue;
+        const nMinus = nodeFor(`${c.id}#0`);
+        const nPlus = nodeFor(`${c.id}#1`);
+        speakers.push({
+            id: c.id,
+            nodePlus: nPlus,
+            nodeMinus: nMinus,
+        });
+    }
+
     const ammeters = [];
     for (const c of components) {
         if (c.type !== "ammeter") continue;
@@ -1573,7 +1785,49 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         });
     }
 
-    if (useTran) {
+    if (useAcForBode) {
+        analysisAc = true;
+        if (lines[0]) lines[0] = "* Circuit Designer - netlist SPICE (.ac)";
+        const acFmin = 1;
+        const acFmax = 1e6;
+        const acPtsPerDec = 50;
+        lines.push(`.ac dec ${acPtsPerDec} ${acFmin} ${acFmax}`);
+        lines.push(".control");
+        lines.push("run");
+        const wrVars = ["frequency"];
+        function pushAcNodeWr(nodeName) {
+            if (!nodeName || nodeName === "0") {
+                return { dbCol: null, phCol: null, isGnd: true };
+            }
+            wrVars.push(`vdb(${nodeName})`);
+            const dbCol = wrVars.length * 2;
+            wrVars.push(`vp(${nodeName})`);
+            const phCol = wrVars.length * 2;
+            return { dbCol, phCol, isGnd: false, nodeName };
+        }
+        for (const ba of bodeAnalyzers) {
+            const meta = {
+                id: ba.id,
+                freqCol: 0,
+                fMin: acFmin,
+                fMax: acFmax,
+                outPlus: pushAcNodeWr(ba.nodeOutPlus),
+                outMinus: pushAcNodeWr(ba.nodeOutMinus),
+                inPlus: pushAcNodeWr(ba.nodeInPlus),
+                inMinus: pushAcNodeWr(ba.nodeInMinus),
+            };
+            bodeAcMeta.push(meta);
+        }
+        lines.push(`wrdata __AC_WAVE_PATH__ ${wrVars.join(" ")}`);
+        warnings.push(
+            `Analyse fréquentielle : balayage ${acFmin} Hz – ${acFmax >= 1e6 ? "1 MHz" : acFmax + " Hz"} (diagramme de Bode, gain en dB).`
+        );
+        if (oscilloscopes.length > 0) {
+            warnings.push(
+                "Oscilloscope présent : non alimenté en mode analyse fréquentielle — retirez l’analyseur Bode ou l’oscilloscope pour une simulation temporelle."
+            );
+        }
+    } else if (useTran) {
         const hc90Mod60 = detectHc90Mod60FromGraphicalState(components, wires);
         const tranTiming = computeTranTiming(components, { ...deckOpts, hc90Mod60 });
         const { tstepStr, tstopStr, slowClock, clockPeriodSec } = tranTiming;
@@ -1708,6 +1962,18 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 nodePlus: vm.nodePlus,
                 nodeMinus: vm.nodeMinus,
                 channel: channelWrMeta(vm.nodePlus, vm.nodeMinus),
+            });
+        }
+        for (const sp of speakers) {
+            addWrNode(sp.nodePlus);
+            addWrNode(sp.nodeMinus);
+            metersTranMeta.speakers.push({
+                id: sp.id,
+                timeCol: 0,
+                wrVarCount: wrVars.length,
+                nodePlus: sp.nodePlus,
+                nodeMinus: sp.nodeMinus,
+                channel: channelWrMeta(sp.nodePlus, sp.nodeMinus),
             });
         }
         for (const am of ammeters) {
@@ -2104,6 +2370,24 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     `74HC90 ${c.id} : MR1 et MR2 au niveau haut — compteur maintenu à 0. Reliez MR1 et MR2 à 0 V (masse).`
                 );
             }
+            if (detectHc90MrAndQ1Q3OnSameChip(c.id, components, wires)) {
+                warnings.push(
+                    `74HC90 ${c.id} : AND(Q1,Q3) relié à MR1/MR2 — comptage erratique (reset pendant les transitions). Pour 0…9 : MR1 et MR2 à la masse. AND(Q0,Q3) sert au report vers un 2e HC90 (dizaines), pas au reset.`
+                );
+            }
+            const ms1Key = `${c.id}#${IC90_PIN.MS1}`;
+            const ms2Key = `${c.id}#${IC90_PIN.MS2}`;
+            const ms1High =
+                (terminalWireCount.get(ms1Key) || 0) > 0 &&
+                isNodeLikelyLogicHigh(nodeFor(ms1Key), components, nodeFor);
+            const ms2High =
+                (terminalWireCount.get(ms2Key) || 0) > 0 &&
+                isNodeLikelyLogicHigh(nodeFor(ms2Key), components, nodeFor);
+            if (ms1High !== ms2High && (ms1High || ms2High)) {
+                warnings.push(
+                    `74HC90 ${c.id} : MS1/MS2 asymétriques — pour le mode décade 0…9, reliez MS1 et MS2 tous deux à 0 V (masse).`
+                );
+            }
         }
         if (isLogicCd4511Type(c.type)) {
             const inp = cd4511InputNodeKeys(c);
@@ -2279,6 +2563,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             nodeMeasures: [],
             scopesTranMeta: [],
             analysisTran: false,
+            analysisAc: false,
         };
     }
 
@@ -2287,6 +2572,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         netlist: netlistText,
         warnings,
         voltmeters,
+        speakers,
         ammeters,
         leds: components
             .filter(c => isLedType(c.type))
@@ -2310,6 +2596,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         metersTranMeta,
         seg7TranMeta,
         analysisTran,
+        analysisAc,
+        bodeAnalyzers,
+        bodeAcMeta,
         seg7Displays: components
             .filter(c => c.type === "seg7")
             .map(c => ({

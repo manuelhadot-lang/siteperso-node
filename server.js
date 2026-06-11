@@ -617,6 +617,13 @@ async function getMergeScopePlotsFromTranWrdata() {
     return module.mergeScopePlotsFromTranWrdata;
 }
 
+async function getMergeBodePlotsFromAcWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeBodePlotsFromAcWrdata !== "function")
+        throw new Error("Module mergeBodePlotsFromAcWrdata introuvable.");
+    return module.mergeBodePlotsFromAcWrdata;
+}
+
 async function getDeriveOscilloscopeValuesFromScopePlots() {
     const module = await importFresh(ngspiceResultParserModulePath);
     if (typeof module.deriveOscilloscopeValuesFromScopePlots !== "function")
@@ -764,6 +771,7 @@ app.post("/api/simulate", async (req, res) => {
     let mergeOscilloscopeMeasurements;
     let deriveOscilloscopeValuesFromScopePlots;
     let mergeScopePlotsFromTranWrdata;
+    let mergeBodePlotsFromAcWrdata;
     let mergeVoltmeterRmsFromTranWrdata;
     let mergeAmmeterRmsFromTranWrdata;
     let mergeVoltmeterFromTranWrdata;
@@ -787,6 +795,7 @@ app.post("/api/simulate", async (req, res) => {
         mergeOscilloscopeMeasurements = await getMergeOscilloscopeMeasurements();
         deriveOscilloscopeValuesFromScopePlots = await getDeriveOscilloscopeValuesFromScopePlots();
         mergeScopePlotsFromTranWrdata = await getMergeScopePlotsFromTranWrdata();
+        mergeBodePlotsFromAcWrdata = await getMergeBodePlotsFromAcWrdata();
         mergeVoltmeterRmsFromTranWrdata = await getMergeVoltmeterRmsFromTranWrdata();
         mergeAmmeterRmsFromTranWrdata = await getMergeAmmeterRmsFromTranWrdata();
         mergeVoltmeterFromTranWrdata = await getMergeVoltmeterFromTranWrdata();
@@ -853,12 +862,16 @@ app.post("/api/simulate", async (req, res) => {
     const netlistPath = path.join(tempDir, "circuit.cir");
     const outputPath = path.join(tempDir, "ngspice.log");
     const wavePathFs = path.join(tempDir, "tran_waves.txt");
+    const acWavePathFs = path.join(tempDir, "ac_waves.txt");
 
     try {
         let deckText = built.netlist;
         // Toujours chemins relatifs : ngspice tourne dans tempDir (évite espaces dans le chemin du projet).
         if (built.analysisTran && typeof deckText === "string") {
             deckText = deckText.split("__TRAN_WAVE_PATH__").join("tran_waves.txt");
+        }
+        if (built.analysisAc && typeof deckText === "string") {
+            deckText = deckText.split("__AC_WAVE_PATH__").join("ac_waves.txt");
         }
         let xspiceRc;
         if (typeof deckText === "string" && deckText.includes(XSPICE_DIGITAL_CM_PLACEHOLDER)) {
@@ -896,6 +909,7 @@ app.post("/api/simulate", async (req, res) => {
             .filter((part) => typeof part === "string" && part.trim().length > 0)
             .join("\n");
         const tran = !!(/** @type {{ analysisTran?: boolean }} */ (built).analysisTran);
+        const ac = !!(/** @type {{ analysisAc?: boolean }} */ (built).analysisAc);
         let voltmeterValues = mergeVoltmeterMeasurements(combinedLog, built.voltmeters, built.nodeMeasures || []);
         let ammeterValues = mergeAmmeterMeasurements(combinedLog, built.ammeters || []);
         let ledValues = mergeLedMeasurements(combinedLog, built.leds || []);
@@ -904,11 +918,13 @@ app.post("/api/simulate", async (req, res) => {
         let voltmeterRmsValues = {};
         let ammeterRmsValues = {};
         let scopePlots = {};
+        let bodePlots = {};
         let seg7Values = mergeSeg7Measurements(combinedLog, built.seg7Displays || []);
         let seg7TranPlots = {};
         let logicGateTranPlots = {};
         let ledTranPlots = {};
         let voltmeterTranPlots = {};
+        let speakerTranPlots = {};
         let waveDiag = "";
         if (tran) {
             let waveTxt = "";
@@ -936,6 +952,10 @@ app.post("/api/simulate", async (req, res) => {
             voltmeterTranPlots = mergeVoltmeterTranPlotsFromWrdata(
                 waveTxt,
                 Array.isArray(metersMeta.voltmeters) ? metersMeta.voltmeters : []
+            );
+            speakerTranPlots = mergeVoltmeterTranPlotsFromWrdata(
+                waveTxt,
+                Array.isArray(metersMeta.speakers) ? metersMeta.speakers : []
             );
             ammeterValues = mergeAmmeterFromTranWrdata(
                 waveTxt,
@@ -969,6 +989,25 @@ app.post("/api/simulate", async (req, res) => {
                 built.warnings = built.warnings || [];
                 built.warnings.push(
                     `Oscilloscope(s) ${miss} : aucune courbe dans tran_waves.txt. Reliez CH1, CH2 et la masse (borne du bas) ; vérifiez qu’il y a un générateur sinus/carré.`
+                );
+            }
+        }
+        if (ac) {
+            let acWaveTxt = "";
+            try {
+                acWaveTxt = await readFileAsync(acWavePathFs, "utf8");
+            } catch (acErr) {
+                acWaveTxt = "";
+                waveDiag = `[wrdata ac] Fichier courbes introuvable : ${acErr?.message || acErr}`;
+            }
+            const bodeMeta = Array.isArray(built.bodeAcMeta) ? built.bodeAcMeta : [];
+            bodePlots = mergeBodePlotsFromAcWrdata(acWaveTxt, bodeMeta);
+            const bodeList = Array.isArray(built.bodeAnalyzers) ? built.bodeAnalyzers : [];
+            if (bodeList.length > 0 && Object.keys(bodePlots).length === 0) {
+                const miss = bodeList.map((b) => b.id).join(", ");
+                built.warnings = built.warnings || [];
+                built.warnings.push(
+                    `Analyse fréquentielle ${miss} : aucune courbe dans ac_waves.txt. Vérifiez le câblage et le générateur sinus.`
                 );
             }
         }
@@ -1020,6 +1059,7 @@ app.post("/api/simulate", async (req, res) => {
             ledBranches: Array.isArray(built.leds) ? built.leds : [],
             ledTranPlots,
             voltmeterTranPlots,
+            speakerTranPlots,
             logicValues,
             logicIds: Array.isArray(built.logicGates) ? built.logicGates.map((g) => g.id) : [],
             logicGates: Array.isArray(built.logicGates) ? built.logicGates : [],
@@ -1040,7 +1080,9 @@ app.post("/api/simulate", async (req, res) => {
                 : [],
             oscilloscopeNodes: Array.isArray(built.oscilloscopes) ? built.oscilloscopes : [],
             analysisTran: tran,
+            analysisAc: ac,
             scopePlots,
+            bodePlots,
             seg7Values,
             seg7TranPlots,
             logicGateTranPlots,
