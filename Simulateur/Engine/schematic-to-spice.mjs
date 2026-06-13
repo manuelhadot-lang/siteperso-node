@@ -922,10 +922,11 @@ function computeTranTiming(components, deckOpts = {}) {
             tstep = tstop / TRAN_MAX_POINTS;
         }
     }
-    // quickTran (serveur Linux) : ne pas tronquer les compteurs 2 chiffres à horloge lente
-    // (sinon 1 Hz → 8 s → affichage bloqué à ~07 et modulo faux au-delà).
+    // quickTran (serveur Linux) : fenêtre .tran réduite pour limiter le temps ngspice.
+    // Décade seule : au moins 10 impulsions (0…9) — 6 provoquait un comptage bloqué à 0…5 en réseau.
+    // Deux chiffres + horloge lente : ne pas tronquer (sinon 1 Hz → 8 s → affichage ~07).
     if (deckOpts.quickTran && hc90Count > 0 && !(slowClock && hc90Count >= 2)) {
-        const quickPeriods = hc90Count >= 2 ? 8 : 6;
+        const quickPeriods = hc90Count >= 2 ? 8 : 10;
         tstop = Math.min(tstop, minPeriod * quickPeriods);
         if (tstop / tstep > TRAN_MAX_POINTS) {
             tstep = tstop / TRAN_MAX_POINTS;
