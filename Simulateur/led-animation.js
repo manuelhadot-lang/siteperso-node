@@ -1,6 +1,9 @@
 // led-animation.js — clignotement LED à partir des courbes .tran (wrdata)
 import { circuit } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
+import { quantizeVoltmeterReading } from './Engine/voltmeter-display.mjs';
+
+export { quantizeVoltmeterReading };
 import {
     detectHc90Cascade,
     hc90LabelForSeg7,
@@ -10,6 +13,10 @@ import {
     isHc90MasterResetActive,
     shouldUseIdealHc90Counting,
 } from './Engine/hc90-cascade.mjs';
+import {
+    idealRippleMod10Bcd,
+    shouldUseIdealRippleMod10Seg7,
+} from './Engine/ripple-mod10.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -361,24 +368,6 @@ function prepareVmTiming(vmPlots) {
     }
 }
 
-/** Affichage voltmètre sur signaux logiques (0 / Vhi) — évite 1,6 V en transition. */
-export function quantizeVoltmeterReading(v, samples) {
-    if (typeof v !== 'number' || !Number.isFinite(v)) return v;
-    const vals = Array.isArray(samples) ? samples.filter(Number.isFinite) : [];
-    if (vals.length >= 4) {
-        const maxV = Math.max(...vals);
-        const minV = Math.min(...vals);
-        if (maxV - minV > 1.5) {
-            const vhi = maxV >= 3 ? maxV : 5;
-            const vlo = minV <= 0.5 ? 0 : minV;
-            return v >= vhi / 2 ? vhi : vlo;
-        }
-    }
-    if (v >= 4) return Math.round(v * 10) / 10;
-    if (v <= 0.5) return 0;
-    return v;
-}
-
 export function getAnimatedVoltmeterVoltage(label) {
     const plot = anim.vmPlots[label];
     if (!plot?.time?.length) return null;
@@ -443,9 +432,20 @@ export function getAnimatedSeg7Segments(label) {
         const bcd = getAnimatedHc90Bcd(hc90Label);
         if (bcd != null) return { segments: bcdDigitToSeg7Segments(bcd) };
     }
-    const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const clockPeriod = getGimpPeriodSec() ?? 1;
     const elapsed = (performance.now() - anim.startMs) / 1000;
+    if (
+        shouldUseIdealRippleMod10Seg7(
+            label,
+            circuit.components,
+            circuit.wires,
+            circuit.autoJunctions,
+            clockPeriod
+        )
+    ) {
+        return { segments: bcdDigitToSeg7Segments(idealRippleMod10Bcd(elapsed, clockPeriod)) };
+    }
+    const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const tSample =
         hasHc90DecadeCounter() && plotSpan > 0 && clockPeriod > 0
             ? hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan)

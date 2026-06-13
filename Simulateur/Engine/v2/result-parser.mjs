@@ -6,6 +6,7 @@
 
 import { logicLevelFromVoltage } from "../logic-rails.mjs";
 import { bcdDigitToSeg7Segments, bcdFromQVoltages, SEG7_NAMES as BCD_SEG7_NAMES } from "../bcd-seg7.mjs";
+import { quantizeVoltmeterReading } from "../voltmeter-display.mjs";
 
 
 
@@ -672,16 +673,8 @@ export function mergeVoltmeterFromTranWrdata(waveTxt, meta) {
         }
         if (!vals.length) continue;
         const raw = vals[vals.length - 1];
-        const vhi = Math.max(...vals.filter(Number.isFinite));
-        const vlo = Math.min(...vals.filter(Number.isFinite));
-        let voltage = raw;
-        if (vhi - vlo > 1.5) {
-            const railHi = vhi >= 3 ? vhi : 5;
-            const railLo = vlo <= 0.5 ? 0 : vlo;
-            voltage = raw >= railHi / 2 ? railHi : railLo;
-        }
         out[m.id] = {
-            voltage,
+            voltage: quantizeVoltmeterReading(raw, vals),
             unit: "V",
             nodePlus: m.nodePlus,
             nodeMinus: m.nodeMinus,

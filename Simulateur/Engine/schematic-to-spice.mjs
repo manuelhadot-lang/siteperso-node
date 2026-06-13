@@ -369,6 +369,71 @@ function ufUnion(parent, a, b) {
     if (ra !== rb) parent.set(ra, rb);
 }
 
+/**
+ * Détecte un AND de reset mod-10 sur deux sorties Q de bascules D (indices DFF1…DFF4).
+ * @returns {{ a: number, b: number } | null}
+ */
+function getRippleMod10ResetAndIndices(components, parent) {
+    const dffs = components.filter((c) => c.type === "logic_dff");
+    const ands = components.filter((c) => c.type === "logic_and" || c.type === "and");
+    if (dffs.length < 4 || ands.length === 0) return null;
+
+    const dffIndex = (c) => {
+        const m = /(\d+)$/.exec(String(c.id || ""));
+        return m ? parseInt(m[1], 10) : null;
+    };
+    const sameNet = (a, b) => ufFind(parent, a) === ufFind(parent, b);
+
+    for (const and of ands) {
+        const outKey = `${and.id}#2`;
+        if (!parent.has(outKey)) continue;
+        if (!dffs.some((d) => sameNet(outKey, `${d.id}#5`))) continue;
+
+        const inputIdx = [];
+        for (const inKey of [`${and.id}#0`, `${and.id}#1`]) {
+            if (!parent.has(inKey)) continue;
+            for (const d of dffs) {
+                const qKey = `${d.id}#2`;
+                if (parent.has(qKey) && sameNet(inKey, qKey)) {
+                    const idx = dffIndex(d);
+                    if (idx != null && !inputIdx.includes(idx)) inputIdx.push(idx);
+                }
+            }
+        }
+        if (inputIdx.length !== 2) continue;
+        inputIdx.sort((a, b) => a - b);
+        return { a: inputIdx[0], b: inputIdx[1] };
+    }
+    return null;
+}
+
+/**
+ * AND de reset mal câblé sur compteur ripple 4 bits (symptôme typique : 4…9 au lieu de 0…9).
+ * @returns {string|null}
+ */
+function detectRippleMod10ResetAndWarning(components, parent) {
+    const pair = getRippleMod10ResetAndIndices(components, parent);
+    if (!pair) return null;
+    const { a, b } = pair;
+    if (a === 2 && b === 4) return null;
+    if (a === 1 && b === 4) {
+        return (
+            "Compteur ripple mod-10 : AND sur la Q de DFF1 et DFF4 — reset au 9 (1001) au lieu du 10 (1010), " +
+            "comptage souvent bloqué entre 4 et 8. Corrigez : AND sur DFF2.Q et DFF4.Q (bits de poids 2 et 8)."
+        );
+    }
+    if (a === 3 && b === 4) {
+        return (
+            "Compteur ripple mod-10 : AND sur DFF3.Q et DFF4.Q — reset au 12 (1100), pas une décade 0…9. " +
+            "Corrigez : AND sur DFF2.Q et DFF4.Q pour détecter 1010."
+        );
+    }
+    return (
+        `Compteur ripple mod-10 : AND de reset sur DFF${a} et DFF${b} — pour le 10 décimal (1010), ` +
+        "reliez AND à DFF2.Q et DFF4.Q seulement."
+    );
+}
+
 /** Résistances / passifs : même nœud électrique aux deux bornes (pour détecter la rétroaction AOP). */
 function ufUnionPassiveInternals(parent, components) {
     for (const c of components) {
@@ -824,6 +889,8 @@ const TRAN_MAX_POINTS = 50000;
 const SLOW_CLOCK_PERIOD_SEC = 1;
 /** Un seul HC90 : 2 cycles décade (0…9 × 2). */
 const SLOW_CLOCK_TRAN_PERIODS = 20;
+/** Compteur ripple mod-10 : 2 décades complètes (0…9 × 2) + marge reset. */
+const RIPPLE_MOD10_TRAN_PERIODS = 22;
 /** Deux HC90 en cascade : cycle complet 0…99 (100 impulsions) ou 0…59 (60) si reset mod-60. */
 const SLOW_CLOCK_TWO_DIGIT_PERIODS = 100;
 const SLOW_CLOCK_MOD60_PERIODS = 60;
@@ -922,12 +989,24 @@ function computeTranTiming(components, deckOpts = {}) {
             tstep = tstop / TRAN_MAX_POINTS;
         }
     }
+    if (deckOpts.rippleMod10) {
+        tstop = Math.max(tstop, minPeriod * RIPPLE_MOD10_TRAN_PERIODS);
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
+        }
+    }
     // quickTran (serveur Linux) : fenêtre .tran réduite pour limiter le temps ngspice.
     // Décade seule : au moins 10 impulsions (0…9) — 6 provoquait un comptage bloqué à 0…5 en réseau.
     // Deux chiffres + horloge lente : ne pas tronquer (sinon 1 Hz → 8 s → affichage ~07).
     if (deckOpts.quickTran && hc90Count > 0 && !(slowClock && hc90Count >= 2)) {
         const quickPeriods = hc90Count >= 2 ? 8 : 10;
         tstop = Math.min(tstop, minPeriod * quickPeriods);
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
+        }
+    }
+    if (deckOpts.quickTran && deckOpts.rippleMod10) {
+        tstop = Math.max(tstop, minPeriod * RIPPLE_MOD10_TRAN_PERIODS);
         if (tstop / tstep > TRAN_MAX_POINTS) {
             tstep = tstop / TRAN_MAX_POINTS;
         }
@@ -1155,6 +1234,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     }
 
     const logicVhiByTerminal = computeLogicVhiByTerminalKey(components, parent);
+
+    const rippleMod10Pair = getRippleMod10ResetAndIndices(components, parent);
+    if (rippleMod10Pair?.a === 2 && rippleMod10Pair?.b === 4) {
+        deckOpts.rippleMod10 = true;
+    }
 
     const bodeAnalyzerComponents = components.filter((c) => isBodeAnalyzerType(c.type));
     const hasBodeAnalyzer = bodeAnalyzerComponents.length > 0;
@@ -2430,6 +2514,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             }
         }
     }
+
+    const rippleMod10Warn = detectRippleMod10ResetAndWarning(components, parent);
+    if (rippleMod10Warn) warnings.push(rippleMod10Warn);
 
     const logicGates = [];
     for (const c of components) {

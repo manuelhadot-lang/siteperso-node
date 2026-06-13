@@ -154,8 +154,10 @@ export function appendLogicDffXspiceNetlist(c, nodeFor, vhi, lines, spiceBranchN
     }
 
     const mname = dffModelName(c.id);
+    // Reset asynchrone ripple mod-10 : maintien plus long pour éviter 9→4 (course avec l’horloge ripple).
+    const srDelay = opts.rippleMod10 ? "100e-9" : "2e-9";
     lines.push(
-        `.model ${mname} d_dff(clk_delay=2e-9 set_delay=2e-9 reset_delay=2e-9 ic=0 rise_delay=2e-9 fall_delay=2e-9)`
+        `.model ${mname} d_dff(clk_delay=2e-9 set_delay=${srDelay} reset_delay=${srDelay} ic=0 rise_delay=2e-9 fall_delay=2e-9)`
     );
 
     // d_dff : ports scalaires (data clk set reset out Nout), sans crochets [ ].

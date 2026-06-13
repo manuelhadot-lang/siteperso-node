@@ -53,7 +53,7 @@ export function logicCd4511BsourceInternalNodeKeys(c) {
     if (!c?.id) return [];
     const keys = [];
     for (const s of ["a", "b", "c", "d"]) {
-        keys.push(`__lat_${s}`, `__lat_${s}_qi`);
+        keys.push(`__inbuf_${s}`, `__lat_${s}`, `__lat_${s}_qi`);
     }
     return keys.map((k) => `${c.id}#${k}`);
 }
@@ -86,6 +86,14 @@ export function appendLogicCd4511BsourceNetlist(c, nodeFor, vhi, lines, spiceBra
 
     const leTransparent = `(1-${stepGt(nLE, th)})`;
 
+    // Entrées BCD lues via VCVS (haute impédance) : évite de perturber les Q des bascules
+    // ripple au reset asynchrone (symptôme 9→4 au lieu de 9→0 quand B/D partagent le fil AND).
+    const inputBuf = (suffix, nIn) => {
+        const nBuf = nodeFor(`${c.id}#__inbuf_${suffix}`);
+        lines.push(`${spiceBranchName("E", c.id)}_buf${suffix} ${nBuf} 0 ${nIn} 0 1`);
+        return nBuf;
+    };
+
     const latchBit = (suffix, nIn) => {
         const nLat = nodeFor(`${c.id}#__lat_${suffix}`);
         const nQi = nodeFor(`${c.id}#__lat_${suffix}_qi`);
@@ -98,10 +106,10 @@ export function appendLogicCd4511BsourceNetlist(c, nodeFor, vhi, lines, spiceBra
         return nLat;
     };
 
-    const nLa = latchBit("a", nA);
-    const nLb = latchBit("b", nB);
-    const nLc = latchBit("c", nC);
-    const nLd = latchBit("d", nD);
+    const nLa = latchBit("a", inputBuf("a", nA));
+    const nLb = latchBit("b", inputBuf("b", nB));
+    const nLc = latchBit("c", inputBuf("c", nC));
+    const nLd = latchBit("d", inputBuf("d", nD));
 
     const biOn = stepGt(nBI, th);
     const ltActive = `(1-${stepGt(nLT, th)})`;
