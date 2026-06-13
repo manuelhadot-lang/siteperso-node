@@ -371,6 +371,24 @@ export function hc90TranSampleTimeSec(elapsedSec, clockPeriodSec, plotSpanSec, p
 const CD4511_BCD_PINS = ["A", "B", "C", "D"];
 const SEG7_SEG_PINS = ["a", "b", "c", "d", "e", "f", "g"];
 
+/**
+ * LED dont l’anode est sur une sortie Q0…Q3 d’un 74HC90 (directement ou via résistance).
+ * @returns {{ hc90Label: string, qIndex: number } | null}
+ */
+export function hc90QBitForLed(ledLabel, components, wires, autoJunctions = []) {
+    if (!ledLabel) return null;
+    const anodeNet = reachableJonctions(`${ledLabel}_in`, wires, autoJunctions);
+    for (const hc of components) {
+        if (hc.type !== "ic_74hc90" || !hc.label) continue;
+        for (let i = 0; i < 4; i++) {
+            if (anodeNet.has(`${hc.label}_Q${i}`)) {
+                return { hc90Label: hc.label, qIndex: i };
+            }
+        }
+    }
+    return null;
+}
+
 /** HC90 dont Q0…Q3 alimentent un CD4511 relié à cet afficheur SEG. */
 export function hc90LabelForSeg7(segLabel, components, wires, autoJunctions = []) {
     if (!segLabel) return null;

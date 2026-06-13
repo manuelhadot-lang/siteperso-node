@@ -4,6 +4,7 @@ import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs'
 import {
     detectHc90Cascade,
     hc90LabelForSeg7,
+    hc90QBitForLed,
     hc90TranSampleTimeSec,
     idealHc90BcdForLabel,
     isHc90MasterResetActive,
@@ -14,6 +15,8 @@ import {
 export const PERSISTENCE_FREQ_HZ = 50;
 
 const LED_ON_A = 1e-4;
+/** Courant simulé pour une LED HC90 en mode comptage idéal (Render / .tran court). */
+const HC90_IDEAL_LED_ON_A = 0.008;
 
 /** Courant maxi recommandé pour une LED standard (au-delà → grillée). */
 export const LED_MAX_SAFE_CURRENT_A = 0.02;
@@ -393,6 +396,19 @@ export function hasVoltmeterAnimation() {
 }
 
 export function getAnimatedLedCurrent(label) {
+    if (syncHc90MasterResetClock()) {
+        const qMap = hc90QBitForLed(label, circuit.components, circuit.wires, circuit.autoJunctions);
+        if (qMap) return 0;
+    }
+    const clockPeriod = getGimpPeriodSec();
+    const cascade = anim.hc90Cascade ?? detectHc90Cascade(circuit.components, circuit.wires, circuit.autoJunctions);
+    const qMap = hc90QBitForLed(label, circuit.components, circuit.wires, circuit.autoJunctions);
+    if (qMap && shouldUseIdealHc90Counting(cascade, clockPeriod)) {
+        const bcd = getAnimatedHc90Bcd(qMap.hc90Label);
+        if (bcd != null) {
+            return (bcd >> qMap.qIndex) & 1 ? HC90_IDEAL_LED_ON_A : 0;
+        }
+    }
     const plot = anim.plots[label];
     if (!plot) return null;
     if (anim.ledPersistence[label]) {
@@ -401,7 +417,6 @@ export function getAnimatedLedCurrent(label) {
     const period = anim.ledPeriods[label] ?? 1;
     const elapsed = (performance.now() - anim.startMs) / 1000;
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
-    const clockPeriod = getGimpPeriodSec();
     const tSample =
         hasHc90DecadeCounter() && plotSpan > 0 && clockPeriod > 0
             ? hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan)

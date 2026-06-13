@@ -339,6 +339,46 @@ let deriveOscilloscopeValuesFromScopePlotsFn = null;
 let mergeScopePlotsFromTranWrdataFn = null;
 const SIM_ENGINE_BUILD_TAG = "v2-reset-2026-05-09";
 
+const ngspiceXspiceProbeModuleUrl = pathToFileURL(
+    path.join(__dirname, "Simulateur", "Engine", "ngspice-xspice-probe.mjs")
+).href;
+/** @type {{ exe: string | null; envKey: string | null; value: boolean | null }} */
+let cachedNgspiceXspice = { exe: null, envKey: null, value: null };
+
+function envPathKey(env) {
+    return env && (env.PATH || env.Path) ? String(env.PATH || env.Path) : "";
+}
+
+function forceBsourceFromEnv() {
+    const v = process.env.FORCE_BSOURCE;
+    return v === "1" || String(v || "").toLowerCase() === "true";
+}
+
+/**
+ * Détecte si le binaire ngspice du serveur supporte XSPICE (résultat mis en cache).
+ * @param {string} exe
+ * @param {NodeJS.ProcessEnv} env
+ */
+async function serverNgspiceHasXspice(exe, env) {
+    const envKey = envPathKey(env);
+    if (
+        cachedNgspiceXspice.exe === exe &&
+        cachedNgspiceXspice.envKey === envKey &&
+        cachedNgspiceXspice.value !== null
+    ) {
+        return cachedNgspiceXspice.value;
+    }
+    try {
+        const mod = await import(ngspiceXspiceProbeModuleUrl);
+        const value = mod.ngspiceHasXspice(exe, env);
+        cachedNgspiceXspice = { exe, envKey, value };
+        return value;
+    } catch {
+        cachedNgspiceXspice = { exe, envKey, value: false };
+        return false;
+    }
+}
+
 /**
  * Binaire ngspice : NGSPICE / NGSPICE_PATH, sinon Simulateur/bin/ngspice(.exe)
  * si vous y copiez le bundle (bin, lib, share).
@@ -817,17 +857,19 @@ app.post("/api/simulate", async (req, res) => {
 
     const gs = Number(req.body?.gridStep);
     const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
+    const ngspiceEnv = applyPathPrepend(process.env, prependPath);
     const linuxServer = process.platform !== "win32";
+    const hasXspice = await serverNgspiceHasXspice(ngspiceExe, ngspiceEnv);
+    const forceBsource = forceBsourceFromEnv() || !hasXspice;
     const deckOpts = {
         repoRoot: __dirname,
         ngspiceExe,
-        ngspiceEnv: applyPathPrepend(process.env, prependPath),
-        // ngspice-39 (apt / Render) : d_genlut et parfois d_dff instables → sources B.
-        forceBsourceCd4511: linuxServer,
-        forceBsourceDff: linuxServer,
-        // Le 74HC90 (sections ÷2/÷5) est modélisé par des bascules JK : on garde XSPICE
-        // (d_jkff, primitive stable) même sur Linux — les sources B ne convergent pas
-        // à travers les fronts d'horloge. Repli automatique en source B si XSPICE absent.
+        ngspiceEnv,
+        // XSPICE si le binaire le supporte (comportement d’origine sur Render).
+        // Repli sources B uniquement si XSPICE absent ou FORCE_BSOURCE=1 (ngspice apt instable).
+        forceBsourceCd4511: forceBsource,
+        forceBsourceDff: forceBsource,
+        // 74HC90 : bascules JK XSPICE si disponibles (repli B automatique sinon).
         quickTran: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
@@ -1779,10 +1821,17 @@ server.listen(PORT, LISTEN_HOST, () => {
         `   ↳ CD4511 / bascules XSPICE : digital.cm ${digitalCm ? "OK" : "ABSENT"} — vérifiez avec npm run check-ngspice`
     );
     import(pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "ngspice-xspice-probe.mjs")).href)
-        .then((m) => {
+        .then(async (m) => {
             const env = applyPathPrepend(process.env, prependPath);
-            const xspice = m.ngspiceHasXspice(ngspiceExe, env);
+            const xspice = await serverNgspiceHasXspice(ngspiceExe, env);
             console.log(`   ↳ XSPICE dans le binaire ngspice : ${xspice ? "oui" : "non (CD4511 non simulé)"}`);
+            if (xspice) {
+                console.log("   ↳ CD4511 / bascules D : modèle XSPICE (digital.cm)");
+            } else if (forceBsourceFromEnv()) {
+                console.log("   ↳ FORCE_BSOURCE=1 : modèle sources B imposé");
+            } else {
+                console.log("   ↳ Repli sources B (XSPICE indisponible sur ce binaire)");
+            }
         })
         .catch(() => {});
     if (siteAccessPasswordConfigured()) {
