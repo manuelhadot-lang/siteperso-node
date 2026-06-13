@@ -860,15 +860,15 @@ app.post("/api/simulate", async (req, res) => {
     const ngspiceEnv = applyPathPrepend(process.env, prependPath);
     const linuxServer = process.platform !== "win32";
     const hasXspice = await serverNgspiceHasXspice(ngspiceExe, ngspiceEnv);
-    const forceBsource = forceBsourceFromEnv() || !hasXspice;
+    const forceAllBsource = forceBsourceFromEnv() || !hasXspice;
     const deckOpts = {
         repoRoot: __dirname,
         ngspiceExe,
         ngspiceEnv,
-        // XSPICE si le binaire le supporte (comportement d’origine sur Render).
-        // Repli sources B uniquement si XSPICE absent ou FORCE_BSOURCE=1 (ngspice apt instable).
-        forceBsourceCd4511: forceBsource,
-        forceBsourceDff: forceBsource,
+        // CD4511 : d_genlut plante sur ngspice apt (Render) → sources B obligatoires sous Linux.
+        // Bascules D : XSPICE si le binaire le supporte ; repli B sinon.
+        forceBsourceCd4511: linuxServer || forceAllBsource,
+        forceBsourceDff: forceAllBsource,
         // 74HC90 : bascules JK XSPICE si disponibles (repli B automatique sinon).
         quickTran: linuxServer,
     };
@@ -1824,9 +1824,14 @@ server.listen(PORT, LISTEN_HOST, () => {
         .then(async (m) => {
             const env = applyPathPrepend(process.env, prependPath);
             const xspice = await serverNgspiceHasXspice(ngspiceExe, env);
-            console.log(`   ↳ XSPICE dans le binaire ngspice : ${xspice ? "oui" : "non (CD4511 non simulé)"}`);
-            if (xspice) {
+            console.log(`   ↳ XSPICE dans le binaire ngspice : ${xspice ? "oui" : "non"}`);
+            if (process.platform !== "win32") {
+                console.log("   ↳ CD4511 (Render/Linux) : modèle sources B (d_genlut apt incompatible)");
+            }
+            if (xspice && process.platform === "win32") {
                 console.log("   ↳ CD4511 / bascules D : modèle XSPICE (digital.cm)");
+            } else if (xspice) {
+                console.log("   ↳ Bascules D / JK HC90 : XSPICE si disponible");
             } else if (forceBsourceFromEnv()) {
                 console.log("   ↳ FORCE_BSOURCE=1 : modèle sources B imposé");
             } else {
