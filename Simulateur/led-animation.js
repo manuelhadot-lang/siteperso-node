@@ -170,6 +170,18 @@ function resetArduinoRuntimes() {
     }
 }
 
+/** Sketch recompilé ou modifié : réinitialise runtime, LED pilotées et phase d'animation. */
+export function onArduinoSketchUpdated() {
+    syncArduinoSketchesFromEditor();
+    for (const comp of circuit.components) {
+        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+    }
+    resetArduinoRuntimes();
+    indexArduinoLedDrives();
+    if (anim.startMs > 0 || anim.rafId != null) anim.startMs = performance.now();
+    ensureArduinoLedAnimation();
+}
+
 function getSourceFrequencyHz() {
     for (const comp of circuit.components) {
         if ((comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') && comp.frequency > 0) return comp.frequency;
@@ -623,6 +635,11 @@ export function getAnimatedLedCurrent(label) {
         if (bcd != null) {
             return (bcd >> qMap.qIndex) & 1 ? HC90_IDEAL_LED_ON_A : 0;
         }
+    }
+    // LED câblée sur GPIO Arduino : le sketch interprété prime sur d'anciennes courbes .tran SPICE.
+    if (anim.arduinoLedDrive[label]) {
+        const ideal = getIdealArduinoLedCurrent(label);
+        if (ideal != null) return ideal;
     }
     const plot = anim.plots[label];
     if (!plot) {

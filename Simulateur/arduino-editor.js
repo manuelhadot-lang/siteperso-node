@@ -1,10 +1,10 @@
 /** Panneau latéral droit — éditeur sketch Arduino + compilation arduino-cli. */
-import { saveState, circuit } from './state.js';
+import { saveState, circuit, flags } from './state.js';
 import { draw, resizeCanvas } from './renderer.js';
+import { onArduinoSketchUpdated } from './led-animation.js';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { registerArduinoSketchSync, syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
-import { flags } from './state.js';
 
 let activeBoard = null;
 
@@ -96,7 +96,14 @@ export async function compileActiveSketch() {
         const data = await r.json();
         activeBoard.lastCompileOk = !!data.ok;
         activeBoard.lastCompileLog = data.log || (data.errors || []).join('\n');
-        if (data.ok) applyArduinoSketchToComponent(activeBoard);
+        if (data.ok) {
+            applyArduinoSketchToComponent(activeBoard);
+            onArduinoSketchUpdated();
+            if (flags.isSimulating) {
+                import('./simulation.js').then((m) => m.requestLiveSimulation());
+            }
+            activeBoard.lastCompileLog = `${activeBoard.lastCompileLog}\n\n✓ Sketch appliqué au simulateur.`;
+        }
         if (log) log.textContent = activeBoard.lastCompileLog;
         draw();
         if (!data.ok) {
