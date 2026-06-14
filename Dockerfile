@@ -6,20 +6,22 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ngspice \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Installer arduino-cli (Linux amd64)
+# Installer arduino-cli (Linux amd64) — curl requis (absent de node:20-slim)
 ARG ARDUINO_CLI_VERSION=1.2.0
 RUN curl -fsSL \
     "https://downloads.arduino.cc/arduino-cli/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz" \
     | tar -xz -C /usr/local/bin arduino-cli \
-    && chmod +x /usr/local/bin/arduino-cli
+    && chmod +x /usr/local/bin/arduino-cli \
+    && /usr/local/bin/arduino-cli version
 # Core Arduino UNO (avr) — indispensable pour compiler
 ENV ARDUINO_DIRECTORIES_DATA=/opt/arduino-data
 RUN mkdir -p "$ARDUINO_DIRECTORIES_DATA" \
-    && arduino-cli config init --dest-dir "$ARDUINO_DIRECTORIES_DATA" \
-    && arduino-cli core update-index \
-    && arduino-cli core install arduino:avr
+    && /usr/local/bin/arduino-cli config init --dest-dir "$ARDUINO_DIRECTORIES_DATA" \
+    && /usr/local/bin/arduino-cli core update-index \
+    && /usr/local/bin/arduino-cli core install arduino:avr
 ENV ARDUINO_CLI=/usr/local/bin/arduino-cli
 
 # 3. Définition du répertoire de travail dans le conteneur

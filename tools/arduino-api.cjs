@@ -25,7 +25,7 @@ function resolveArduinoCliPath() {
         if (path.isAbsolute(fromEnv) && fs.existsSync(fromEnv)) return fromEnv;
         const fromCwd = path.resolve(process.cwd(), fromEnv);
         if (fs.existsSync(fromCwd)) return fromCwd;
-        return fromEnv;
+        // Chemin ARDUINO_CLI invalide (ex. build Docker incomplet) — retomber sur le PATH
     }
     if (process.platform === "win32") {
         const desktop = path.join(process.env.USERPROFILE || process.env.HOME || "", "Desktop");
@@ -88,7 +88,9 @@ async function getArduinoCliStatus() {
         fqbnDefault: DEFAULT_FQBN,
         hint: versionRun.ok
             ? null
-            : "Installez arduino-cli (https://arduino.github.io/arduino-cli/) puis définissez ARDUINO_CLI ou ajoutez-le au PATH.",
+            : process.env.ARDUINO_CLI && !fs.existsSync(cleanEnvExecutable(process.env.ARDUINO_CLI))
+              ? `ARDUINO_CLI pointe vers un fichier absent (${process.env.ARDUINO_CLI}). Reconstruisez l'image Docker ou corrigez la variable.`
+              : "Installez arduino-cli (https://arduino.github.io/arduino-cli/) puis définissez ARDUINO_CLI ou ajoutez-le au PATH.",
     };
 }
 
