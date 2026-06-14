@@ -1,0 +1,73 @@
+/** Géométrie Arduino UNO R3 — brochage réel (headers power/analog + digital). */
+import { GRID_SIZE as G } from './state.js';
+
+export const UNO_BOX_L = -4 * G;
+export const UNO_BOX_R = 5 * G;
+export const UNO_BOX_T = -7 * G;
+export const UNO_BOX_B = 8 * G;
+export const UNO_JUNC_L = -5 * G;
+export const UNO_JUNC_R = 6 * G;
+export const UNO_LABEL_L = UNO_BOX_L + G / 2;
+export const UNO_LABEL_R = UNO_BOX_R - G / 2;
+export const UNO_HIT_DX = 6 * G + G / 2;
+export const UNO_HIT_DY = 8 * G + G / 2;
+
+/** Broches header gauche (haut → bas) : alimentation + analogique. */
+export const UNO_LEFT_PINS = [
+    'IOREF', 'RESET', '3V3', '5V', 'GND', 'GND2', 'VIN',
+    'A0', 'A1', 'A2', 'A3', 'A4', 'A5',
+];
+
+/** Broches header droit (haut → bas) : D13 → D0. */
+export const UNO_RIGHT_PINS = [
+    'D13', 'D12', 'D11', 'D10', 'D9', 'D8', 'D7', 'D6',
+    'D5', 'D4', 'D3', 'D2', 'D1', 'D0',
+];
+
+export const UNO_LEFT_PIN_Y = UNO_LEFT_PINS.map((_, i) => (i - 6) * G);
+
+/** 14 broches : positions entières sur la grille (évite le décalage i - 6.5). */
+export const UNO_RIGHT_PIN_Y = UNO_RIGHT_PINS.map((_, i) => (i - 6) * G);
+
+/** Indice SPICE #0…#26 (ordre : gauche puis droite). */
+export const UNO_PIN = {};
+UNO_LEFT_PINS.forEach((name, i) => {
+    UNO_PIN[name] = i;
+});
+UNO_RIGHT_PINS.forEach((name, i) => {
+    UNO_PIN[name] = UNO_LEFT_PINS.length + i;
+});
+
+export const UNO_PIN_COUNT = UNO_LEFT_PINS.length + UNO_RIGHT_PINS.length;
+
+export const UNO_JONCTION_SUFFIX = { ...UNO_PIN };
+
+export const UNO_DIGITAL_PINS = UNO_RIGHT_PINS.slice().reverse();
+export const UNO_ANALOG_PINS = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+
+export function arduinoUnoJonctionToTerminalKey(label, jonctionId) {
+    if (!label || !jonctionId?.startsWith(`${label}_`)) return null;
+    const suffix = jonctionId.slice(label.length + 1);
+    const idx = UNO_JONCTION_SUFFIX[suffix];
+    if (idx === undefined) return null;
+    return `${label}#${idx}`;
+}
+
+export function arduinoUnoTerminalKeys(label) {
+    const keys = [];
+    for (let i = 0; i < UNO_PIN_COUNT; i++) keys.push(`${label}#${i}`);
+    return keys;
+}
+
+export const DEFAULT_ARDUINO_SKETCH = `// Arduino UNO — sketch minimal
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+}
+`;

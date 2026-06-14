@@ -1,0 +1,69 @@
+{
+  "name": "simulateur-h",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Simulateur H — application Windows (circuits électroniques + ngspice)",
+  "main": "main.js",
+  "author": "STI2D",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "fr.sti2d.simulateur-h",
+    "productName": "Simulateur H",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "simulate-server.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../Simulateur",
+        "to": "simulator-app/Simulateur",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../tools/ngspice-bundle.cjs",
+        "to": "simulator-app/tools/ngspice-bundle.cjs"
+      },
+      {
+        "from": "../tools/arduino-api.cjs",
+        "to": "simulator-app/tools/arduino-api.cjs"
+      },
+      {
+        "from": "../tools/arduino-routes.cjs",
+        "to": "simulator-app/tools/arduino-routes.cjs"
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Simulateur H"
+    }
+  }
+}

@@ -2,8 +2,9 @@
 import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
 import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
+import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
 import { draw } from './renderer.js';
-import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation } from './led-animation.js';
+import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
 import { openScopePanel, isScopePanelOpen, getActiveScope } from './scope-panel.js';
 import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
@@ -23,11 +24,14 @@ export function requestLiveSimulation() {
     }, 400);
 }
 
+import { prepareArduinoForSimulation } from './arduino-editor.js';
+import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
+
 const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
-    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', led: 'diode_led', seg7: 'seg7',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', led: 'diode_led', seg7: 'seg7',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -125,6 +129,9 @@ function jonctionIdToTerminalKey(jonctionId) {
         } else if (comp.type === 'ic_74hc90') {
             const key = ic74hc90JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
+        } else if (comp.type === 'arduino_uno') {
+            const key = arduinoUnoJonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
         } else if (comp.type === 'potentiometer') {
             if (jonctionId === `${id}_in`) return `${id}#0`;
             if (jonctionId === `${id}_wip`) return `${id}#1`;
@@ -166,6 +173,7 @@ function buildSimulationState() {
             out.position = comp.position ?? 50;
         }
         if (comp.type === 'switch_spdt') out.state = comp.state ?? 0;
+        if (comp.type === 'push_button') out.state = comp.state ?? 0;
         if (comp.type === 'capacitor') out.value = comp.value || '1u';
         if (comp.type === 'inductor') out.value = comp.value || '1m';
         if (comp.type === 'diode') out.value = comp.value || '1N4148';
@@ -182,6 +190,16 @@ function buildSimulationState() {
             out.ch2VoltsPerDiv = comp.ch2VoltsPerDiv ?? 1;
             out.ch1PositionDiv = comp.ch1PositionDiv ?? 0;
             out.ch2PositionDiv = comp.ch2PositionDiv ?? 0;
+        }
+        if (comp.type === 'arduino_uno') {
+            applyArduinoSketchToComponent(comp);
+            out.sketch = comp.sketch || '';
+            out.fqbn = comp.fqbn || 'arduino:avr:uno';
+            out.pinModes = comp.pinModes || {};
+            out.pinLevels = comp.pinLevels || {};
+            out.pinPulses = comp.pinPulses || {};
+            out.pinPhases = comp.pinPhases || [];
+            out.avrRegisters = comp.avrRegisters || null;
         }
         return out;
     });
@@ -208,7 +226,10 @@ function buildSimulationState() {
 /** URL de POST /api/simulate (serveur Node, même machine que la page). */
 function resolveSimulationApiBaseUrl() {
     const { protocol, hostname, port, pathname } = window.location;
-    if (protocol === 'file:') return 'http://127.0.0.1:3000';
+    const isSimulateurH = new URLSearchParams(window.location.search).get('app') === 'h';
+    if (protocol === 'file:') {
+        return isSimulateurH ? 'http://127.0.0.1:43721' : 'http://127.0.0.1:3000';
+    }
     if (pathname.startsWith('/Simulateur')) return window.location.origin;
     const p = port || (protocol === 'https:' ? '443' : '80');
     if (p === '3000' || p === '80' || p === '443') return window.location.origin;
@@ -276,6 +297,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
         return;
     }
     simulationInFlight = true;
+    prepareArduinoForSimulation();
     const baseUrl = resolveSimulationApiBaseUrl();
     const payload = { state: buildSimulationState(), gridStep: GRID_SIZE };
     const wiredCount = circuit.wires.filter((w) => w.fromJonctionId && w.toJonctionId).length;
@@ -346,6 +368,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 const ledPlots = result.ledTranPlots || {};
                 const seg7Plots = result.seg7TranPlots || {};
                 const logicGateTranPlots = result.logicGateTranPlots || {};
+                const arduinoIdeal = hasArduinoStaticIdealDisplay();
                 if (
                     Object.keys(vmPlots).length ||
                     Object.keys(ledPlots).length ||
@@ -355,7 +378,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
                     startLedAnimation(ledPlots, vmPlots, seg7Plots, logicGateTranPlots, {
                         keepClock: isSilentUpdate,
                     });
-                } else {
+                } else if (!arduinoIdeal) {
                     stopLedAnimation();
                 }
                 const speakerPlots = result.speakerTranPlots || {};
@@ -374,6 +397,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
             });
             if (hasBurntLed && !hasLedAnimation() && !hasVoltmeterAnimation()) startBurntLedSmokeLoop();
             flags.isSimulating = true;
+            ensureArduinoLedAnimation();
             if (btnSim) { btnSim.innerText = "▶️ Simulation Live"; btnSim.style.background = "#00bcd4"; }
             if (btnStop) btnStop.classList.remove('disabled');
             draw();

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simulateur de Circuits Électroniques</title>
-    <link rel="stylesheet" href="style.css?v=theme1">
+    <link rel="stylesheet" href="style.css?v=theme4">
 </head>
 <body class="theme-dark">
 
@@ -29,14 +29,14 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">⚡</span> Sources
+            <span class="menu-icon menu-icon--sources" aria-hidden="true"></span> Sources
             <div class="dropdown">
-                <div class="dropdown-item" draggable="true" data-component="battery">🔋 Pile DC</div>
-                <div class="dropdown-item" draggable="true" data-component="vcc">🔌 Alimentation VCC</div>
-                <div class="dropdown-item" draggable="true" data-component="gnd">📐 Masse (0V)</div>
-                <div class="dropdown-item" draggable="true" data-component="gimp">⚡ GImp (Impulsions)</div>
-                <div class="dropdown-item" draggable="true" data-component="gsin">〰️ Générateur sinusoïdal</div>
-                <div class="dropdown-item" draggable="true" data-component="gsqr">⬜ Générateur carré</div>
+                <div class="dropdown-item" draggable="true" data-component="battery">Pile DC</div>
+                <div class="dropdown-item" draggable="true" data-component="vcc">Alimentation VCC</div>
+                <div class="dropdown-item" draggable="true" data-component="gnd">Masse (0 V)</div>
+                <div class="dropdown-item" draggable="true" data-component="gimp">GImp — horloge / impulsions</div>
+                <div class="dropdown-item" draggable="true" data-component="gsin">Générateur sinusoïdal</div>
+                <div class="dropdown-item" draggable="true" data-component="gsqr">Générateur carré</div>
             </div>
         </div>
 
@@ -49,7 +49,8 @@
                 <div class="dropdown-item" draggable="true" data-component="diode">Diode</div>
                 <div class="dropdown-item" draggable="true" data-component="potentiometer">Potentiomètre</div>
                 <div class="dropdown-item" draggable="true" data-component="switch_spdt">Interrupteur 3 broches</div>
-                <div class="dropdown-item" draggable="true" data-component="speaker" title="Charge 8 Ω — son via la carte son (générateur Sin, ex. 440 Hz)">Haut-parleur</div>
+                <div class="dropdown-item" draggable="true" data-component="push_button" title="Bouton poussoir — momentané par défaut (fermé pendant l'appui). Double-clic pour passer en mode maintenu (bascule).">Bouton poussoir</div>
+                <div class="dropdown-item" draggable="true" data-component="speaker" title="Charge 8 Ω — son via la carte son (GImp ou circuit importé)">Haut-parleur</div>
                 <div class="dropdown-submenu">
                     <span class="dropdown-item submenu-title">Transistors</span>
                     <div class="submenu">
@@ -94,6 +95,13 @@
         </div>
 
         <div class="menu-item">
+            <span class="menu-icon">🤖</span> Arduino
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="arduino_uno">Arduino UNO R3</div>
+            </div>
+        </div>
+
+        <div class="menu-item">
             <span class="menu-icon">🚨</span> Opto
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="led">LED (Rouge)</div>
@@ -113,174 +121,33 @@
         </div>
 
         <div class="simulation-controls">
-            <button id="btn-simulate">🚀 Lancer Simulation</button>
-            <button id="btn-stop" class="disabled">🛑 Stop</button>
+            <span id="circuit-name" class="circuit-name" title="Nom du montage">Sans titre</span>
+            <button id="btn-simulate" type="button">Lancer la simulation</button>
+            <button id="btn-stop" type="button" class="disabled">Arrêter</button>
         </div>
     </header>
 
-    <div id="cd4511-doc-modal" class="modal">
-        <div class="modal-content modal-content--doc">
-            <span class="close-modal" id="close-cd4511-doc">&times;</span>
-            <h2 id="cd4511-doc-title">CD4511 — Décodeur BCD / 7 segments</h2>
-            <div class="modal-body modal-body--doc">
-                <p>
-                    Le <strong>CD4511</strong> (ou équivalent CMOS) convertit un code <strong>BCD 4 bits</strong>
-                    (A = LSB) en sorties pour un afficheur <strong>7 segments</strong> en cathode commune.
-                    Il intègre une <strong>mémorisation</strong> (broche LE) et les fonctions
-                    <strong>extinction</strong> (BI) et <strong>test lampe</strong> (LT).
-                </p>
-                <h3>Broches du symbole (simulateur)</h3>
-                <table class="doc-pin-table">
-                    <thead>
-                        <tr><th>Broche</th><th>Rôle</th><th>Niveau actif</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>A, B, C, D</td><td>Entrées BCD (A = bit faible)</td><td>1 = logique haut (0…V<sub>CC</sub>)</td></tr>
-                        <tr><td>LE</td><td>Verrouillage — 0 : suivi des entrées ; 1 : mémorise</td><td>Relier à <strong>0 V</strong> pour suivre un compteur</td></tr>
-                        <tr><td>BI</td><td>Extinction de l’affichage</td><td><strong>0 V = éteint</strong> — relier BI au <strong>+5 V</strong></td></tr>
-                        <tr><td>LT</td><td>Test lampe (tous segments ON)</td><td><strong>0 V = test</strong> — relier LT au <strong>+5 V</strong> en usage normal</td></tr>
-                        <tr><td>a … g</td><td>Sorties vers les segments</td><td>1 = segment allumé (cathode commune)</td></tr>
-                    </tbody>
-                </table>
-                <h3>Brochage réel (boîtier DIP 16 — repères courants)</h3>
-                <table class="doc-pin-table">
-                    <thead>
-                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>7</td><td>A</td><td>Entrée BCD bit faible (LSB)</td></tr>
-                        <tr><td>1</td><td>B</td><td>Entrée BCD</td></tr>
-                        <tr><td>2</td><td>C</td><td>Entrée BCD</td></tr>
-                        <tr><td>6</td><td>D</td><td>Entrée BCD bit fort (MSB)</td></tr>
-                        <tr><td>1</td><td>LE</td><td>Verrouillage (0 = suivi direct)</td></tr>
-                        <tr><td>2</td><td>BI</td><td>Extinction (1 = affichage actif)</td></tr>
-                        <tr><td>3</td><td>LT</td><td>Test lampe (1 = fonctionnement normal)</td></tr>
-                        <tr><td>12</td><td>V<sub>DD</sub></td><td>+5 V (alimentation du circuit, hors symbole)</td></tr>
-                        <tr><td>8</td><td>V<sub>SS</sub></td><td>Masse</td></tr>
-                        <tr><td>9, 10, 11, 13, 14, 15, 16</td><td>e, d, c, b, a, f, g</td><td>Sorties vers l’afficheur 7 segments</td></tr>
-                    </tbody>
-                </table>
-                <h3>Câblage typique</h3>
-                <ul class="doc-list">
-                    <li>Relier <strong>a … g</strong> aux entrées du composant <em>Afficheur 7 segments</em> (<code>SEG_1</code>).</li>
-                    <li>Relier la <strong>cathode commune (COM)</strong> de l’afficheur à la <strong>masse</strong> (<code>GND_1</code>).</li>
-                    <li><strong>BI</strong> et <strong>LT</strong> au <strong>+5 V</strong> (<code>VCC_1</code> ou <code>LOGIC_1</code> à 1) — pas à la masse.</li>
-                    <li><strong>LE</strong> à <strong>0 V</strong> (<code>GND_1</code> ou borne à 0) pour suivre un compteur.</li>
-                </ul>
-                <h3>Simulation</h3>
-                <p>
-                    Modèle <strong>XSPICE</strong> : bascules <code>d_dlatch</code>, table <code>d_genlut</code>,
-                    ponts analogiques/numériques. Nécessite <code>digital.cm</code> et ngspice avec XSPICE
-                    (<code>npm run check-ngspice</code>).
-                </p>
-                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+    <div id="app-root" class="app-root">
+    <div class="sim-workspace">
+        <main class="canvas-container">
+            <canvas id="circuitCanvas"></canvas>
+        </main>
+        <aside id="arduino-panel" class="right-panel hidden" aria-label="Éditeur Arduino">
+            <div class="panel-header panel-header--arduino">
+                <span id="arduino-panel-title">Arduino UNO</span>
+                <button type="button" id="arduino-panel-close" class="panel-close" title="Fermer">&times;</button>
             </div>
-        </div>
-    </div>
-
-    <div id="hc90-doc-modal" class="modal">
-        <div class="modal-content modal-content--doc">
-            <span class="close-modal" id="close-hc90-doc">&times;</span>
-            <h2 id="hc90-doc-title">74HC90 — Compteur décade asynchrone</h2>
-            <div class="modal-body modal-body--doc">
-                <p>
-                    Le <strong>74HC90</strong> (ou 74LS90) est un compteur <strong>asynchrone</strong>
-                    en deux sections : <strong>÷2</strong> (bascule A, horloge <strong>CP0</strong>) et
-                    <strong>÷5</strong> (bascules B–D). En <strong>mode décade</strong>, la sortie
-                    <strong>Q0</strong> est reliée à <strong>CP1</strong> pour former un compteur
-                    <strong>0…9</strong> sur les sorties Q0–Q3 (code binaire naturel).
-                </p>
-                <h3>Brochage réel (boîtier DIP 14 — 74HC90)</h3>
-                <table class="doc-pin-table">
-                    <thead>
-                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>14</td><td>CP0</td><td>Horloge principale (GImp) — section ÷2</td></tr>
-                        <tr><td>1</td><td>CP1</td><td>Horloge section ÷5 — relier à <strong>Q0</strong> (décade)</td></tr>
-                        <tr><td>12</td><td>Q0</td><td>Sortie LSB — vers <strong>CD4511_1</strong> entrée <strong>A</strong></td></tr>
-                        <tr><td>9</td><td>Q1</td><td>Vers entrée <strong>B</strong></td></tr>
-                        <tr><td>8</td><td>Q2</td><td>Vers entrée <strong>C</strong></td></tr>
-                        <tr><td>11</td><td>Q3</td><td>MSB — vers entrée <strong>D</strong></td></tr>
-                        <tr><td>2, 3</td><td>MR1, MR2</td><td>Reset (niveau haut = compteur à 0)</td></tr>
-                        <tr><td>6, 7</td><td>MS1, MS2</td><td>Mode — laisser à 0 V (décade)</td></tr>
-                        <tr><td>5</td><td>VCC</td><td>+5 V (<code>VCC_1</code>)</td></tr>
-                        <tr><td>10</td><td>GND</td><td>Masse (<code>GND_1</code>)</td></tr>
-                        <tr><td>4, 13</td><td>NC</td><td>Non connectées</td></tr>
-                    </tbody>
-                </table>
-                <p class="doc-hint">Sur le schéma, <strong>Q0…Q3</strong> sont alignés verticalement (comme <strong>A…D</strong> du CD4511) pour des fils horizontaux courts.</p>
-                <h3>Montage compteur → afficheur (noms du simulateur)</h3>
-                <table class="doc-pin-table">
-                    <thead>
-                        <tr><th>De</th><th>Vers</th><th>Fil</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td><code>GND_1</code></td><td><code>HC90_1</code> GND, <code>CD4511_1</code> (masse circuit), <code>SEG_1</code> COM</td><td>Masse commune</td></tr>
-                        <tr><td><code>VCC_1</code></td><td><code>HC90_1</code> VCC</td><td>+5 V</td></tr>
-                        <tr><td><code>VCC_1</code> ou <code>LOGIC_1</code> (1)</td><td><code>CD4511_1</code> BI, LT</td><td>Afficheur actif</td></tr>
-                        <tr><td><code>GND_1</code> ou <code>LOGIC_2</code> (0)</td><td><code>CD4511_1</code> LE</td><td>Suivi direct du compteur</td></tr>
-                        <tr><td><code>GND_1</code> ou <code>LOGIC_3</code> (0)</td><td><code>HC90_1</code> MR1, MR2, MS1, MS2</td><td>Comptage décade</td></tr>
-                        <tr><td><code>GImp_1</code> sortie</td><td><code>HC90_1</code> CP0</td><td>Horloge</td></tr>
-                        <tr><td><code>HC90_1</code> Q0</td><td><code>HC90_1</code> CP1</td><td>Décade (aussi forcé en simulation)</td></tr>
-                        <tr><td><code>HC90_1</code> Q0</td><td><code>CD4511_1</code> A</td><td>BCD bit 0</td></tr>
-                        <tr><td><code>HC90_1</code> Q1</td><td><code>CD4511_1</code> B</td><td>BCD bit 1</td></tr>
-                        <tr><td><code>HC90_1</code> Q2</td><td><code>CD4511_1</code> C</td><td>BCD bit 2</td></tr>
-                        <tr><td><code>HC90_1</code> Q3</td><td><code>CD4511_1</code> D</td><td>BCD bit 3</td></tr>
-                        <tr><td><code>CD4511_1</code> a…g</td><td><code>SEG_1</code> a…g</td><td>Segments</td></tr>
-                    </tbody>
-                </table>
-                <h3>Câblage typique (mode décade 0…9)</h3>
-                <ul class="doc-list">
-                    <li>Les composants sont numérotés <code>HC90_1</code>, <code>CD4511_1</code>, <code>SEG_1</code>, <code>GND_1</code>, <code>VCC_1</code>, <code>GImp_1</code>, etc.</li>
-                    <li>Horloge <strong>1 Hz</strong> sur <code>GImp_1</code> → CP0 pour une seconde par pas (préréglage « tick seconde » dans le panneau GImp).</li>
-                    <li>Le fil <strong>Q0 → CP1</strong> reste recommandé sur la plaquette ; il est aussi appliqué automatiquement en simulation.</li>
-                </ul>
-                <h3>Deux chiffres (unités + dizaines)</h3>
-                <ul class="doc-list">
-                    <li>Dupliquer la chaîne <code>HC90 → CD4511 → SEG</code> (<code>HC90_2</code>, <code>CD4511_2</code>, <code>SEG_2</code>).</li>
-                    <li>Horloge <code>GImp_1</code> uniquement sur <code>HC90_1</code> CP0 ; <code>HC90_2</code> CP0 via une porte <strong>ET</strong>.</li>
-                    <li><strong>Report au chiffre 9</strong> : relier <code>HC90_1</code> <strong>Q0</strong> et <strong>Q3</strong> aux entrées de l’ET, sortie → <code>HC90_2</code> CP0. Au comptage 9 (binaire 1001), Q0 et Q3 sont à 1 → un front horloge sur les dizaines.</li>
-                    <li><strong>Ne pas utiliser Q1 + Q3</strong> : en BCD 0…9 ces sorties ne sont jamais hautes en même temps (seul l’état invalide 10 = 1010 les active).</li>
-                    <li><code>HC90_2</code> : même câblage décade (Q0 → CP1, MR/MS à 0, VCC/GND).</li>
-                    <li><strong>Affichage 0…99</strong> : si le report est correct (AND Q0+Q3 ou Q3), l’animation utilise un comptage idéal en temps réel (1 impulsion = +1), fiable à toute fréquence du GImp.</li>
-                </ul>
-                <h3>Simulation</h3>
-                <p>
-                    Quatre bascules <strong>D</strong> en mode bascule (D relié à /Q, horloges en cascade).
-                    Modèle <strong>XSPICE</strong> (<code>d_dff</code>) si ngspice et <code>digital.cm</code> sont disponibles ;
-                    sinon repli sur sources comportementales (comme la bascule D du simulateur).
-                    Vérification : <code>node Simulateur/Engine/ic74hc90-decade.test.mjs</code>,
-                    <code>node Simulateur/Engine/hc90-cascade.test.mjs</code> ou
-                    <code>npm run check-ngspice</code>.
-                </p>
-                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            <div class="arduino-panel-body">
+                <p id="arduino-cli-status" class="arduino-cli-status">…</p>
+                <label class="arduino-sketch-label" for="arduino-sketch-input">Sketch (.ino)</label>
+                <textarea id="arduino-sketch-input" class="arduino-sketch-input" spellcheck="false"></textarea>
+                <div class="arduino-panel-actions">
+                    <button type="button" id="arduino-btn-compile" class="arduino-btn arduino-btn--primary">Compiler (arduino-cli)</button>
+                </div>
+                <pre id="arduino-compile-log" class="arduino-compile-log"></pre>
             </div>
-        </div>
+        </aside>
     </div>
-
-    <div id="commands-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal" id="close-commands">&times;</span>
-            <h2>Commandes de l'Éditeur</h2>
-            <div class="modal-body">
-                <p><strong>Ctrl + C / Ctrl + V :</strong> Copier / Coller la sélection (Évite le double-copier)</p>
-                <p><strong>Clic simple (Simulation active) :</strong> Commuter l'état (0 ou 1) d'une Borne Logique</p>
-                <p><strong>Clic simple (Hors simulation) :</strong> Sélectionner un fil ou un composant</p>
-                <p><strong>Double-clic :</strong> Modifier la valeur (Résistances, VCC, Niveau Haut de Borne Logique) ; fiche technique <strong>CD4511</strong> et <strong>74HC90</strong></p>
-                <p><strong>[Shift] + Glisser cadre :</strong> Sélectionner plusieurs composants</p>
-                <p><strong>[R] :</strong> Pivoter les composants sélectionnés de 90° (sauf bascules et GImp)</p>
-                <p><strong>[X] :</strong> Retourner horizontalement le GImp sélectionné</p>
-                <p><strong>[Suppr] ou [Backspace] :</strong> Supprimer la sélection (Composants ou fil choisi)</p>
-                <p><strong>[Espace] :</strong> Ajouter un point d'ancrage intermédiaire sur un fil en cours de tracé</p>
-                <p><strong>[Ctrl] + [Z] / [Ctrl] + [Y] :</strong> Annuler / Rétablir</p>
-            </div>
-        </div>
-    </div>
-
-    <main class="canvas-container">
-        <canvas id="circuitCanvas"></canvas>
-    </main>
 
     <div id="source-panel" class="bottom-panel hidden">
         <div class="panel-header">
@@ -398,6 +265,8 @@
         </div>
     </div>
 
+        </div>
+
     <div id="scope-popup" class="scope-floating hidden">
         <div class="scope-floating-header" id="scope-popup-drag-handle">
             <span id="scope-popup-title">Oscilloscope</span>
@@ -415,6 +284,289 @@
         <canvas id="bode-popup-canvas" width="640" height="380"></canvas>
     </div>
 
-    <script type="module" src="app.js?v=labels1"></script>
+    <div id="cd4511-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-cd4511-doc">&times;</span>
+            <h2 id="cd4511-doc-title">CD4511 — Décodeur BCD / 7 segments</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>CD4511</strong> (ou équivalent CMOS) convertit un code <strong>BCD 4 bits</strong>
+                    (A = LSB) en sorties pour un afficheur <strong>7 segments</strong> en cathode commune.
+                    Il intègre une <strong>mémorisation</strong> (broche LE) et les fonctions
+                    <strong>extinction</strong> (BI) et <strong>test lampe</strong> (LT).
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th><th>Niveau actif</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>A, B, C, D</td><td>Entrées BCD (A = bit faible)</td><td>1 = logique haut (0…V<sub>CC</sub>)</td></tr>
+                        <tr><td>LE</td><td>Verrouillage — 0 : suivi des entrées ; 1 : mémorise</td><td>Relier à <strong>0 V</strong> pour suivre un compteur</td></tr>
+                        <tr><td>BI</td><td>Extinction de l’affichage</td><td><strong>0 V = éteint</strong> — relier BI au <strong>+5 V</strong></td></tr>
+                        <tr><td>LT</td><td>Test lampe (tous segments ON)</td><td><strong>0 V = test</strong> — relier LT au <strong>+5 V</strong> en usage normal</td></tr>
+                        <tr><td>a … g</td><td>Sorties vers les segments</td><td>1 = segment allumé (cathode commune)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Brochage réel (boîtier DIP 16 — repères courants)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>7</td><td>A</td><td>Entrée BCD bit faible (LSB)</td></tr>
+                        <tr><td>1</td><td>B</td><td>Entrée BCD</td></tr>
+                        <tr><td>2</td><td>C</td><td>Entrée BCD</td></tr>
+                        <tr><td>6</td><td>D</td><td>Entrée BCD bit fort (MSB)</td></tr>
+                        <tr><td>1</td><td>LE</td><td>Verrouillage (0 = suivi direct)</td></tr>
+                        <tr><td>2</td><td>BI</td><td>Extinction (1 = affichage actif)</td></tr>
+                        <tr><td>3</td><td>LT</td><td>Test lampe (1 = fonctionnement normal)</td></tr>
+                        <tr><td>12</td><td>V<sub>DD</sub></td><td>+5 V (alimentation du circuit, hors symbole)</td></tr>
+                        <tr><td>8</td><td>V<sub>SS</sub></td><td>Masse</td></tr>
+                        <tr><td>9, 10, 11, 13, 14, 15, 16</td><td>e, d, c, b, a, f, g</td><td>Sorties vers l’afficheur 7 segments</td></tr>
+                    </tbody>
+                </table>
+                <h3>Câblage typique</h3>
+                <ul class="doc-list">
+                    <li>Relier <strong>a … g</strong> aux entrées du composant <em>Afficheur 7 segments</em> (<code>SEG_1</code>).</li>
+                    <li>Relier la <strong>cathode commune (COM)</strong> de l’afficheur à la <strong>masse</strong> (<code>GND_1</code>).</li>
+                    <li><strong>BI</strong> et <strong>LT</strong> au <strong>+5 V</strong> (<code>VCC_1</code> ou <code>LOGIC_1</code> à 1) — pas à la masse.</li>
+                    <li><strong>LE</strong> à <strong>0 V</strong> (<code>GND_1</code> ou borne à 0) pour suivre un compteur.</li>
+                </ul>
+                <h3>Simulation</h3>
+                <p>
+                    Modèle <strong>XSPICE</strong> : bascules <code>d_dlatch</code>, table <code>d_genlut</code>,
+                    ponts analogiques/numériques. Nécessite <code>digital.cm</code> et ngspice avec XSPICE
+                    (<code>npm run check-ngspice</code>).
+                </p>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="hc90-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-hc90-doc">&times;</span>
+            <h2 id="hc90-doc-title">74HC90 — Compteur décade asynchrone</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>74HC90</strong> (ou 74LS90) est un compteur <strong>asynchrone</strong>
+                    en deux sections : <strong>÷2</strong> (bascule A, horloge <strong>CP0</strong>) et
+                    <strong>÷5</strong> (bascules B–D). En <strong>mode décade</strong>, la sortie
+                    <strong>Q0</strong> est reliée à <strong>CP1</strong> pour former un compteur
+                    <strong>0…9</strong> sur les sorties Q0–Q3 (code binaire naturel).
+                </p>
+                <h3>Brochage réel (boîtier DIP 14 — 74HC90)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche DIP</th><th>Symbole</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>14</td><td>CP0</td><td>Horloge principale (GImp) — section ÷2</td></tr>
+                        <tr><td>1</td><td>CP1</td><td>Horloge section ÷5 — relier à <strong>Q0</strong> (décade)</td></tr>
+                        <tr><td>12</td><td>Q0</td><td>Sortie LSB — vers <strong>CD4511_1</strong> entrée <strong>A</strong></td></tr>
+                        <tr><td>9</td><td>Q1</td><td>Vers entrée <strong>B</strong></td></tr>
+                        <tr><td>8</td><td>Q2</td><td>Vers entrée <strong>C</strong></td></tr>
+                        <tr><td>11</td><td>Q3</td><td>MSB — vers entrée <strong>D</strong></td></tr>
+                        <tr><td>2, 3</td><td>MR1, MR2</td><td>Reset (niveau haut = compteur à 0)</td></tr>
+                        <tr><td>6, 7</td><td>MS1, MS2</td><td>Mode — laisser à 0 V (décade)</td></tr>
+                        <tr><td>5</td><td>VCC</td><td>+5 V (<code>VCC_1</code>)</td></tr>
+                        <tr><td>10</td><td>GND</td><td>Masse (<code>GND_1</code>)</td></tr>
+                        <tr><td>4, 13</td><td>NC</td><td>Non connectées</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">Sur le schéma, <strong>Q0…Q3</strong> sont alignés verticalement (comme <strong>A…D</strong> du CD4511) pour des fils horizontaux courts.</p>
+                <h3>Montage compteur → afficheur (noms du simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Fil</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>GND_1</code></td><td><code>HC90_1</code> GND, <code>CD4511_1</code> (masse circuit), <code>SEG_1</code> COM</td><td>Masse commune</td></tr>
+                        <tr><td><code>VCC_1</code></td><td><code>HC90_1</code> VCC</td><td>+5 V</td></tr>
+                        <tr><td><code>VCC_1</code> ou <code>LOGIC_1</code> (1)</td><td><code>CD4511_1</code> BI, LT</td><td>Afficheur actif</td></tr>
+                        <tr><td><code>GND_1</code> ou <code>LOGIC_2</code> (0)</td><td><code>CD4511_1</code> LE</td><td>Suivi direct du compteur</td></tr>
+                        <tr><td><code>GND_1</code> ou <code>LOGIC_3</code> (0)</td><td><code>HC90_1</code> MR1, MR2, MS1, MS2</td><td>Comptage décade</td></tr>
+                        <tr><td><code>GImp_1</code> sortie</td><td><code>HC90_1</code> CP0</td><td>Horloge</td></tr>
+                        <tr><td><code>HC90_1</code> Q0</td><td><code>HC90_1</code> CP1</td><td>Décade (aussi forcé en simulation)</td></tr>
+                        <tr><td><code>HC90_1</code> Q0</td><td><code>CD4511_1</code> A</td><td>BCD bit 0</td></tr>
+                        <tr><td><code>HC90_1</code> Q1</td><td><code>CD4511_1</code> B</td><td>BCD bit 1</td></tr>
+                        <tr><td><code>HC90_1</code> Q2</td><td><code>CD4511_1</code> C</td><td>BCD bit 2</td></tr>
+                        <tr><td><code>HC90_1</code> Q3</td><td><code>CD4511_1</code> D</td><td>BCD bit 3</td></tr>
+                        <tr><td><code>CD4511_1</code> a…g</td><td><code>SEG_1</code> a…g</td><td>Segments</td></tr>
+                    </tbody>
+                </table>
+                <h3>Câblage typique (mode décade 0…9)</h3>
+                <ul class="doc-list">
+                    <li>Les composants sont numérotés <code>HC90_1</code>, <code>CD4511_1</code>, <code>SEG_1</code>, <code>GND_1</code>, <code>VCC_1</code>, <code>GImp_1</code>, etc.</li>
+                    <li>Horloge <strong>1 Hz</strong> sur <code>GImp_1</code> → CP0 pour une seconde par pas (préréglage « tick seconde » dans le panneau GImp).</li>
+                    <li>Le fil <strong>Q0 → CP1</strong> reste recommandé sur la plaquette ; il est aussi appliqué automatiquement en simulation.</li>
+                </ul>
+                <h3>Deux chiffres (unités + dizaines)</h3>
+                <ul class="doc-list">
+                    <li>Dupliquer la chaîne <code>HC90 → CD4511 → SEG</code> (<code>HC90_2</code>, <code>CD4511_2</code>, <code>SEG_2</code>).</li>
+                    <li>Horloge <code>GImp_1</code> uniquement sur <code>HC90_1</code> CP0 ; <code>HC90_2</code> CP0 via une porte <strong>ET</strong>.</li>
+                    <li><strong>Report au chiffre 9</strong> : relier <code>HC90_1</code> <strong>Q0</strong> et <strong>Q3</strong> aux entrées de l’ET, sortie → <code>HC90_2</code> CP0. Au comptage 9 (binaire 1001), Q0 et Q3 sont à 1 → un front horloge sur les dizaines.</li>
+                    <li><strong>Ne pas utiliser Q1 + Q3</strong> : en BCD 0…9 ces sorties ne sont jamais hautes en même temps (seul l’état invalide 10 = 1010 les active).</li>
+                    <li><code>HC90_2</code> : même câblage décade (Q0 → CP1, MR/MS à 0, VCC/GND).</li>
+                    <li><strong>Affichage 0…99</strong> : si le report est correct (AND Q0+Q3 ou Q3), l’animation utilise un comptage idéal en temps réel (1 impulsion = +1), fiable à toute fréquence du GImp.</li>
+                </ul>
+                <h3>Simulation</h3>
+                <p>
+                    Quatre bascules <strong>D</strong> en mode bascule (D relié à /Q, horloges en cascade).
+                    Modèle <strong>XSPICE</strong> (<code>d_dff</code>) si ngspice et <code>digital.cm</code> sont disponibles ;
+                    sinon repli sur sources comportementales (comme la bascule D du simulateur).
+                    Vérification : <code>node Simulateur/Engine/ic74hc90-decade.test.mjs</code>,
+                    <code>node Simulateur/Engine/hc90-cascade.test.mjs</code> ou
+                    <code>npm run check-ngspice</code>.
+                </p>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="uno-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-uno-doc">&times;</span>
+            <h2 id="uno-doc-title">Arduino UNO R3</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Carte <strong>Arduino UNO R3</strong> (ATmega328P) : alimentation <strong>5 V</strong> / <strong>3,3 V</strong>,
+                    <strong>14 broches digitales</strong> D0–D13 et <strong>6 entrées analogiques</strong> A0–A5.
+                    L’éditeur de sketch est dans le <strong>panneau à droite</strong> (ouvert à la pose du composant).
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>5V, 3V3</td><td>Alimentation sortie (rails simulés)</td></tr>
+                        <tr><td>GND, GND2</td><td>Masse</td></tr>
+                        <tr><td>VIN</td><td>Alimentation externe (entrée)</td></tr>
+                        <tr><td>RESET</td><td>Reset (pull-up interne modélisé)</td></tr>
+                        <tr><td>A0 … A5</td><td>Entrées analogiques / I²C (A4/A5)</td></tr>
+                        <tr><td>D0, D1</td><td>UART (RX/TX)</td></tr>
+                        <tr><td>D2 … D13</td><td>GPIO digitales (PWM : D3, D5, D6, D9, D10, D11)</td></tr>
+                        <tr><td>D13</td><td>LED intégrée (<code>LED_BUILTIN</code> = 13)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Registres AVR — ports et broches (ATmega328P)</h3>
+                <p>
+                    Chaque broche GPIO est pilotée par un couple <strong>DDRx</strong> (direction) et
+                    <strong>PORTx</strong> (niveau ou pull-up). Le simulateur interprète
+                    <code>pinMode</code> / <code>digitalWrite</code> et les accès directs aux registres
+                    (<code>DDRD |= (1&lt;&lt;5)</code>, <code>PORTB = 0xFF</code>, etc.).
+                    Pendant la simulation, les valeurs hex des registres s’affichent sur le symbole UNO.
+                </p>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Port AVR</th><th>Registres</th><th>Bits</th><th>Broches Arduino</th><th>Repères MCU</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Port D</strong></td>
+                            <td><code>DDRD</code> / <code>PORTD</code></td>
+                            <td>0 … 7</td>
+                            <td><strong>D0</strong> … <strong>D7</strong></td>
+                            <td>PD0 … PD7</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Port B</strong></td>
+                            <td><code>DDRB</code> / <code>PORTB</code></td>
+                            <td>0 … 5</td>
+                            <td><strong>D8</strong> … <strong>D13</strong></td>
+                            <td>PB0 … PB5 (<code>LED_BUILTIN</code> = PB5 / D13)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Port C</strong></td>
+                            <td><code>DDRC</code> / <code>PORTC</code></td>
+                            <td>0 … 5</td>
+                            <td><strong>A0</strong> … <strong>A5</strong></td>
+                            <td>PC0 … PC5 (pins Arduino 14 … 19 en mode digital)</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h3>Correspondance broche ↔ bit (référence rapide)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Port / bit</th><th>Numéro Arduino</th><th>Usage courant</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>D0</td><td>PORTD bit 0</td><td>0</td><td>UART RX</td></tr>
+                        <tr><td>D1</td><td>PORTD bit 1</td><td>1</td><td>UART TX</td></tr>
+                        <tr><td>D2 … D7</td><td>PORTD bits 2 … 7</td><td>2 … 7</td><td>GPIO (PWM : D3, D5, D6)</td></tr>
+                        <tr><td>D8 … D12</td><td>PORTB bits 0 … 4</td><td>8 … 12</td><td>GPIO (PWM : D9, D10, D11)</td></tr>
+                        <tr><td>D13</td><td>PORTB bit 5</td><td>13</td><td>GPIO, LED intégrée</td></tr>
+                        <tr><td>A0 … A3</td><td>PORTC bits 0 … 3</td><td>14 … 17</td><td>Analogique / GPIO digital</td></tr>
+                        <tr><td>A4</td><td>PORTC bit 4</td><td>18</td><td>I²C SDA (SDA)</td></tr>
+                        <tr><td>A5</td><td>PORTC bit 5</td><td>19</td><td>I²C SCL (SCL)</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    <strong>DDRx</strong> : bit à <code>1</code> = sortie, à <code>0</code> = entrée.
+                    <strong>PORTx</strong> en sortie : bit à <code>1</code> = HIGH (5 V), à <code>0</code> = LOW.
+                    En entrée avec <code>pinMode(n, INPUT_PULLUP)</code> : bit PORT à <code>1</code> active le pull-up interne.
+                </p>
+                <h3>CD4511 + PORTD (4 bits faibles)</h3>
+                <p>
+                    Pour afficher le chiffre <strong>0…9</strong> avec <code>PORTD = n</code>, reliez
+                    <strong>A→D0, B→D1, C→D2, D→D3</strong>, puis :
+                </p>
+                <pre class="doc-code">void setup() {
+  DDRD = 0b00001111;  // D0…D3 en sortie
+}
+void loop() {
+  PORTD = 6;          // affiche 6
+}</pre>
+                <p>
+                    Attention : écrire <code>DDRD = 6</code> dans <code>loop()</code> (au lieu de
+                    <code>PORTD</code>) reconfigure les directions et peut bloquer l’affichage.
+                    Seul <code>PORTD</code> fixe les niveaux logiques.
+                </p>
+                <h3>Programmation</h3>
+                <ul class="doc-list">
+                    <li>Éditeur à droite : sketch <code>.ino</code> + bouton <strong>Compiler (arduino-cli)</strong>.</li>
+                    <li>Carte cible : <code>arduino:avr:uno</code>.</li>
+                    <li>À la simulation, le moteur interprète <code>pinMode(…, OUTPUT|INPUT|INPUT_PULLUP)</code>, <code>digitalWrite</code>, <code>delay(ms)</code> et les écritures <code>DDRx</code> / <code>PORTx</code> pour piloter D0–D13 et A0–A5.</li>
+                    <li>Reliez <strong>GND</strong> de l’UNO à la masse du circuit si vous utilisez les rails 5 V / 3,3 V.</li>
+                </ul>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="value-prompt-modal" class="modal hidden">
+        <div class="modal-content modal-content--prompt">
+            <span class="close-modal" id="close-value-prompt">&times;</span>
+            <label id="value-prompt-message" class="value-prompt-label" for="value-prompt-input"></label>
+            <input type="text" id="value-prompt-input" class="value-prompt-input" autocomplete="off">
+            <div class="value-prompt-actions">
+                <button type="button" id="value-prompt-ok" class="value-prompt-btn value-prompt-btn--ok">OK</button>
+                <button type="button" id="value-prompt-cancel" class="value-prompt-btn">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="commands-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal" id="close-commands">&times;</span>
+            <h2>Commandes de l'Éditeur</h2>
+            <div class="modal-body">
+                <p><strong>Ctrl + C / Ctrl + V :</strong> Copier / Coller la sélection (Évite le double-copier)</p>
+                <p><strong>Clic simple (Simulation active) :</strong> Commuter l'état (0 ou 1) d'une Borne Logique</p>
+                <p><strong>Clic simple (Hors simulation) :</strong> Sélectionner un fil ou un composant</p>
+                <p><strong>Double-clic :</strong> Modifier la valeur (R, C, L, VCC…) ; fiche technique <strong>CD4511</strong>, <strong>74HC90</strong>, <strong>Arduino UNO</strong></p>
+                <p><strong>[Shift] + Glisser cadre :</strong> Sélectionner plusieurs composants</p>
+                <p><strong>[R] :</strong> Pivoter les composants sélectionnés de 90° (sauf bascules et GImp)</p>
+                <p><strong>[X] :</strong> Retourner horizontalement le GImp sélectionné</p>
+                <p><strong>[Suppr] ou [Backspace] :</strong> Supprimer la sélection (Composants ou fil choisi)</p>
+                <p><strong>[Espace] :</strong> Ajouter un point d'ancrage intermédiaire sur un fil en cours de tracé</p>
+                <p><strong>[Ctrl] + [Z] / [Ctrl] + [Y] :</strong> Annuler / Rétablir</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js?v=digitalread1"></script>
 </body>
 </html>

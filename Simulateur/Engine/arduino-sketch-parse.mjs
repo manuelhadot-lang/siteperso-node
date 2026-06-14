@@ -1,0 +1,830 @@
+/**
+ * Interprétation minimale d'un sketch Arduino (.ino) pour la co-simulation.
+ * pinMode(n, OUTPUT|INPUT|INPUT_PULLUP), digitalWrite(n, HIGH|LOW|1|0), delay(ms).
+ * Registres AVR : DDRB/C/D, PORTB/C/D (D0–D13, A0–A5).
+ */
+
+import {
+    buildAvrRegistersFromParsed,
+    applyDynamicLevelsToRegisters,
+    registersToPinLevels,
+    registersToPinModes,
+} from "./arduino-avr-registers.mjs";
+
+export function resolvePinToken(token) {
+    const t = String(token || "").trim();
+    if (/LED_BUILTIN/i.test(t)) return 13;
+    const a = t.match(/^A(\d+)$/i);
+    if (a) return 14 + parseInt(a[1], 10);
+    const m = t.match(/\bD?\s*(\d+)\b/i);
+    if (m) return parseInt(m[1], 10);
+    return null;
+}
+
+function stripComments(src) {
+    return String(src || "")
+        .replace(/\/\/[^\n]*/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function extractLoopBody(src) {
+    const idx = src.search(/void\s+loop\s*\(\s*\)\s*\{/i);
+    if (idx < 0) return src;
+    let i = src.indexOf("{", idx);
+    if (i < 0) return src;
+    let depth = 0;
+    const start = i + 1;
+    for (; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+            depth--;
+            if (depth === 0) return src.slice(start, i);
+        }
+    }
+    return src.slice(start);
+}
+
+function pinLabel(pin) {
+    if (pin == null || pin < 0) return null;
+    if (pin <= 13) return `D${pin}`;
+    if (pin <= 19) return `A${pin - 14}`;
+    return null;
+}
+
+/* ---------------------------------------------------------------------------
+ * Mini-interpréteur de sketch : variables, delay, incréments, écritures PORTx.
+ * Génère des phases temporelles (compteur, séquences) pour l'animation.
+ * ------------------------------------------------------------------------- */
+
+function extractFunctionBody(src, name) {
+    const idx = src.search(new RegExp(`\\b(?:void|int|byte)\\s+${name}\\s*\\([^)]*\\)\\s*\\{`, "i"));
+    if (idx < 0) return "";
+    let i = src.indexOf("{", idx);
+    if (i < 0) return "";
+    let depth = 0;
+    const start = i + 1;
+    for (; i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        else if (src[i] === "}") {
+            depth--;
+            if (depth === 0) return src.slice(start, i);
+        }
+    }
+    return src.slice(start);
+}
+
+function parseNumberLiteral(t) {
+    const s = String(t).trim();
+    if (/^0[xX][0-9a-fA-F]+$/.test(s)) return parseInt(s, 16);
+    if (/^0[bB][01]+$/.test(s)) return parseInt(s.slice(2), 2);
+    if (/^B[01]+$/.test(s)) return parseInt(s.slice(1), 2);
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    return null;
+}
+
+function tokenizeExpr(expr) {
+    const toks = [];
+    const s = String(expr);
+    let i = 0;
+    const two = ["<<", ">>", "<=", ">=", "==", "!=", "&&", "||"];
+    while (i < s.length) {
+        const c = s[i];
+        if (/\s/.test(c)) { i++; continue; }
+        if (/[0-9]/.test(c)) {
+            let j = i + 1;
+            if (c === "0" && (s[i + 1] === "x" || s[i + 1] === "X")) {
+                j = i + 2;
+                while (j < s.length && /[0-9a-fA-F]/.test(s[j])) j++;
+            } else if (c === "0" && (s[i + 1] === "b" || s[i + 1] === "B")) {
+                j = i + 2;
+                while (j < s.length && /[01]/.test(s[j])) j++;
+            } else {
+                while (j < s.length && /[0-9]/.test(s[j])) j++;
+            }
+            toks.push({ t: "num", v: parseNumberLiteral(s.slice(i, j)) ?? 0 });
+            i = j;
+            continue;
+        }
+        if (/[A-Za-z_]/.test(c)) {
+            let j = i + 1;
+            while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) j++;
+            toks.push({ t: "id", v: s.slice(i, j) });
+            i = j;
+            continue;
+        }
+        const pair = s.slice(i, i + 2);
+        if (two.includes(pair)) { toks.push({ t: "op", v: pair }); i += 2; continue; }
+        if ("+-*/%()<>!&|^~".includes(c)) { toks.push({ t: "op", v: c }); i++; continue; }
+        return null;
+    }
+    return toks;
+}
+
+const BIN_PREC = {
+    "*": 10, "/": 10, "%": 10,
+    "+": 9, "-": 9,
+    "<<": 8, ">>": 8,
+    "<": 7, "<=": 7, ">": 7, ">=": 7,
+    "==": 6, "!=": 6,
+    "&": 5, "^": 4, "|": 3,
+    "&&": 2, "||": 1,
+};
+
+function evalExpr(expr, vars) {
+    const toks = tokenizeExpr(expr);
+    if (!toks) return 0;
+    const out = [];
+    const ops = [];
+    let prevValue = false;
+    const applyTop = () => {
+        const op = ops.pop();
+        if (op.unary) {
+            const a = out.pop() ?? 0;
+            if (op.v === "-") out.push(-a);
+            else if (op.v === "!") out.push(a ? 0 : 1);
+            else if (op.v === "~") out.push(~a);
+            return;
+        }
+        const b = out.pop() ?? 0;
+        const a = out.pop() ?? 0;
+        switch (op.v) {
+            case "*": out.push(a * b); break;
+            case "/": out.push(b === 0 ? 0 : Math.trunc(a / b)); break;
+            case "%": out.push(b === 0 ? 0 : a % b); break;
+            case "+": out.push(a + b); break;
+            case "-": out.push(a - b); break;
+            case "<<": out.push(a << b); break;
+            case ">>": out.push(a >> b); break;
+            case "<": out.push(a < b ? 1 : 0); break;
+            case "<=": out.push(a <= b ? 1 : 0); break;
+            case ">": out.push(a > b ? 1 : 0); break;
+            case ">=": out.push(a >= b ? 1 : 0); break;
+            case "==": out.push(a === b ? 1 : 0); break;
+            case "!=": out.push(a !== b ? 1 : 0); break;
+            case "&": out.push(a & b); break;
+            case "^": out.push(a ^ b); break;
+            case "|": out.push(a | b); break;
+            case "&&": out.push(a && b ? 1 : 0); break;
+            case "||": out.push(a || b ? 1 : 0); break;
+            default: out.push(0);
+        }
+    };
+    for (const tok of toks) {
+        if (tok.t === "num") { out.push(tok.v); prevValue = true; continue; }
+        if (tok.t === "id") {
+            const name = tok.v;
+            if (/^(HIGH|true)$/i.test(name)) out.push(1);
+            else if (/^(LOW|false)$/i.test(name)) out.push(0);
+            else out.push(Number.isFinite(vars[name]) ? vars[name] : 0);
+            prevValue = true;
+            continue;
+        }
+        const v = tok.v;
+        if (v === "(") { ops.push({ v }); prevValue = false; continue; }
+        if (v === ")") {
+            while (ops.length && ops[ops.length - 1].v !== "(") applyTop();
+            ops.pop();
+            prevValue = true;
+            continue;
+        }
+        const unary = !prevValue && (v === "-" || v === "!" || v === "~");
+        if (unary) { ops.push({ v, unary: true, prec: 11 }); prevValue = false; continue; }
+        const prec = BIN_PREC[v] ?? 0;
+        while (
+            ops.length &&
+            ops[ops.length - 1].v !== "(" &&
+            (ops[ops.length - 1].prec ?? BIN_PREC[ops[ops.length - 1].v] ?? 0) >= prec
+        ) {
+            applyTop();
+        }
+        ops.push({ v, prec });
+        prevValue = false;
+    }
+    while (ops.length) {
+        if (ops[ops.length - 1].v === "(") { ops.pop(); continue; }
+        applyTop();
+    }
+    return out.length ? Math.trunc(out[out.length - 1]) : 0;
+}
+
+const DECL_RE = /\b(?:unsigned\s+)?(?:int|long|byte|char|short|uint8_t|uint16_t|volatile\s+int|volatile\s+byte)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;,]+)/g;
+
+function collectInitialVars(src) {
+    const vars = {};
+    let m;
+    DECL_RE.lastIndex = 0;
+    while ((m = DECL_RE.exec(src)) !== null) {
+        vars[m[1]] = evalExpr(m[2], vars);
+    }
+    return vars;
+}
+
+function parseStatementOrBlock(s, i) {
+    const n = s.length;
+    while (i < n && /\s/.test(s[i])) i++;
+    if (s[i] === "{") {
+        let depth = 0;
+        let j = i;
+        for (; j < n; j++) {
+            if (s[j] === "{") depth++;
+            else if (s[j] === "}") { depth--; if (depth === 0) break; }
+        }
+        return { stmt: parseStatements(s.slice(i + 1, j)), next: j + 1 };
+    }
+    let j = i;
+    let depth = 0;
+    for (; j < n; j++) {
+        const c = s[j];
+        if (c === "(") depth++;
+        else if (c === ")") depth--;
+        else if (c === ";" && depth === 0) break;
+    }
+    const text = s.slice(i, j).trim();
+    return { stmt: text ? [{ type: "expr", text }] : [], next: j + 1 };
+}
+
+function parseStatements(body) {
+    const stmts = [];
+    const s = String(body);
+    const n = s.length;
+    let i = 0;
+    while (i < n) {
+        while (i < n && /\s/.test(s[i])) i++;
+        if (i >= n) break;
+        if (s.slice(i, i + 2) === "if" && !/[A-Za-z0-9_]/.test(s[i + 2] || "")) {
+            i += 2;
+            while (i < n && /\s/.test(s[i])) i++;
+            if (s[i] !== "(") continue;
+            let depth = 0;
+            let j = i;
+            for (; j < n; j++) {
+                if (s[j] === "(") depth++;
+                else if (s[j] === ")") { depth--; if (depth === 0) break; }
+            }
+            const cond = s.slice(i + 1, j);
+            const thenPart = parseStatementOrBlock(s, j + 1);
+            let elsePart = null;
+            let k = thenPart.next;
+            while (k < n && /\s/.test(s[k])) k++;
+            if (s.slice(k, k + 4) === "else" && !/[A-Za-z0-9_]/.test(s[k + 4] || "")) {
+                const r = parseStatementOrBlock(s, k + 4);
+                elsePart = r.stmt;
+                i = r.next;
+            } else {
+                i = thenPart.next;
+            }
+            stmts.push({ type: "if", cond, body: thenPart.stmt, elseBody: elsePart });
+            continue;
+        }
+        let j = i;
+        let depth = 0;
+        for (; j < n; j++) {
+            const c = s[j];
+            if (c === "(") depth++;
+            else if (c === ")") depth--;
+            else if (c === ";" && depth === 0) break;
+        }
+        const text = s.slice(i, j).trim();
+        if (text) stmts.push({ type: "expr", text });
+        i = j + 1;
+    }
+    return stmts;
+}
+
+/**
+ * Remplace les appels de fonction connus par leur valeur avant évaluation :
+ * digitalRead(pin) → état d'entrée (1 par défaut, pull-up/relâché), millis()/micros()
+ * → temps simulé, analogRead(pin) → 0.
+ */
+function substituteCalls(expr, state) {
+    let s = String(expr);
+    s = s.replace(/\bdigitalRead\s*\(\s*([^()]*?)\s*\)/gi, (_, p) => {
+        const label = pinLabel(resolvePinToken(p));
+        const v = label && state.inputs ? state.inputs[label] : undefined;
+        return v === 0 ? "0" : "1";
+    });
+    s = s.replace(/\banalogRead\s*\(\s*[^()]*\)/gi, "0");
+    s = s.replace(/\b(?:millis|micros)\s*\(\s*\)/gi, String(Math.trunc(state.simTimeMs || 0)));
+    return s;
+}
+
+function evalExprState(expr, state) {
+    return evalExpr(substituteCalls(expr, state), state.vars);
+}
+
+/** Exécute une instruction simple ; renvoie la durée delay() en ms (0 sinon). */
+function execExprStatement(text, state, onDelay) {
+    const delayM = text.match(/^delay\s*\(\s*(.+?)\s*\)$/i);
+    if (delayM) {
+        const ms = Math.max(0, evalExprState(delayM[1], state));
+        if (onDelay) onDelay(ms);
+        return ms;
+    }
+    if (/^digitalWrite\s*\(/i.test(text)) {
+        const m = text.match(/^digitalWrite\s*\(\s*([^,]+)\s*,\s*(.+)\)$/i);
+        if (m) {
+            const label = pinLabel(resolvePinToken(m[1]));
+            if (label) state.pins[label] = evalExprState(m[2], state) ? 1 : 0;
+        }
+        return 0;
+    }
+    if (/^pinMode\s*\(/i.test(text)) return 0;
+
+    let m = text.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(\+\+|--)$/) ||
+        text.match(/^(\+\+|--)\s*([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (m) {
+        const name = /[A-Za-z_]/.test(m[1][0]) ? m[1] : m[2];
+        const op = /[A-Za-z_]/.test(m[1][0]) ? m[2] : m[1];
+        state.vars[name] = (state.vars[name] || 0) + (op === "++" ? 1 : -1);
+        return 0;
+    }
+
+    m = text.match(/^(DDR[BCD]|PORT[BCD]|[A-Za-z_][A-Za-z0-9_]*)\s*(\|=|&=|\^=|\+=|-=|\*=|\/=|%=|<<=|>>=|=)\s*(.+)$/);
+    if (!m) return 0;
+    const target = m[1];
+    const op = m[2];
+    const rhs = evalExprState(m[3], state);
+    const cur = /^(DDR|PORT)[BCD]$/.test(target)
+        ? state.regs[target] || 0
+        : state.vars[target] || 0;
+    let val;
+    switch (op) {
+        case "=": val = rhs; break;
+        case "|=": val = cur | rhs; break;
+        case "&=": val = cur & rhs; break;
+        case "^=": val = cur ^ rhs; break;
+        case "+=": val = cur + rhs; break;
+        case "-=": val = cur - rhs; break;
+        case "*=": val = cur * rhs; break;
+        case "/=": val = rhs === 0 ? cur : Math.trunc(cur / rhs); break;
+        case "%=": val = rhs === 0 ? cur : cur % rhs; break;
+        case "<<=": val = cur << rhs; break;
+        case ">>=": val = cur >> rhs; break;
+        default: val = rhs;
+    }
+    if (/^(DDR|PORT)[BCD]$/.test(target)) {
+        state.regs[target] = val & 0xff;
+        if (state.assignedRegs) state.assignedRegs.add(target);
+    } else {
+        state.vars[target] = val;
+    }
+    return 0;
+}
+
+function execStatements(stmts, state, onDelay) {
+    for (const st of stmts) {
+        if (st.type === "expr") execExprStatement(st.text, state, onDelay);
+        else if (st.type === "if") {
+            if (evalExprState(st.cond, state)) execStatements(st.body, state, onDelay);
+            else if (st.elseBody) execStatements(st.elseBody, state, onDelay);
+        }
+    }
+}
+
+/**
+ * Exécution pas-à-pas du loop() sous forme de générateur : chaque delay(ms)
+ * rendu (yield) permet de suspendre l'exécution et de l'aligner sur le temps réel.
+ */
+function* runLoopGen(stmts, state) {
+    for (const st of stmts) {
+        if (st.type === "expr") {
+            const d = execExprStatement(st.text, state);
+            if (d > 0) yield d;
+        } else if (st.type === "if") {
+            if (evalExprState(st.cond, state)) yield* runLoopGen(st.body, state);
+            else if (st.elseBody) yield* runLoopGen(st.elseBody, state);
+        }
+    }
+}
+
+const PORT_TO_LABELS = {
+    PORTD: ["D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7"],
+    PORTB: ["D8", "D9", "D10", "D11", "D12", "D13"],
+    PORTC: ["A0", "A1", "A2", "A3", "A4", "A5"],
+};
+const DDR_FOR_PORT = { PORTD: "DDRD", PORTB: "DDRB", PORTC: "DDRC" };
+
+function resolveOutputLevels(state) {
+    const levels = {};
+    for (const [port, labels] of Object.entries(PORT_TO_LABELS)) {
+        const ddr = state.regs[DDR_FOR_PORT[port]] || 0;
+        const val = state.regs[port] || 0;
+        labels.forEach((label, bit) => {
+            if ((ddr >> bit) & 1) levels[label] = (val >> bit) & 1;
+        });
+    }
+    for (const [label, lv] of Object.entries(state.pins)) levels[label] = lv ? 1 : 0;
+    return levels;
+}
+
+/* ---------------------------------------------------------------------------
+ * Runtime temps réel : exécute setup() une fois puis loop() en boucle, en
+ * lisant les entrées (digitalRead) en direct et en respectant delay() comme
+ * une vraie temporisation. Permet aux sketches pilotés par un bouton de
+ * fonctionner pendant la simulation.
+ * ------------------------------------------------------------------------- */
+
+/** Le loop() lit-il une entrée (digitalRead) ? → nécessite le runtime live. */
+export function sketchUsesLiveInput(sketch) {
+    const loop = extractFunctionBody(stripComments(sketch || ""), "loop");
+    return /\bdigitalRead\s*\(/i.test(loop);
+}
+
+export function createArduinoRuntime(uno) {
+    const src = stripComments(uno?.sketch || "");
+    const setupBody = extractFunctionBody(src, "setup");
+    const loopBody = extractFunctionBody(src, "loop");
+    const state = { vars: collectInitialVars(src), regs: {}, pins: {}, inputs: {}, simTimeMs: 0 };
+    execStatements(parseStatements(setupBody), state, (ms) => { state.simTimeMs += ms; });
+    return {
+        sketch: uno?.sketch || "",
+        state,
+        loopStmts: parseStatements(loopBody),
+        gen: null,
+        sleepMs: 0,
+        passDelays: 0,
+        idle: false,
+        lastInputs: null,
+    };
+}
+
+/**
+ * Avance le runtime de deltaMs (temps réel), en consommant les delay().
+ * @param {object} rt runtime créé par createArduinoRuntime
+ * @param {number} deltaMs durée écoulée depuis le dernier pas
+ * @param {Record<string, number>} inputs niveaux d'entrée live (ex. { D13: 0 })
+ */
+export function stepArduinoRuntime(rt, deltaMs, inputs) {
+    if (!rt) return;
+    rt.state.inputs = inputs || {};
+    const inKey = JSON.stringify(rt.state.inputs);
+    if (rt.lastInputs !== inKey) rt.idle = false;
+    rt.lastInputs = inKey;
+    if (rt.idle) return;
+    let budget = Math.min(Math.max(0, deltaMs), 2000);
+    let guard = 0;
+    while (budget > 0 && guard < 200000) {
+        guard++;
+        if (rt.sleepMs > 0) {
+            const c = Math.min(budget, rt.sleepMs);
+            rt.sleepMs -= c;
+            budget -= c;
+            rt.state.simTimeMs += c;
+            if (rt.sleepMs > 0) break;
+            continue;
+        }
+        if (!rt.gen) { rt.gen = runLoopGen(rt.loopStmts, rt.state); rt.passDelays = 0; }
+        const r = rt.gen.next();
+        if (r.done) {
+            const hadDelay = rt.passDelays > 0;
+            rt.gen = null;
+            if (!hadDelay) { rt.idle = true; break; }
+            continue;
+        }
+        rt.sleepMs = Math.max(0, Number(r.value) || 0);
+        rt.passDelays++;
+    }
+}
+
+export function arduinoRuntimeLevels(rt) {
+    return rt ? resolveOutputLevels(rt.state) : {};
+}
+
+/**
+ * Exécute setup() puis loop() une fois et renvoie l'état final des registres.
+ * Résout les variables et expressions (PORTD = x, PORTD = x << 1, etc.).
+ */
+function interpretRegisterState(src) {
+    const setupBody = extractFunctionBody(src, "setup");
+    const loopBody = extractFunctionBody(src, "loop");
+    if (!setupBody && !loopBody) return null;
+    if (!/\b(?:DDR|PORT)[BCD]\s*(?:\|=|&=|\^=|=)/.test(`${setupBody};${loopBody}`)) return null;
+    const state = { vars: collectInitialVars(src), regs: {}, pins: {}, assignedRegs: new Set() };
+    execStatements(parseStatements(setupBody), state, () => {});
+    execStatements(parseStatements(loopBody), state, () => {});
+    return { regs: state.regs, assigned: state.assignedRegs };
+}
+
+/** Exécute le sketch (setup + loop) pour générer des phases temporelles. */
+function interpretRegisterPhases(src) {
+    const setupBody = extractFunctionBody(src, "setup");
+    const loopBody = extractFunctionBody(src, "loop");
+    if (!loopBody) return null;
+    if (!/\bdelay\s*\(/i.test(loopBody)) return null;
+    // Réservé aux écritures registre PORTx dans loop() (compteurs, séquences).
+    // Les clignotements digitalWrite restent gérés par la logique dédiée.
+    if (!/\bPORT[BCD]\s*(?:\|=|&=|\^=|=)/.test(loopBody)) return null;
+
+    const state = { vars: collectInitialVars(src), regs: {}, pins: {} };
+    execStatements(parseStatements(setupBody), state, () => {});
+
+    const loopStmts = parseStatements(loopBody);
+    const phases = [];
+    const MAX_PHASES = 64;
+    const seen = new Set();
+
+    for (let iter = 0; iter < 256 && phases.length < MAX_PHASES; iter++) {
+        let emitted = false;
+        execStatements(loopStmts, state, (ms) => {
+            if (ms <= 0) return;
+            phases.push({ durationMs: ms, levels: resolveOutputLevels(state) });
+            emitted = true;
+        });
+        if (!emitted) break;
+        const key = JSON.stringify(state.vars) + "|" + JSON.stringify(state.regs) + "|" + JSON.stringify(state.pins);
+        if (seen.has(key) && phases.length >= 2) break;
+        seen.add(key);
+    }
+
+    return phases.length >= 2 ? phases : null;
+}
+
+function computeDynamicPinLevels(uno, tSec = 0) {
+    const levels = {};
+    const pinPhases = uno?.pinPhases;
+    if (Array.isArray(pinPhases) && pinPhases.length >= 2) {
+        const totalMs = pinPhases.reduce((s, p) => s + (p.durationMs || 0), 0);
+        if (totalMs > 0) {
+            let rem = (((tSec * 1000) % totalMs) + totalMs) % totalMs;
+            for (const ph of pinPhases) {
+                const d = ph.durationMs || 0;
+                if (rem < d) return { ...(ph.levels || {}) };
+                rem -= d;
+            }
+            return { ...(pinPhases[pinPhases.length - 1].levels || {}) };
+        }
+    }
+    const pinPulses = uno?.pinPulses || {};
+    for (const [pin, pulse] of Object.entries(pinPulses)) {
+        if (pulse?.highSec > 0 && pulse?.lowSec > 0) {
+            const period = pulse.highSec + pulse.lowSec;
+            const phase = ((tSec % period) + period) % period;
+            levels[pin] = phase < pulse.highSec ? 1 : 0;
+        }
+    }
+    return levels;
+}
+
+function parseLoopPhases(loopBody) {
+    const phases = [];
+    let current = {};
+    let hadWrite = false;
+    const re =
+        /digitalWrite\s*\(\s*([^,)]+)\s*,\s*(HIGH|LOW|1|0)\s*\)|delay\s*\(\s*(\d+)\s*\)/gi;
+    let m;
+    while ((m = re.exec(loopBody)) !== null) {
+        if (/digitalWrite/i.test(m[0])) {
+            const pin = resolvePinToken(m[1]);
+            const label = pinLabel(pin);
+            if (!label) continue;
+            current[label] = /HIGH|1/i.test(m[2]) ? 1 : 0;
+            hadWrite = true;
+            continue;
+        }
+        const delayMs = parseInt(m[3], 10);
+        if (hadWrite && delayMs > 0) {
+            phases.push({ durationMs: delayMs, levels: { ...current } });
+        }
+        hadWrite = false;
+    }
+    return phases;
+}
+
+/** Deux phases ou plus sur une seule broche → pulsation carrée (clignotement). */
+function singlePinPulseFromPhases(phases) {
+    const pins = new Set();
+    for (const ph of phases) {
+        for (const label of Object.keys(ph.levels || {})) pins.add(label);
+    }
+    if (pins.size !== 1) return null;
+    const label = [...pins][0];
+    let highMs = 0;
+    let lowMs = 0;
+    for (const ph of phases) {
+        if (ph.levels?.[label]) highMs += ph.durationMs || 0;
+        else lowMs += ph.durationMs || 0;
+    }
+    if (highMs <= 0 || lowMs <= 0) return null;
+    return { label, pulse: { highSec: highMs / 1000, lowSec: lowMs / 1000 } };
+}
+
+/**
+ * Niveaux GPIO D0–D13 à l'instant tSec (phases loop, pulsations ou statique).
+ * @returns {Record<string, number>}
+ */
+export function resolvePinLevelsAt(uno, tSec = 0) {
+    if (uno && uno.liveLevels) return { ...uno.liveLevels };
+    const base =
+        uno?.avrRegisters ||
+        buildAvrRegistersFromParsed(
+            {
+                pinModes: uno?.pinModes,
+                pinLevels: uno?.pinLevels,
+                pinPulses: uno?.pinPulses,
+                pinPhases: uno?.pinPhases,
+            },
+            uno?.sketch || ""
+        );
+    const dynamic = computeDynamicPinLevels(uno, tSec);
+    const hasDynamic = Object.keys(dynamic).length > 0;
+    if (!hasDynamic) return registersToPinLevels(base);
+    return registersToPinLevels(applyDynamicLevelsToRegisters(base, dynamic));
+}
+
+export function arduinoGpioIsTimeVarying(uno) {
+    if (!uno || uno.type !== "arduino_uno") return false;
+    if (Array.isArray(uno.pinPhases) && uno.pinPhases.length >= 2) return true;
+    return !!(uno.pinPulses && Object.keys(uno.pinPulses).length > 0);
+}
+
+/**
+ * @returns {{ pinModes: Record<string, string>, pinLevels: Record<string, number>, pinPulses: Record<string, { highSec: number, lowSec: number }>, pinPhases: Array<{ durationMs: number, levels: Record<string, number> }> }}
+ */
+export function parseArduinoSketch(sketch) {
+    const src = stripComments(sketch);
+    const pinModes = {};
+    const pinLevels = {};
+    const pinPulses = {};
+    let pinPhases = [];
+
+    for (const m of src.matchAll(/pinMode\s*\(\s*([^,)]+)\s*,\s*(OUTPUT|INPUT_PULLUP|INPUT)\s*\)/gi)) {
+        const pin = resolvePinToken(m[1]);
+        const label = pinLabel(pin);
+        if (!label) continue;
+        const mode = String(m[2]).toUpperCase();
+        if (mode === "INPUT_PULLUP") pinModes[label] = "INPUT_PULLUP";
+        else if (/INPUT/i.test(mode)) pinModes[label] = "INPUT";
+        else pinModes[label] = "OUTPUT";
+    }
+
+    const loopBody = extractLoopBody(src);
+    const writes = [];
+    const writeRe = /digitalWrite\s*\(\s*([^,)]+)\s*,\s*(HIGH|LOW|1|0)\s*\)/gi;
+    for (const m of loopBody.matchAll(writeRe)) {
+        const pin = resolvePinToken(m[1]);
+        const label = pinLabel(pin);
+        if (!label) continue;
+        writes.push({ label, level: /HIGH|1/i.test(m[2]) });
+    }
+
+    const loopPhases = parseLoopPhases(loopBody);
+    let blinkApplied = false;
+
+    if (loopPhases.length >= 2) {
+        const singlePulse = singlePinPulseFromPhases(loopPhases);
+        if (singlePulse) {
+            pinModes[singlePulse.label] = "OUTPUT";
+            pinPulses[singlePulse.label] = singlePulse.pulse;
+            delete pinLevels[singlePulse.label];
+            blinkApplied = true;
+        } else {
+            pinPhases = loopPhases;
+            for (const ph of pinPhases) {
+                for (const label of Object.keys(ph.levels || {})) {
+                    pinModes[label] = "OUTPUT";
+                    delete pinLevels[label];
+                    delete pinPulses[label];
+                }
+            }
+        }
+    } else {
+        const stepRe =
+            /digitalWrite\s*\(\s*([^,)]+)\s*,\s*(HIGH|LOW|1|0)\s*\)\s*;\s*delay\s*\(\s*(\d+)\s*\)/gi;
+        const steps = [];
+        let match;
+        while ((match = stepRe.exec(loopBody)) !== null) {
+            const pin = resolvePinToken(match[1]);
+            const label = pinLabel(pin);
+            if (!label) continue;
+            steps.push({
+                label,
+                level: /HIGH|1/i.test(match[2]),
+                delayMs: parseInt(match[3], 10),
+            });
+        }
+
+        if (steps.length >= 2) {
+            const labels = [...new Set(steps.map((s) => s.label))];
+            if (labels.length === 1) {
+                const label = labels[0];
+                let highMs = 0;
+                let lowMs = 0;
+                for (const s of steps) {
+                    if (s.level) highMs += s.delayMs;
+                    else lowMs += s.delayMs;
+                }
+                if (highMs > 0 && lowMs > 0) {
+                    pinModes[label] = "OUTPUT";
+                    pinPulses[label] = { highSec: highMs / 1000, lowSec: lowMs / 1000 };
+                    delete pinLevels[label];
+                    blinkApplied = true;
+                }
+            }
+        }
+
+        if (!blinkApplied && loopPhases.length === 1) {
+            for (const [label, level] of Object.entries(loopPhases[0].levels || {})) {
+                pinModes[label] = "OUTPUT";
+                pinLevels[label] = level ? 1 : 0;
+                delete pinPulses[label];
+            }
+        } else if (!blinkApplied && writes.length > 0) {
+            const lastByPin = {};
+            for (const w of writes) lastByPin[w.label] = w.level;
+            for (const [label, level] of Object.entries(lastByPin)) {
+                pinModes[label] = "OUTPUT";
+                pinLevels[label] = level ? 1 : 0;
+                delete pinPulses[label];
+            }
+        }
+    }
+
+    if (pinPhases.length < 2) {
+        const regPhases = interpretRegisterPhases(src);
+        if (regPhases && regPhases.length >= 2) {
+            pinPhases = regPhases;
+            for (const ph of pinPhases) {
+                for (const label of Object.keys(ph.levels || {})) {
+                    pinModes[label] = "OUTPUT";
+                    delete pinLevels[label];
+                    delete pinPulses[label];
+                }
+            }
+        }
+    }
+
+    for (const label of Object.keys(pinModes)) {
+        if (pinModes[label] !== "OUTPUT") {
+            delete pinLevels[label];
+            delete pinPulses[label];
+            continue;
+        }
+        if (pinLevels[label] === undefined && !pinPulses[label] && pinPhases.length < 2) {
+            pinLevels[label] = 0;
+        }
+    }
+
+    const avrRegisters = buildAvrRegistersFromParsed(
+        { pinModes, pinLevels, pinPulses, pinPhases },
+        sketch
+    );
+
+    // L'interpréteur résout les variables/expressions (PORTD = x, PORTD = x << 1…)
+    // que l'analyse statique ne peut pas évaluer. On écrase les registres touchés.
+    const execState = interpretRegisterState(src);
+    if (execState) {
+        for (const reg of execState.assigned) {
+            avrRegisters[reg] = (execState.regs[reg] || 0) & 0xff;
+        }
+    }
+
+    const syncedModes = registersToPinModes(avrRegisters);
+    const syncedLevels = registersToPinLevels(avrRegisters);
+    for (const label of Object.keys(syncedModes)) {
+        if (syncedModes[label] !== "OUTPUT") {
+            delete syncedLevels[label];
+            continue;
+        }
+        if (pinPulses[label] || (pinPhases.length >= 2 && pinPhases.some((ph) => label in (ph.levels || {})))) {
+            delete syncedLevels[label];
+        }
+    }
+
+    return {
+        pinModes: syncedModes,
+        pinLevels: syncedLevels,
+        pinPulses,
+        pinPhases,
+        avrRegisters,
+        usesLiveInput: sketchUsesLiveInput(sketch),
+    };
+}
+
+export function applyArduinoSketchToComponent(comp) {
+    if (!comp || comp.type !== "arduino_uno") return;
+    const parsed = parseArduinoSketch(comp.sketch || "");
+    comp.pinModes = parsed.pinModes;
+    comp.pinLevels = parsed.pinLevels;
+    comp.pinPulses = parsed.pinPulses;
+    comp.pinPhases = parsed.pinPhases || [];
+    comp.avrRegisters = parsed.avrRegisters;
+    comp.usesLiveInput = parsed.usesLiveInput;
+}
+
+export function arduinoUnoMinPulsePeriodSec(components) {
+    let min = Infinity;
+    for (const c of components) {
+        if (c.type !== "arduino_uno") continue;
+        if (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2) {
+            const totalMs = c.pinPhases.reduce((s, p) => s + (p.durationMs || 0), 0);
+            if (totalMs > 0) min = Math.min(min, totalMs / 1000);
+        }
+        if (!c.pinPulses) continue;
+        for (const pulse of Object.values(c.pinPulses)) {
+            const period = (pulse.highSec || 0) + (pulse.lowSec || 0);
+            if (period > 0) min = Math.min(min, period);
+        }
+    }
+    return Number.isFinite(min) ? min : 0;
+}

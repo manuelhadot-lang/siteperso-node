@@ -3,9 +3,13 @@
     --panel-bg: #1e1e1e;
     --accent-color: #ff5722;
     --text-color: #ffffff;
-    --text-muted: #e0e0e0;
+    --text-muted: #b8b8b8;
     --border-color: #333333;
     --canvas-bg: #121212;
+    --sim-run: #0d9668;
+    --sim-run-hover: #0a7d56;
+    --sim-stop: #c0392b;
+    --sim-stop-hover: #a93226;
 }
 
 body.theme-light {
@@ -37,35 +41,53 @@ body.theme-light .close-modal:hover {
 }
 
 body {
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
     overflow: hidden;
     height: 100vh;
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
 }
 
 .navbar {
-    height: 45px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    flex-shrink: 0;
     background-color: var(--panel-bg);
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    padding: 0 10px;
-    z-index: 10;
+    padding: 0 12px;
+    z-index: 100000;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+
+.app-root {
+    margin-top: 48px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .menu-item {
     position: relative;
-    padding: 10px 15px;
+    padding: 10px 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
-    font-weight: bold;
-    transition: background 0.2s;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 0.15s;
 }
 
 .menu-item:hover {
@@ -73,40 +95,66 @@ body {
 }
 
 .menu-icon {
-    font-size: 16px;
+    font-size: 14px;
+    opacity: 0.85;
+}
+
+.menu-icon--sources::before {
+    content: "⏚";
+    font-size: 15px;
 }
 
 .simulation-controls {
     margin-left: auto;
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.circuit-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    max-width: min(280px, 28vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 12px;
+    border-right: 1px solid var(--border-color);
+    flex-shrink: 1;
+}
+
+body.theme-light .circuit-name {
+    color: #555;
 }
 
 .simulation-controls button {
-    border: none;
-    padding: 6px 15px;
-    font-size: 13px;
-    font-weight: bold;
-    border-radius: 4px;
+    border: 1px solid transparent;
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 6px;
     cursor: pointer;
     color: white;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
 
 #btn-simulate {
-    background-color: #00ca71;
+    background-color: var(--sim-run);
 }
 
 #btn-simulate:hover {
-    background-color: #00b362;
+    background-color: var(--sim-run-hover);
 }
 
 #btn-stop {
-    background-color: #ea4335;
+    background-color: var(--sim-stop);
 }
 
-#btn-stop:hover {
-    background-color: #d63629;
+#btn-stop:hover:not(.disabled) {
+    background-color: var(--sim-stop-hover);
 }
 
 .disabled {
@@ -122,19 +170,21 @@ body {
     top: 100%;
     left: 0;
     background-color: var(--panel-bg);
-    border: 2px solid var(--border-color);
-    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.5);
-    z-index: 1;
-    min-width: 180px; /* Légèrement augmenté pour accueillir confortablement les noms longs */
-    border-radius: 0 0 4px 4px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    z-index: 501;
+    min-width: 200px;
+    border-radius: 0 0 8px 8px;
+    padding: 4px 0;
 }
 
 .dropdown-item {
     color: var(--text-muted);
-    padding: 10px 15px;
+    padding: 9px 16px;
     text-decoration: none;
     display: block;
     font-size: 13px;
+    font-weight: 500;
     white-space: nowrap;
 }
 
@@ -143,7 +193,8 @@ body {
     color: white;
 }
 
-.menu-item:hover > .dropdown {
+.menu-item:hover > .dropdown,
+.menu-item.open > .dropdown {
     display: block;
 }
 
@@ -219,24 +270,202 @@ body {
 
 .canvas-container {
     flex: 1;
+    min-width: 0;
+    min-height: 0;
     position: relative;
     background-color: var(--bg-color);
+    overflow: hidden;
 }
 
 #circuitCanvas {
     display: block;
+    width: 100%;
+    height: 100%;
     background-color: var(--canvas-bg);
 }
 
-.modal {
+.sim-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.right-panel {
+    width: min(360px, 38vw);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-bg);
+    border-left: 2px solid var(--border-color);
+    z-index: 20;
+}
+
+.right-panel.hidden {
     display: none;
+}
+
+.panel-header--arduino {
+    color: #00979d;
+}
+
+.arduino-panel-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.arduino-panel-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.modal-content--prompt {
+    max-width: 420px;
+    width: 90%;
+}
+
+.value-prompt-label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.value-prompt-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--canvas-bg);
+    color: inherit;
+    font-size: 1rem;
+}
+
+.value-prompt-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.value-prompt-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--panel-bg);
+    color: inherit;
+    cursor: pointer;
+}
+
+.value-prompt-btn--ok {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #fff;
+}
+
+.value-prompt-btn:hover {
+    filter: brightness(1.08);
+}
+
+.modal-content--arduino {
+    max-width: 720px;
+    width: 92%;
+}
+
+.arduino-cli-status {
+    font-size: 0.85rem;
+    margin: 0 0 10px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.arduino-cli-status--ok { color: #76ff03; }
+.arduino-cli-status--warn { color: #ffb74d; }
+
+.arduino-sketch-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+}
+
+.arduino-sketch-input {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1;
+    min-height: 120px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--canvas-bg);
+    color: inherit;
+    resize: none;
+}
+
+.arduino-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.arduino-btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--panel-bg);
+    color: inherit;
+    cursor: pointer;
+}
+
+.arduino-btn--primary {
+    background: #00979d;
+    border-color: #006064;
+    color: #fff;
+}
+
+.arduino-compile-log {
+    flex: 0 1 40%;
+    min-height: 80px;
+    max-height: 220px;
+    overflow: auto;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    padding: 8px;
+    background: #0a0a0a;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+.modal {
+    display: none !important;
     position: fixed;
-    z-index: 100;
+    z-index: 100001;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
     background-color: rgba(0,0,0,0.7);
+    pointer-events: none !important;
+    visibility: hidden;
+}
+
+.modal.is-open {
+    display: block !important;
+    pointer-events: auto !important;
+    visibility: visible;
 }
 
 .modal-content {

@@ -1,6 +1,6 @@
 ﻿// app.js (Nouveau fichier principal)
 import { canvas, GRID_SIZE, scale, pan, flags, counters, circuit, interaction, zone, menuDrag, clipboard, undoStack, redoStack, emptyDragImage, snapToGrid, toGridCoords, saveState } from './state.js';
-import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest, potentiometerControlHit, switchSpdtToggleHit } from './geometry.js';
+import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest, potentiometerControlHit, switchSpdtToggleHit, pushButtonToggleHit } from './geometry.js';
 import { resizeCanvas, draw } from './renderer.js';
 import { triggerSimulation, stopSimulation, requestLiveSimulation } from './simulation.js';
 import { openSourcePanel, closeSourcePanel, onSourceRemoved, initSourcePanel } from './source-panel.js';
@@ -11,15 +11,25 @@ import { bindLedAnimationRedraw } from './led-animation.js';
 import { bindSpeakerAudioRedraw } from './speaker-audio.js';
 import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animation.js';
 import { initEditorTheme, setEditorTheme } from './theme.js';
+import { initValuePrompt, showValuePrompt } from './value-prompt.js';
+import { initArduinoEditor, openArduinoEditor, onArduinoBoardRemoved } from './arduino-editor.js';
+import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
+import { showModal, hideModal, initModalUi } from './modal-ui.js';
+
+/** « Simulateur H » (application Windows) ou site web. */
+const APP_PRODUCT_NAME =
+    new URLSearchParams(window.location.search).get('app') === 'h'
+        ? 'Simulateur H'
+        : 'Simulateur de Circuits';
 
 const COMPONENT_PREFIX = {
-    battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', capacitor: 'C', inductor: 'L', diode: 'D',
+    battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', push_button: 'BP', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', opamp: 'AOP',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
-    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', led: 'LED', seg7: 'SEG',
+    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', led: 'LED', seg7: 'SEG',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
@@ -36,8 +46,26 @@ function ensureAllCounters() {
     if (counters.junction == null || !Number.isFinite(counters.junction)) counters.junction = 0;
 }
 let fileHandle = null;
+let circuitDisplayName = 'Sans titre';
+
+function formatCircuitDisplayName(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return 'Sans titre';
+    return s.replace(/\.json$/i, '');
+}
+
+function setCircuitDisplayName(name) {
+    circuitDisplayName = formatCircuitDisplayName(name);
+    const el = document.getElementById('circuit-name');
+    if (el) {
+        el.textContent = circuitDisplayName;
+        el.title = `Montage : ${circuitDisplayName}`;
+    }
+    document.title = `${circuitDisplayName} — ${APP_PRODUCT_NAME}`;
+}
 let lastMouseGridPos = { x: 0, y: 0 };
 let liveDragMoved = false;
+let heldPushButton = null;
 
 // --- HISTORIQUE & SÉCURITÉ ---
 function undo() {
@@ -58,10 +86,23 @@ function redo() {
 }
 
 // --- FICHIERS ET SAUVEGARDE ---
-function getCircuitDataJSON() { return JSON.stringify({ components: circuit.components, wires: circuit.wires, autoJunctions: circuit.autoJunctions, counters }, null, 4); }
+function getCircuitDataJSON() {
+    return JSON.stringify(
+        {
+            name: circuitDisplayName,
+            components: circuit.components,
+            wires: circuit.wires,
+            autoJunctions: circuit.autoJunctions,
+            counters,
+        },
+        null,
+        4
+    );
+}
 async function saveAs() {
     try {
         fileHandle = await window.showSaveFilePicker({ suggestedName: 'schema_circuit.json', types: [{ description: 'Fichier JSON Circuit', accept: { 'application/json': ['.json'] } }] });
+        setCircuitDisplayName(fileHandle.name);
         const writable = await fileHandle.createWritable(); await writable.write(getCircuitDataJSON()); await writable.close();
     } catch (err) { fallbackDownload(getCircuitDataJSON()); }
 }
@@ -75,15 +116,28 @@ async function openFile() {
     if (circuit.components.length > 0 && confirm("Voulez-vous sauvegarder votre schéma actuel ?")) { await saveFile(); }
     try {
         const [handle] = await window.showOpenFilePicker({ types: [{ accept: { 'application/json': ['.json'] } }] });
-        fileHandle = handle; loadCircuitFromJSON(await (await handle.getFile()).text());
+        fileHandle = handle;
+        setCircuitDisplayName(handle.name);
+        loadCircuitFromJSON(await (await handle.getFile()).text());
     } catch (err) {
         const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
-        input.onchange = e => { const r = new FileReader(); r.onload = ev => loadCircuitFromJSON(ev.target.result); r.readAsText(e.target.files[0]); }; input.click();
+        input.onchange = e => {
+            const file = e.target.files?.[0];
+            if (file) {
+                fileHandle = null;
+                setCircuitDisplayName(file.name);
+            }
+            const r = new FileReader();
+            r.onload = ev => loadCircuitFromJSON(ev.target.result);
+            if (file) r.readAsText(file);
+        };
+        input.click();
     }
 }
 function loadCircuitFromJSON(jsonText) {
     try {
         const data = JSON.parse(jsonText);
+        if (data.name) setCircuitDisplayName(data.name);
         circuit.components = data.components || []; circuit.wires = data.wires || []; circuit.autoJunctions = data.autoJunctions || [];
         Object.assign(counters, data.counters || {}); ensureAllCounters(); interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
         undoStack.length = 0; redoStack.length = 0; stopSimulation(); closeSourcePanel(); draw();
@@ -91,8 +145,17 @@ function loadCircuitFromJSON(jsonText) {
 }
 
 // --- CLAVIER & RECOPIE ---
+function isTextFieldFocused() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return true;
+    return el.isContentEditable === true;
+}
+
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase(); if (e.key === 'Shift') flags.isShiftPressed = true;
+    if (isTextFieldFocused()) return;
     if (e.code === 'Space' && interaction.activeWire) {
         e.preventDefault(); const last = interaction.activeWire.points[interaction.activeWire.points.length - 1]; interaction.activeWire.points.push({ x: last.x, y: last.y }); draw(); return;
     }
@@ -117,6 +180,7 @@ window.addEventListener('keydown', (e) => {
                 interaction.selectedComponents.forEach(comp => {
                     onSourceRemoved(comp);
                     onScopeRemoved(comp);
+                    onArduinoBoardRemoved(comp);
                     const idx = circuit.components.indexOf(comp); if (idx > -1) circuit.components.splice(idx, 1);
                     circuit.wires = circuit.wires.filter(w => !w.fromJonctionId.startsWith(comp.label) && !w.toJonctionId.startsWith(comp.label));
                 }); interaction.selectedComponents = [];
@@ -213,6 +277,18 @@ canvas.addEventListener('mousedown', (e) => {
             if (flags.isSimulating) requestLiveSimulation();
             return;
         }
+        if (hitComp?.type === 'push_button' && !interaction.hoverJonction && pushButtonToggleHit(hitComp, mousePos.x, mousePos.y)) {
+            if (!flags.isSimulating) saveState();
+            if (hitComp.maintained) {
+                hitComp.state = hitComp.state === 1 ? 0 : 1;
+            } else {
+                hitComp.state = 1;
+                heldPushButton = hitComp;
+            }
+            draw();
+            if (flags.isSimulating) requestLiveSimulation();
+            return;
+        }
         if (interaction.hoveredComponent && interaction.hoveredComponent.type === 'logic_terminal' && flags.isSimulating) {
             saveState(); interaction.hoveredComponent.state = interaction.hoveredComponent.state === 1 ? 0 : 1; draw();
             triggerSimulation(true); return;
@@ -273,12 +349,21 @@ canvas.addEventListener('mousedown', (e) => {
         if (!interaction.selectedComponents.includes(hc)) { interaction.selectedComponents = [hc]; interaction.selectedAutoJunctions = []; }
         if (hc.type === 'gimp' || hc.type === 'gsin' || hc.type === 'gsqr') { closeScopePanelFully(); openSourcePanel(hc); }
         else if (hc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(hc); }
+        else if (hc.type === 'arduino_uno') { openArduinoEditor(hc); }
         else { closeSourcePanel(); closeScopePanelFully(); }
         flags.isDraggingComponent = true; saveState();
     } else { interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; if (!flags.isSimulating) { closeSourcePanel(); closeScopePanelFully(); } flags.isPanning = true; flags.startX = e.clientX - pan.x; flags.startY = e.clientY - pan.y; }
     draw();
 });
 
+canvas.addEventListener('mouseleave', () => {
+    if (heldPushButton) {
+        heldPushButton.state = 0;
+        heldPushButton = null;
+        draw();
+        if (flags.isSimulating) requestLiveSimulation();
+    }
+});
 canvas.addEventListener('mousemove', (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY);
     if (flags.isSelectingZone) { zone.end = { x: mousePos.x, y: mousePos.y }; draw(); return; }
@@ -301,6 +386,12 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mouseup', () => {
+    if (heldPushButton) {
+        heldPushButton.state = 0;
+        heldPushButton = null;
+        draw();
+        if (flags.isSimulating) requestLiveSimulation();
+    }
     if (flags.isSelectingZone) {
         flags.isSelectingZone = false; const xMi = Math.min(zone.start.x, zone.end.x), xMa = Math.max(zone.start.x, zone.end.x), yMi = Math.min(zone.start.y, zone.end.y), yMa = Math.max(zone.start.y, zone.end.y);
         interaction.selectedComponents = circuit.components.filter(c => c.x >= xMi && c.x <= xMa && c.y >= yMi && c.y <= yMa); interaction.selectedAutoJunctions = circuit.autoJunctions.filter(aj => aj.x >= xMi && aj.x <= xMa && aj.y >= yMi && aj.y <= yMa);
@@ -322,12 +413,11 @@ function openCd4511DocModal(componentLabel) {
             ? `CD4511 — ${componentLabel}`
             : 'CD4511 — Décodeur BCD / 7 segments';
     }
-    modal.style.display = 'block';
+    showModal(modal);
 }
 
 function closeCd4511DocModal() {
-    const modal = document.getElementById('cd4511-doc-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal(document.getElementById('cd4511-doc-modal'));
 }
 
 function openHc90DocModal(componentLabel) {
@@ -339,15 +429,30 @@ function openHc90DocModal(componentLabel) {
             ? `74HC90 — ${componentLabel}`
             : '74HC90 — Compteur décade asynchrone';
     }
-    modal.style.display = 'block';
+    showModal(modal);
 }
 
 function closeHc90DocModal() {
-    const modal = document.getElementById('hc90-doc-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal(document.getElementById('hc90-doc-modal'));
 }
 
-canvas.addEventListener('dblclick', (e) => {
+function openUnoDocModal(componentLabel) {
+    const modal = document.getElementById('uno-doc-modal');
+    const title = document.getElementById('uno-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `Arduino UNO R3 — ${componentLabel}`
+            : 'Arduino UNO R3';
+    }
+    showModal(modal);
+}
+
+function closeUnoDocModal() {
+    hideModal(document.getElementById('uno-doc-modal'));
+}
+
+canvas.addEventListener('dblclick', async (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
         if (target.type === 'cd4511') {
@@ -356,6 +461,10 @@ canvas.addEventListener('dblclick', (e) => {
         }
         if (target.type === 'ic_74hc90') {
             openHc90DocModal(target.label);
+            return;
+        }
+        if (target.type === 'arduino_uno') {
+            openUnoDocModal(target.label);
             return;
         }
         if (target.type === 'oscilloscope') {
@@ -376,15 +485,15 @@ canvas.addEventListener('dblclick', (e) => {
         }
         const live = flags.isSimulating;
         if (target.type === 'resistor') {
-            let v = prompt(`Valeur de ${target.label} :`, target.value || "1k");
+            let v = await showValuePrompt(`Valeur de ${target.label} :`, target.value || "1k");
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'potentiometer') {
-            let v = prompt(`Résistance totale de ${target.label} (ex. 10k) :`, target.value || '10k');
+            let v = await showValuePrompt(`Résistance totale de ${target.label} (ex. 10k) :`, target.value || '10k');
             if (v) {
                 if (!live) saveState();
                 target.value = v.trim();
-                const p = prompt('Position du curseur (0–100 %) :', String(target.position ?? 50));
+                const p = await showValuePrompt('Position du curseur (0–100 %) :', String(target.position ?? 50));
                 if (p !== null && p.trim() !== '' && !isNaN(parseFloat(p))) {
                     target.position = Math.min(100, Math.max(0, parseFloat(p)));
                 }
@@ -393,25 +502,25 @@ canvas.addEventListener('dblclick', (e) => {
             }
         }
         else if (target.type === 'capacitor') {
-            let v = prompt(`Capacité de ${target.label} (ex. 1u, 100n, 10p, 1m) :`, target.value || "1u");
+            let v = await showValuePrompt(`Capacité de ${target.label} (ex. 1u, 100n, 10p, 1m) :`, target.value || "1u");
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'speaker') {
-            let v = prompt(`Impédance de ${target.label} (Ω, ex. 8) :`, target.value || '8');
+            let v = await showValuePrompt(`Impédance de ${target.label} (Ω, ex. 8) :`, target.value || '8');
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'inductor') {
-            let v = prompt(`Inductance de ${target.label} (ex. 1m, 10u) :`, target.value || "1m");
+            let v = await showValuePrompt(`Inductance de ${target.label} (ex. 1m, 10u) :`, target.value || "1m");
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'diode') {
-            let v = prompt(`Modèle diode ${target.label} (ex. 1N4148) :`, target.value || "1N4148");
+            let v = await showValuePrompt(`Modèle diode ${target.label} (ex. 1N4148) :`, target.value || "1N4148");
             if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'opamp') {
-            let vp = prompt('Alimentation + (V) :', target.vp ?? 15);
+            let vp = await showValuePrompt('Alimentation + (V) :', String(target.vp ?? 15));
             if (vp === null) return;
-            let vn = prompt('Alimentation − (V) :', target.vn ?? -15);
+            let vn = await showValuePrompt('Alimentation − (V) :', String(target.vn ?? -15));
             if (vn === null) return;
             if (!live) saveState();
             target.vp = parseFloat(vp) || 15;
@@ -420,13 +529,28 @@ canvas.addEventListener('dblclick', (e) => {
             if (live) requestLiveSimulation();
         }
         else if (['battery', 'vcc'].includes(target.type)) {
-            let v = prompt("Tension (Volts) :", target.value !== undefined ? target.value : "5");
+            let v = await showValuePrompt("Tension (Volts) :", target.value !== undefined ? String(target.value) : "5");
             if (v && !isNaN(parseFloat(v))) { if (!live) saveState(); target.value = parseFloat(v); draw(); if (live) requestLiveSimulation(); }
         }
         else if (target.type === 'logic_terminal') {
             if (live) { alert("Arrêtez la simulation."); return; }
-            let v = prompt("Tension Niveau Haut (Volts) :", target.highVoltage !== undefined ? target.highVoltage : "5");
+            let v = await showValuePrompt("Tension Niveau Haut (Volts) :", target.highVoltage !== undefined ? String(target.highVoltage) : "5");
             if (v && !isNaN(parseFloat(v))) { saveState(); target.highVoltage = parseFloat(v); draw(); }
+        }
+        else if (target.type === 'push_button') {
+            const cur = target.maintained ? 'maintenu' : 'momentane';
+            let v = await showValuePrompt(
+                `Mode de ${target.label} — "momentane" (fermé pendant l'appui) ou "maintenu" (1er clic ferme, 2e clic ouvre) :`,
+                cur
+            );
+            if (v) {
+                if (!live) saveState();
+                target.maintained = v.trim().toLowerCase().startsWith('maint');
+                target.state = 0;
+                heldPushButton = null;
+                draw();
+                if (live) requestLiveSimulation();
+            }
         }
     }
 });
@@ -457,6 +581,9 @@ canvas.addEventListener('drop', (e) => {
         nc.position = 50;
     } else if (menuDrag.draggedComponentType === 'switch_spdt') {
         nc.state = 0;
+    } else if (menuDrag.draggedComponentType === 'push_button') {
+        nc.state = 0;
+        nc.maintained = false;
     } else if (menuDrag.draggedComponentType === 'speaker') {
         nc.value = '8';
     } else if (menuDrag.draggedComponentType === 'gsin') {
@@ -488,10 +615,19 @@ canvas.addEventListener('drop', (e) => {
         nc.ch2VoltsPerDiv = 1;
         nc.ch1PositionDiv = 0;
         nc.ch2PositionDiv = 0;
+    } else if (menuDrag.draggedComponentType === 'arduino_uno') {
+        nc.sketch = DEFAULT_ARDUINO_SKETCH;
+        nc.fqbn = 'arduino:avr:uno';
+        nc.pinModes = {};
+        nc.pinLevels = {};
+        nc.avrRegisters = null;
+        nc.lastCompileOk = null;
+        nc.lastCompileLog = '';
     }
     circuit.components.push(nc); interaction.selectedComponents = [nc]; interaction.selectedAutoJunctions = []; interaction.selectedWire = null; flags.isDraggingFromMenu = false; menuDrag.draggedComponentType = null; draw();
     if (nc.type === 'gimp' || nc.type === 'gsin' || nc.type === 'gsqr') { closeScopePanelFully(); openSourcePanel(nc); }
     else if (nc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(nc); }
+    else if (nc.type === 'arduino_uno') { openArduinoEditor(nc); }
 });
 
 /** Retire les emoji / symboles décoratifs des entrées de menu déroulant. */
@@ -512,12 +648,14 @@ function normalizeSubmenuLabels() {
 }
 
 // --- CHARGEMENT INITIAL ---
-window.onload = function() {
+function initApp() {
+    initModalUi();
     initEditorTheme();
     document.getElementById('btn-theme-dark')?.addEventListener('click', () => { setEditorTheme('dark'); draw(); });
     document.getElementById('btn-theme-light')?.addEventListener('click', () => { setEditorTheme('light'); draw(); });
     normalizeSubmenuLabels();
     ensureAllCounters();
+    setCircuitDisplayName('Sans titre');
     resizeCanvas(); window.addEventListener('resize', resizeCanvas);
     document.querySelectorAll('.dropdown-item[draggable=true]').forEach(item => {
         item.addEventListener('dragstart', (e) => {
@@ -537,13 +675,40 @@ window.onload = function() {
     document.querySelectorAll('.dropdown-submenu .submenu').forEach(sub => {
         sub.addEventListener('click', (e) => e.stopPropagation());
     });
-    document.addEventListener('click', () => {
+    document.querySelectorAll('.navbar > .menu-item').forEach((item) => {
+        if (!item.querySelector('.dropdown')) return;
+        item.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('.dropdown-item')) return;
+            e.stopPropagation();
+            const wasOpen = item.classList.contains('open');
+            document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
+            if (!wasOpen) item.classList.add('open');
+        });
+        item.querySelector('.dropdown')?.addEventListener('pointerdown', (e) => e.stopPropagation());
+    });
+    document.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.navbar')) return;
+        document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
         document.querySelectorAll('.dropdown-submenu.open').forEach(s => s.classList.remove('open'));
     });
-    document.getElementById('btn-new').addEventListener('click', () => { if (circuit.components.length > 0 && confirm("Tout effacer ?")) { saveState(); circuit.components = []; circuit.wires = []; circuit.autoJunctions = []; Object.keys(counters).forEach(k => counters[k]=0); stopSimulation(); } });
+    document.getElementById('btn-new').addEventListener('click', () => {
+        if (circuit.components.length > 0 && confirm("Tout effacer ?")) {
+            saveState();
+            circuit.components = [];
+            circuit.wires = [];
+            circuit.autoJunctions = [];
+            Object.keys(counters).forEach(k => counters[k] = 0);
+            fileHandle = null;
+            setCircuitDisplayName('Sans titre');
+            stopSimulation();
+        }
+    });
     document.getElementById('btn-open').addEventListener('click', openFile); document.getElementById('btn-save').addEventListener('click', saveFile); document.getElementById('btn-save-as').addEventListener('click', saveAs);
     document.getElementById('btn-simulate').addEventListener('click', () => { if (!flags.isSimulating) triggerSimulation(); }); document.getElementById('btn-stop').addEventListener('click', stopSimulation);
     initSourcePanel();
+    initValuePrompt();
+    initArduinoEditor();
     initScopePanel();
     initScopePopup();
     initBodePopup();
@@ -556,11 +721,23 @@ window.onload = function() {
     bindSpeakerAudioRedraw(draw);
     bindScopeAnimationRedraw(draw);
     bindScopePopupRedraw(refreshScopePopup);
-    const m = document.getElementById('commands-modal'); document.getElementById('btn-commands').addEventListener('click', () => m.style.display = 'block'); document.getElementById('close-commands').addEventListener('click', () => m.style.display = 'none'); window.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });
+    const m = document.getElementById('commands-modal');
+    document.getElementById('btn-commands')?.addEventListener('click', () => showModal(m));
+    document.getElementById('close-commands')?.addEventListener('click', () => hideModal(m));
+    window.addEventListener('click', (e) => { if (e.target === m) hideModal(m); });
     const cdDoc = document.getElementById('cd4511-doc-modal');
     document.getElementById('close-cd4511-doc')?.addEventListener('click', closeCd4511DocModal);
     window.addEventListener('click', (e) => { if (e.target === cdDoc) closeCd4511DocModal(); });
     const hc90Doc = document.getElementById('hc90-doc-modal');
     document.getElementById('close-hc90-doc')?.addEventListener('click', closeHc90DocModal);
     window.addEventListener('click', (e) => { if (e.target === hc90Doc) closeHc90DocModal(); });
-};
+    const unoDoc = document.getElementById('uno-doc-modal');
+    document.getElementById('close-uno-doc')?.addEventListener('click', closeUnoDocModal);
+    window.addEventListener('click', (e) => { if (e.target === unoDoc) closeUnoDocModal(); });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}

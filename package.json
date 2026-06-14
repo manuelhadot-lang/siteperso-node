@@ -7,7 +7,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "check-ngspice": "node tools/check-ngspice.cjs"
+    "check-ngspice": "node tools/check-ngspice.cjs",
+    "simulateur-h": "npm start --prefix SimulateurH",
+    "simulateur-h:build": "npm run dist --prefix SimulateurH"
   },
   "dependencies": {
     "archiver": "^7.0.1",

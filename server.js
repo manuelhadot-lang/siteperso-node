@@ -19,6 +19,7 @@ const {
     isNgspiceWrongPlatformBinary,
     resolveDigitalCmSourcePath,
 } = require("./tools/ngspice-bundle.cjs");
+const { mountArduinoRoutes } = require("./tools/arduino-routes.cjs");
 
 const XSPICE_DIGITAL_CM_PLACEHOLDER = "__XSPICE_DIGITAL_CM__";
 
@@ -1184,6 +1185,8 @@ app.post("/api/simulate", async (req, res) => {
         await rm(tempDir, { recursive: true, force: true });
     }
 });
+
+mountArduinoRoutes(app);
 
 // --- 5. COMPTEUR ---
 let visitCount = 0;

@@ -28,11 +28,30 @@ import {
     IC90_RIGHT_PIN_Y,
     IC90_Q_STACK_INDICES,
 } from './ic74hc90-layout.js';
+import {
+    UNO_BOX_B,
+    UNO_BOX_L,
+    UNO_BOX_R,
+    UNO_BOX_T,
+    UNO_JUNC_L,
+    UNO_JUNC_R,
+    UNO_LABEL_L,
+    UNO_LABEL_R,
+    UNO_HIT_DX,
+    UNO_HIT_DY,
+    UNO_LEFT_PINS,
+    UNO_RIGHT_PINS,
+    UNO_LEFT_PIN_Y,
+    UNO_RIGHT_PIN_Y,
+    UNO_DIGITAL_PINS,
+} from './arduino-uno-layout.js';
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
-import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { getArduinoPanelWidth } from './arduino-editor.js';
+import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, getIdealSeg7Display, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
 import { isSpeakerAudioPlaying } from './speaker-audio.js';
 import { COLORS } from './theme.js';
+import { formatAvrRegistersSummary } from './Engine/arduino-avr-registers.mjs';
 
 function hc90SimCount(comp) {
     if (!flags.isSimulating || !comp?.label) return null;
@@ -51,8 +70,15 @@ function hc90SimCount(comp) {
 }
 
 export function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 45 - getBottomPanelHeight();
+    const container = canvas.parentElement;
+    const w = container?.clientWidth > 0
+        ? container.clientWidth
+        : Math.max(200, window.innerWidth - getArduinoPanelWidth());
+    const h = container?.clientHeight > 0
+        ? container.clientHeight
+        : Math.max(200, window.innerHeight - 48 - getBottomPanelHeight());
+    canvas.width = Math.max(200, Math.floor(w));
+    canvas.height = Math.max(200, Math.floor(h));
     draw();
 }
 
@@ -178,16 +204,27 @@ function drawOscilloscopeScreen(comp) {
 const SEG7_PIN_Y = [-60, -40, -20, 0, 20, 40, 60];
 const SEG7_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
 
+function seg7SetFrom(segments) {
+    return new Set(Object.entries(segments).filter(([, on]) => on).map(([k]) => k));
+}
+
 function getSeg7LitSet(comp) {
     if (flags.isSimulating) {
+        // En simulation : valeur animée (compteurs, phases) basée sur le temps écoulé.
         const anim = getAnimatedSeg7Segments(comp.label);
-        if (anim?.segments) {
-            return new Set(Object.entries(anim.segments).filter(([, on]) => on).map(([k]) => k));
-        }
+        if (anim?.segments) return seg7SetFrom(anim.segments);
+        const data = simulationResults.seg7?.[comp.label];
+        if (data?.segments) return seg7SetFrom(data.segments);
+        return new Set();
+    }
+    // Hors simulation : aperçu statique piloté par le sketch Arduino (valeur initiale).
+    const idealArduino = getIdealSeg7Display(comp.label);
+    if (idealArduino?.segments && !idealArduino.blank) {
+        return seg7SetFrom(idealArduino.segments);
     }
     const data = simulationResults.seg7?.[comp.label];
     if (!data?.segments) return new Set();
-    return new Set(Object.entries(data.segments).filter(([, on]) => on).map(([k]) => k));
+    return seg7SetFrom(data.segments);
 }
 
 function drawSeg7Display(comp) {
@@ -432,7 +469,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     ctx.save(); ctx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     ctx.rotate(rot * Math.PI / 180);
 
@@ -547,6 +584,40 @@ function drawComponentBody(comp) {
         ctx.fillText('COM', -44, 0);
         ctx.fillText('B', -44, 18);
         drawLabels(comp.label, null, rot);
+    }
+    else if (comp.type === 'push_button') {
+        const pressed = (comp.state ?? 0) === 1;
+        ctx.strokeStyle = COLORS.componentStroke; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-40, 0); ctx.lineTo(-16, 0);
+        ctx.moveTo(16, 0); ctx.lineTo(40, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(-16, 0, 3, 0, Math.PI * 2);
+        ctx.moveTo(16, 0);
+        ctx.arc(16, 0, 3, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.componentStroke;
+        ctx.fill();
+        const barY = pressed ? -3 : -9;
+        ctx.strokeStyle = COLORS.componentStroke; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-16, barY); ctx.lineTo(16, barY);
+        ctx.moveTo(0, barY); ctx.lineTo(0, barY - 8);
+        ctx.stroke();
+        ctx.fillStyle = pressed ? '#ef5350' : COLORS.componentFill;
+        ctx.strokeStyle = COLORS.componentStroke; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(-12, barY - 16, 24, 8);
+        ctx.fill();
+        ctx.stroke();
+        if (comp.maintained) {
+            ctx.fillStyle = COLORS.inkDim;
+            ctx.font = '9px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('M', 0, barY - 18);
+        }
+        drawLabels(comp.label, pressed ? 'ON' : 'OFF', rot);
     }
     else if (comp.type === 'capacitor') {
         ctx.strokeStyle = '#66bb6a'; ctx.lineWidth = 2;
@@ -761,6 +832,74 @@ function drawComponentBody(comp) {
         ctx.font = '11px Arial';
         ctx.fillText(comp.label, 0, IC90_BOX_T - 12);
     }
+    else if (comp.type === 'arduino_uno') {
+        ctx.fillStyle = '#00979d';
+        ctx.strokeStyle = '#006064';
+        ctx.lineWidth = 2;
+        ctx.fillRect(UNO_BOX_L, UNO_BOX_T, UNO_BOX_R - UNO_BOX_L, UNO_BOX_B - UNO_BOX_T);
+        ctx.strokeRect(UNO_BOX_L, UNO_BOX_T, UNO_BOX_R - UNO_BOX_L, UNO_BOX_B - UNO_BOX_T);
+        ctx.beginPath();
+        UNO_LEFT_PIN_Y.forEach((y) => {
+            ctx.moveTo(UNO_JUNC_L, y);
+            ctx.lineTo(UNO_BOX_L, y);
+        });
+        UNO_RIGHT_PIN_Y.forEach((y) => {
+            ctx.moveTo(UNO_BOX_R, y);
+            ctx.lineTo(UNO_JUNC_R, y);
+        });
+        ctx.strokeStyle = '#004d40';
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '7px Arial';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        UNO_LEFT_PINS.forEach((t, i) => ctx.fillText(t, UNO_LABEL_L, UNO_LEFT_PIN_Y[i]));
+        ctx.textAlign = 'right';
+        UNO_RIGHT_PINS.forEach((t, i) => ctx.fillText(t, UNO_LABEL_R, UNO_RIGHT_PIN_Y[i]));
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('UNO', 0, 0);
+        ctx.font = '8px Arial';
+        ctx.fillText('ATmega328P', 0, 12);
+        if (flags.isSimulating && comp.avrRegisters) {
+            const regText = formatAvrRegistersSummary(comp.avrRegisters);
+            ctx.font = '5px monospace';
+            ctx.fillStyle = '#b2ebf2';
+            ctx.textAlign = 'center';
+            ctx.fillText(regText.slice(0, 48), 0, 22);
+            if (regText.length > 48) ctx.fillText(regText.slice(48), 0, 29);
+        }
+        if (flags.isSimulating && comp.label) {
+            UNO_DIGITAL_PINS.forEach((pinName) => {
+                const lv = simulationResults.logicValues?.[`${comp.label}_${pinName}`]
+                    ?? simulationResults.logicValues?.[`${comp.label}/${pinName}`];
+                if (!lv) return;
+                const idx = UNO_RIGHT_PINS.indexOf(pinName);
+                if (idx < 0) return;
+                const y = UNO_RIGHT_PIN_Y[idx];
+                ctx.beginPath();
+                ctx.fillStyle = lv.logic === 1 ? '#76ff03' : '#455a64';
+                ctx.arc(UNO_JUNC_R - 8, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        if (comp.lastCompileOk === true) {
+            ctx.fillStyle = '#76ff03';
+            ctx.font = '7px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('✓ compile', UNO_BOX_L + 4, UNO_BOX_B - 6);
+        } else if (comp.lastCompileOk === false) {
+            ctx.fillStyle = '#ff5252';
+            ctx.font = '7px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('✗ compile', UNO_BOX_L + 4, UNO_BOX_B - 6);
+        }
+        ctx.fillStyle = COLORS.ink;
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(comp.label, 0, UNO_BOX_T - 12);
+    }
     else if (comp.type === 'seg7') {
         drawSeg7Display(comp);
     }
@@ -798,7 +937,7 @@ function drawComponentBody(comp) {
         if (isBurnt) {
             drawLedSmoke(performance.now() / 350);
         }
-        drawLabels(comp.label, isBurnt ? 'GRILLÉE' : (isLit ? 'ALLUMÉE' : 'ÉTEINTE'), rot);
+        drawLabels(comp.label, isBurnt ? 'GRILLÉE' : null, rot);
     }
     else if (comp.type === 'gimp') {
         ctx.save();
@@ -859,16 +998,18 @@ function drawComponentBody(comp) {
         drawOscilloscopeScreen(comp);
     }
     else if (comp.type === 'voltmeter') {
-        let displayValue = '0.0';
+        let displayValue = flags.isSimulating ? '—' : '0.0';
         let rawV = null;
-        const animV = flags.isSimulating ? getAnimatedVoltmeterVoltage(comp.label) : null;
-        if (animV != null && Number.isFinite(animV)) {
-            rawV = animV;
-        } else if (flags.isSimulating && simulationResults.voltmeters && simulationResults.voltmeters[comp.label] !== undefined) {
-            let measureData = simulationResults.voltmeters[comp.label];
-            if (measureData && typeof measureData === 'object' && measureData.voltage !== undefined) {
-                rawV = measureData.voltage;
-            } else if (typeof measureData === 'number') { rawV = measureData; }
+        if (flags.isSimulating) {
+            const animV = getAnimatedVoltmeterVoltage(comp.label);
+            if (animV != null && Number.isFinite(animV)) {
+                rawV = animV;
+            } else if (simulationResults.voltmeters && simulationResults.voltmeters[comp.label] !== undefined) {
+                let measureData = simulationResults.voltmeters[comp.label];
+                if (measureData && typeof measureData === 'object' && measureData.voltage !== undefined) {
+                    rawV = measureData.voltage;
+                } else if (typeof measureData === 'number') { rawV = measureData; }
+            }
         }
         if (rawV != null && Number.isFinite(rawV)) {
             displayValue = formatMeterValue(quantizeVoltmeterReading(rawV));

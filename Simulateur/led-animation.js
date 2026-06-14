@@ -17,6 +17,21 @@ import {
     idealRippleMod10Bcd,
     shouldUseIdealRippleMod10Seg7,
 } from './Engine/ripple-mod10.mjs';
+import {
+    applyArduinoSketchToComponent,
+    arduinoGpioIsTimeVarying,
+    resolvePinLevelsAt,
+    createArduinoRuntime,
+    stepArduinoRuntime,
+    arduinoRuntimeLevels,
+} from './Engine/arduino-sketch-parse.mjs';
+import { reachableJonctions } from './Engine/hc90-cascade.mjs';
+import { UNO_JONCTION_SUFFIX } from './arduino-uno-layout.js';
+import { syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
+import {
+    getIdealSeg7FromArduino,
+    getIdealVoltmeterVoltage,
+} from './Engine/arduino-gpio-ideal.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -24,6 +39,8 @@ export const PERSISTENCE_FREQ_HZ = 50;
 const LED_ON_A = 1e-4;
 /** Courant simulé pour une LED HC90 en mode comptage idéal (Render / .tran court). */
 const HC90_IDEAL_LED_ON_A = 0.008;
+/** Courant simulé pour une LED pilotée par GPIO Arduino (animation idéale). */
+const ARDUINO_IDEAL_LED_ON_A = 0.008;
 
 /** Courant maxi recommandé pour une LED standard (au-delà → grillée). */
 export const LED_MAX_SAFE_CURRENT_A = 0.02;
@@ -56,11 +73,101 @@ let anim = {
     /** @type {Record<string, number>} courant moyen si persistance */
     steadyCurrent: {},
     /** @type {ReturnType<typeof detectHc90Cascade>|null} */
-    hc90Cascade: null,
+    /** @type {Record<string, { pulse?: { highSec: number, lowSec: number }, level?: number }>} */
+    arduinoLedDrive: {},
 };
 
 export function bindLedAnimationRedraw(fn) {
     redraw = typeof fn === 'function' ? fn : () => {};
+}
+
+/* --- Runtime Arduino temps réel (sketches pilotés par digitalRead) --------- */
+
+/** @type {Map<string, { rt: object, sketch: string }>} */
+const arduinoRuntimes = new Map();
+let lastRuntimeStepMs = 0;
+
+function junctionNetReachesGnd(net) {
+    for (const j of net) {
+        if (typeof j === 'string' && (j.startsWith('GND') || /^GND\d*_/.test(j))) return true;
+    }
+    return false;
+}
+
+function junctionNetReachesHigh(net) {
+    for (const j of net) {
+        if (typeof j !== 'string') continue;
+        if (j.startsWith('VCC')) return true;
+        if (/^VDC\d*_in$/.test(j)) return true;
+    }
+    return false;
+}
+
+/** Niveaux d'entrée live (boutons/interrupteurs vers une rampe) pour un UNO. */
+function readUnoInputs(uno) {
+    const inputs = {};
+    const modes = uno.pinModes || {};
+    const wires = circuit.wires;
+    const aj = circuit.autoJunctions;
+    for (const [label, mode] of Object.entries(modes)) {
+        if (mode !== 'INPUT' && mode !== 'INPUT_PULLUP') continue;
+        const net = reachableJonctions(`${uno.label}_${label}`, wires, aj);
+        let value = 1;
+        if (junctionNetReachesGnd(net)) value = 0;
+        else if (junctionNetReachesHigh(net)) value = 1;
+        for (const comp of circuit.components) {
+            if (comp.type !== 'push_button' && comp.type !== 'switch_spdt') continue;
+            const a = `${comp.label}_in`;
+            const b = `${comp.label}_out`;
+            const pinSide = net.has(a) ? a : net.has(b) ? b : null;
+            if (!pinSide && comp.type === 'switch_spdt') continue;
+            if (comp.type === 'push_button') {
+                if (!pinSide) continue;
+                const otherSide = pinSide === a ? b : a;
+                const other = reachableJonctions(otherSide, wires, aj);
+                if (junctionNetReachesGnd(other)) value = comp.state === 1 ? 0 : 1;
+                else if (junctionNetReachesHigh(other)) value = comp.state === 1 ? 1 : 0;
+            }
+        }
+        inputs[label] = value;
+    }
+    return inputs;
+}
+
+/** Avance (une fois par frame) les runtimes des UNO pilotés par digitalRead. */
+function updateArduinoRuntimes() {
+    const now = performance.now();
+    if (lastRuntimeStepMs <= 0) lastRuntimeStepMs = now;
+    const deltaMs = now - lastRuntimeStepMs;
+    lastRuntimeStepMs = now;
+    const seen = new Set();
+    for (const comp of circuit.components) {
+        if (comp.type !== 'arduino_uno') continue;
+        applyArduinoSketchToComponent(comp);
+        if (!comp.usesLiveInput) {
+            comp.liveLevels = null;
+            continue;
+        }
+        seen.add(comp.label);
+        let entry = arduinoRuntimes.get(comp.label);
+        if (!entry || entry.sketch !== (comp.sketch || '')) {
+            entry = { rt: createArduinoRuntime(comp), sketch: comp.sketch || '' };
+            arduinoRuntimes.set(comp.label, entry);
+        }
+        stepArduinoRuntime(entry.rt, deltaMs, readUnoInputs(comp));
+        comp.liveLevels = arduinoRuntimeLevels(entry.rt);
+    }
+    for (const key of [...arduinoRuntimes.keys()]) {
+        if (!seen.has(key)) arduinoRuntimes.delete(key);
+    }
+}
+
+function resetArduinoRuntimes() {
+    arduinoRuntimes.clear();
+    lastRuntimeStepMs = 0;
+    for (const comp of circuit.components) {
+        if (comp.type === 'arduino_uno') comp.liveLevels = null;
+    }
 }
 
 function getSourceFrequencyHz() {
@@ -206,6 +313,121 @@ function sampleTimeSec(elapsed, ledPeriod) {
 
 function plotTimeOrigin(elapsed, period) {
     return elapsed % period;
+}
+
+
+function arduinoPinLabelFromJonction(unoLabel, jonctionId) {
+    if (!jonctionId?.startsWith(`${unoLabel}_`)) return null;
+    const suffix = jonctionId.slice(unoLabel.length + 1);
+    if (suffix in UNO_JONCTION_SUFFIX && /^D\d+$/.test(suffix)) return suffix;
+    return null;
+}
+
+function indexArduinoLedDrives() {
+    anim.arduinoLedDrive = {};
+    for (const led of circuit.components.filter((c) => c.type === 'led')) {
+        const start = `${led.label}_in`;
+        for (const uno of circuit.components.filter((c) => c.type === 'arduino_uno')) {
+            applyArduinoSketchToComponent(uno);
+            const net = reachableJonctions(start, circuit.wires, circuit.autoJunctions);
+            let found = null;
+            for (const jid of net) {
+                const pinLabel = arduinoPinLabelFromJonction(uno.label, jid);
+                if (pinLabel && uno.pinModes?.[pinLabel] === 'OUTPUT') {
+                    found = {
+                        unoLabel: uno.label,
+                        pinLabel,
+                        pulse: uno.pinPulses?.[pinLabel],
+                        level: uno.pinLevels?.[pinLabel],
+                    };
+                    break;
+                }
+            }
+            if (found && (found.pulse || found.level === 1 || found.level === 0)) {
+                anim.arduinoLedDrive[led.label] = found;
+                break;
+            }
+        }
+    }
+}
+
+function hasArduinoStaticIdealDisplay() {
+    syncArduinoSketchesFromEditor();
+    for (const comp of circuit.components) {
+        if (comp.type !== 'seg7') continue;
+        const ideal = getIdealSeg7FromArduino(
+            comp.label,
+            circuit.components,
+            circuit.wires,
+            0,
+            circuit.autoJunctions
+        );
+        if (ideal?.segments && !ideal.blank) return true;
+    }
+    for (const comp of circuit.components) {
+        if (comp.type !== 'voltmeter') continue;
+        const v = getIdealVoltmeterVoltage(
+            comp.label,
+            circuit.components,
+            circuit.wires,
+            0,
+            circuit.autoJunctions
+        );
+        if (v != null && Number.isFinite(v)) return true;
+    }
+    return false;
+}
+
+/** Affichage 7 segments piloté par sketch Arduino (sans attendre SPICE). */
+export function getIdealSeg7Display(label) {
+    syncArduinoSketchesFromEditor();
+    return getIdealSeg7FromArduino(
+        label,
+        circuit.components,
+        circuit.wires,
+        0,
+        circuit.autoJunctions
+    );
+}
+
+export { hasArduinoStaticIdealDisplay };
+
+function getIdealArduinoLedCurrent(label) {
+    const drive = anim.arduinoLedDrive[label];
+    if (!drive?.pinLabel || !drive?.unoLabel) return null;
+    const uno = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === drive.unoLabel);
+    if (!uno) return null;
+    applyArduinoSketchToComponent(uno);
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    const levels = resolvePinLevelsAt(uno, elapsed);
+    const lv = levels[drive.pinLabel];
+    if (lv === 1) return ARDUINO_IDEAL_LED_ON_A;
+    if (lv === 0) return 0;
+    return null;
+}
+
+function hasArduinoTimeVaryingGpio() {
+    syncArduinoSketchesFromEditor();
+    return circuit.components.some((c) => c.type === 'arduino_uno' && arduinoGpioIsTimeVarying(c));
+}
+
+export function ensureArduinoLedAnimation() {
+    indexArduinoLedDrives();
+    if (
+        !hasArduinoTimeVaryingGpio() &&
+        !Object.keys(anim.arduinoLedDrive).length &&
+        !hasArduinoStaticIdealDisplay()
+    ) {
+        return;
+    }
+    if (anim.startMs <= 0) anim.startMs = performance.now();
+    if (anim.rafId != null) return;
+    const tick = () => {
+        updateArduinoRuntimes();
+        redraw();
+        anim.rafId = requestAnimationFrame(tick);
+    };
+    anim.rafId = requestAnimationFrame(tick);
 }
 
 function fallbackPeriodSec(plots) {
@@ -369,12 +591,16 @@ function prepareVmTiming(vmPlots) {
 }
 
 export function getAnimatedVoltmeterVoltage(label) {
+    syncArduinoSketchesFromEditor();
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    const ideal = getIdealVoltmeterVoltage(label, circuit.components, circuit.wires, elapsed, circuit.autoJunctions);
+    if (ideal != null && Number.isFinite(ideal)) return ideal;
     const plot = anim.vmPlots[label];
     if (!plot?.time?.length) return null;
     const period = anim.vmPeriods[label] ?? 1;
-    const elapsed = (performance.now() - anim.startMs) / 1000;
+    const elapsedPlot = (performance.now() - anim.startMs) / 1000;
     // Temps réel : ne pas figer sur la phase stable des compteurs ripple (réservée aux LED).
-    const tSample = plotTimeOrigin(elapsed, period);
+    const tSample = plotTimeOrigin(elapsedPlot, period);
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
     return quantizeVoltmeterReading(interpolateVoltagePlot(plot, tAbs), plot.voltage);
@@ -399,7 +625,11 @@ export function getAnimatedLedCurrent(label) {
         }
     }
     const plot = anim.plots[label];
-    if (!plot) return null;
+    if (!plot) {
+        const ideal = getIdealArduinoLedCurrent(label);
+        if (ideal != null) return ideal;
+        return null;
+    }
     if (anim.ledPersistence[label]) {
         return anim.steadyCurrent[label] ?? 0;
     }
@@ -424,6 +654,11 @@ export function hasSeg7Animation() {
 
 /** Segments allumés à l'instant courant de la simulation live (.tran). */
 export function getAnimatedSeg7Segments(label) {
+    syncArduinoSketchesFromEditor();
+    updateArduinoRuntimes();
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    const ideal = getIdealSeg7FromArduino(label, circuit.components, circuit.wires, elapsed, circuit.autoJunctions);
+    if (ideal?.segments) return ideal;
     const plot = anim.seg7Plots[label];
     if (!plot?.time?.length) return null;
     if (syncHc90MasterResetClock()) return { segments: bcdDigitToSeg7Segments(0) };
@@ -433,7 +668,7 @@ export function getAnimatedSeg7Segments(label) {
         if (bcd != null) return { segments: bcdDigitToSeg7Segments(bcd) };
     }
     const clockPeriod = getGimpPeriodSec() ?? 1;
-    const elapsed = (performance.now() - anim.startMs) / 1000;
+    const elapsedPlot = (performance.now() - anim.startMs) / 1000;
     if (
         shouldUseIdealRippleMod10Seg7(
             label,
@@ -443,13 +678,13 @@ export function getAnimatedSeg7Segments(label) {
             clockPeriod
         )
     ) {
-        return { segments: bcdDigitToSeg7Segments(idealRippleMod10Bcd(elapsed, clockPeriod)) };
+        return { segments: bcdDigitToSeg7Segments(idealRippleMod10Bcd(elapsedPlot, clockPeriod)) };
     }
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const tSample =
         hasHc90DecadeCounter() && plotSpan > 0 && clockPeriod > 0
-            ? hc90TranSampleTimeSec(elapsed, clockPeriod, plotSpan)
-            : sampleTimeSec(elapsed, clockPeriod);
+            ? hc90TranSampleTimeSec(elapsedPlot, clockPeriod, plotSpan)
+            : sampleTimeSec(elapsedPlot, clockPeriod);
     const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
     const vCom = interpolateSeries(plot.time, plot.common, tAbs);
     const segmentV = SEG7_NAMES.map((n) => interpolateSeries(plot.time, plot.segments[n], tAbs));
@@ -460,7 +695,7 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     const mrActive = isHc90MasterResetActive(circuit.components, circuit.wires, circuit.autoJunctions);
     const mrReleased = anim.hc90MrActive && !mrActive;
     const savedStartMs = opts.keepClock === true && !mrReleased ? anim.startMs : 0;
-    stopLedAnimation();
+    stopLedAnimation(opts.keepClock === true && !mrReleased);
     const hasLeds = plots && Object.keys(plots).length > 0;
     const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
     const hasSeg7 = seg7Plots && Object.keys(seg7Plots).length > 0;
@@ -488,6 +723,7 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     }
 
     const tick = () => {
+        updateArduinoRuntimes();
         redraw();
         anim.rafId = requestAnimationFrame(tick);
     };
@@ -510,7 +746,7 @@ function stopBurntLedSmokeLoop() {
     smokeRafId = null;
 }
 
-export function stopLedAnimation() {
+export function stopLedAnimation(preserveArduino = false) {
     if (anim.rafId != null) cancelAnimationFrame(anim.rafId);
     anim.rafId = null;
     anim.plots = {};
@@ -524,5 +760,7 @@ export function stopLedAnimation() {
     anim.vmPeriods = {};
     anim.ledPersistence = {};
     anim.steadyCurrent = {};
+    anim.arduinoLedDrive = {};
+    if (!preserveArduino) resetArduinoRuntimes();
     stopBurntLedSmokeLoop();
 }

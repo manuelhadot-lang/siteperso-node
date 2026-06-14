@@ -10,6 +10,16 @@ import {
     IC90_HIT_DY,
     ic74hc90JonctionToTerminalKey,
 } from './ic74hc90-layout.js';
+import {
+    UNO_JUNC_L,
+    UNO_JUNC_R,
+    UNO_LEFT_PINS,
+    UNO_RIGHT_PINS,
+    UNO_LEFT_PIN_Y,
+    UNO_RIGHT_PIN_Y,
+    UNO_HIT_DX,
+    UNO_HIT_DY,
+} from './arduino-uno-layout.js';
 
 export function isPointOnSegment(px, py, p1, p2, tolerance = 1) {
     const minX = Math.min(p1.x, p2.x) - tolerance, maxX = Math.max(p1.x, p2.x) + tolerance;
@@ -43,7 +53,7 @@ export function getComponentJonctions(comp) {
     const rad = (comp.rotation || 0) * Math.PI / 180;
     let localPts = [];
 
-    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'bode_analyzer', 'speaker', 'led'].includes(comp.type)) {
+    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'bode_analyzer', 'speaker', 'led', 'push_button'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'potentiometer') {
         localPts = [
@@ -136,6 +146,13 @@ export function getComponentJonctions(comp) {
         right.forEach((n, i) => {
             if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_R, y: IC90_RIGHT_PIN_Y[i] });
         });
+    } else if (comp.type === 'arduino_uno') {
+        UNO_LEFT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: UNO_JUNC_L, y: UNO_LEFT_PIN_Y[i] });
+        });
+        UNO_RIGHT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: UNO_JUNC_R, y: UNO_RIGHT_PIN_Y[i] });
+        });
     } else if (['gnd', 'vcc', 'logic_terminal'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_out`, x: GRID_SIZE, y: 0 }];
     }
@@ -143,7 +160,7 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
@@ -164,12 +181,14 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
     if (comp.type === 'cd4511') return dx < CD4511_HIT_DX && dy < CD4511_HIT_DY;
     if (comp.type === 'ic_74hc90') return dx < IC90_HIT_DX && dy < IC90_HIT_DY;
+    if (comp.type === 'arduino_uno') return dx < UNO_HIT_DX && dy < UNO_HIT_DY;
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
     if (comp.type === 'seg7') return dx < 60 && dy < 110;
     if (comp.type === 'opamp') return dx < 44 && dy < 42;
     if (comp.type === 'npn') return dx < 44 && dy < 44;
     if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;
+    if (comp.type === 'push_button') return dx < 34 && dy < 26;
     if (comp.type === 'potentiometer') return dx < 34 && dy < 38;
     return dx < 30 && dy < 30;
 }
@@ -198,6 +217,13 @@ export function switchSpdtToggleHit(comp, mx, my) {
     if (comp.type !== 'switch_spdt') return false;
     const { x, y } = compLocalCoords(comp, mx, my);
     return x >= -12 && x <= 12 && y >= -18 && y <= 18;
+}
+
+/** Zone du capuchon du bouton poussoir (clic = appui ↔ relâche). */
+export function pushButtonToggleHit(comp, mx, my) {
+    if (comp.type !== 'push_button') return false;
+    const { x, y } = compLocalCoords(comp, mx, my);
+    return x >= -16 && x <= 16 && y >= -20 && y <= 16;
 }
 
 export function isJonctionConnected(jonctionId) {

@@ -68,6 +68,14 @@ import {
     resolveIc74hc90Vhi,
 } from "./logic-74hc90.mjs";
 import {
+    appendArduinoUnoNetlist,
+    arduinoUnoDigitalPinIndices,
+    arduinoUnoDigitalPinName,
+    arduinoUnoTerminalKeys,
+    isArduinoUnoType,
+} from "./arduino-uno.mjs";
+import { arduinoUnoMinPulsePeriodSec, applyArduinoSketchToComponent } from "./arduino-sketch-parse.mjs";
+import {
     detectHc90Mod60FromGraphicalState,
     detectHc90MrAndQ1Q3OnSameChip,
 } from "./hc90-cascade.mjs";
@@ -125,7 +133,8 @@ function isTwoTerminalType(t) {
         t === "ammeter_rms" ||
         t === "ohmmeter" ||
         t === "bode_analyzer" ||
-        t === "speaker"
+        t === "speaker" ||
+        t === "push_button"
     );
 }
 
@@ -215,6 +224,7 @@ function terminalKeysForComponent(c) {
         for (let i = 0; i < 14; i++) keys.push(`${c.id}#${i}`);
         return keys;
     }
+    if (isArduinoUnoType(c.type)) return arduinoUnoTerminalKeys(c);
     if (isSingleTerminalRefType(c.type)) return [`${c.id}#0`];
     if (isTwoTerminalType(c.type) || isSignalGeneratorType(c.type)) {
         return [`${c.id}#0`, `${c.id}#1`];
@@ -904,6 +914,8 @@ function computeTranTiming(components, deckOpts = {}) {
         const f = parseFreqHz(c.value);
         if (f > 0) minPeriod = Math.min(minPeriod, 1 / f);
     }
+    const arduinoPeriod = arduinoUnoMinPulsePeriodSec(components);
+    if (arduinoPeriod > 0) minPeriod = Math.min(minPeriod, arduinoPeriod);
     if (!Number.isFinite(minPeriod) || minPeriod <= 0) minPeriod = 1;
 
     const lcHz = estimateParallelLcResonantHz(components);
@@ -1060,6 +1072,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const components = Array.isArray(state.components) ? state.components : [];
     const wires = Array.isArray(state.wires) ? state.wires : [];
 
+    for (const c of components) {
+        if (isArduinoUnoType(c.type)) applyArduinoSketchToComponent(c);
+    }
+
     const parent = new Map();
     const terminalWireCount = new Map();
 
@@ -1118,7 +1134,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     );
 
     const hasAutonomousLcOscillator = circuitHasAutonomousLcOscillator(components);
-    if (needsDcSupply && !powerSrc && !hasVtermPower && !hasAutonomousLcOscillator) {
+    const hasArduinoUno = components.some((c) => isArduinoUnoType(c.type));
+    if (needsDcSupply && !powerSrc && !hasVtermPower && !hasAutonomousLcOscillator && !hasArduinoUno) {
         return {
             ok: false,
             errors: [
@@ -1135,7 +1152,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             analysisTran: false,
         };
     }
-    if (!powerSrc && !hasVtermPower && ohmeterComponents.length === 0 && groundComponents.length === 0) {
+    if (!powerSrc && !hasVtermPower && !hasArduinoUno && ohmeterComponents.length === 0 && groundComponents.length === 0) {
         return {
             ok: false,
             errors: [
@@ -1337,6 +1354,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const toB = Number(c.state) === 1;
             lines.push(`${spiceBranchName("R", c.id)}a ${nCom} ${nA} ${toB ? rOff : rOn}`);
             lines.push(`${spiceBranchName("R", c.id)}b ${nCom} ${nB} ${toB ? rOn : rOff}`);
+        } else if (c.type === "push_button") {
+            const n0 = nodeFor(`${c.id}#0`);
+            const n1 = nodeFor(`${c.id}#1`);
+            const pressed = Number(c.state) === 1;
+            lines.push(`${spiceBranchName("R", c.id)} ${n0} ${n1} ${pressed ? 0.01 : 1e9}`);
         } else if (c.type === "capacitor") {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
@@ -1498,6 +1520,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         } else if (isIc74hc90Type(c.type)) {
             const vhi = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, deckOpts);
+        } else if (isArduinoUnoType(c.type)) {
+            appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName);
         } else if (isLogicCd4511Type(c.type)) {
             const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
@@ -1766,8 +1790,15 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const hasLogicGates = components.some(
         c => isLogicGateComponentType(c.type) || isLogicDigitalSimType(c.type)
     );
+    const hasArduinoPulse = components.some(
+        (c) =>
+            isArduinoUnoType(c.type) &&
+            ((c.pinPulses && Object.keys(c.pinPulses).length > 0) ||
+                (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2))
+    );
     let useTran =
         hasPulseSource ||
+        hasArduinoPulse ||
         hasLogicGates ||
         hasAutonomousLcOscillator ||
         (acSources.length > 0 &&
@@ -2087,7 +2118,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             });
         }
         for (const c of components) {
-            if (!isLogicGateComponentType(c.type) && !isLogicDigitalSimType(c.type)) continue;
+            if (!isLogicGateComponentType(c.type) && !isLogicDigitalSimType(c.type) && !isArduinoUnoType(c.type)) continue;
             let outKeys = [];
             if (isLogicGateComponentType(c.type)) outKeys = [logicGateOutputNodeKey(c)];
             else if (c.type === "logic_dff") {
@@ -2103,6 +2134,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 outKeys = ic74hc90OutputNodeKeys(c);
             } else if (isLogicCd4511Type(c.type)) {
                 outKeys = cd4511OutputNodeKeys(c);
+            } else if (isArduinoUnoType(c.type)) {
+                outKeys = arduinoUnoDigitalPinIndices().map((i) => `${c.id}#${i}`);
             }
             let vhiTran = 5;
             if (isLogicGateComponentType(c.type)) {
@@ -2131,6 +2164,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 vhiTran = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             } else if (isLogicCd4511Type(c.type)) {
                 vhiTran = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
+            } else if (isArduinoUnoType(c.type)) {
+                vhiTran = 5;
             }
             for (const outKey of outKeys) {
                 const nOut = nodeFor(outKey);
@@ -2154,6 +2189,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     const segNames = ["a", "b", "c", "d", "e", "f", "g"];
                     const idx = outKeys.indexOf(outKey);
                     if (idx >= 0 && idx < segNames.length) icOutId = `${c.id}_${segNames[idx]}`;
+                } else if (isArduinoUnoType(c.type)) {
+                    const pinIdx = Number(String(outKey).split("#")[1]);
+                    if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${arduinoUnoDigitalPinName(pinIdx)}`;
                 }
                 logicGatesTranMeta.push({
                     id: icOutId,
@@ -2606,6 +2644,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     vth: vhi / 2,
                 });
             });
+        } else if (isArduinoUnoType(c.type)) {
+            const vhi = 5;
+            for (const pinIdx of arduinoUnoDigitalPinIndices()) {
+                const pinName = arduinoUnoDigitalPinName(pinIdx);
+                logicGates.push({
+                    id: `${c.id}_${pinName}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${pinIdx}`),
+                    inputs: [],
+                    vhi,
+                    vth: 2.5,
+                });
+            }
         } else if (isIc74ls74Type(c.type)) {
             const vhi = resolveIc74ls74Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             ic74ls74DffSlices().forEach((sl) => {

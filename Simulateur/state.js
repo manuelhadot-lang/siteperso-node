@@ -28,7 +28,7 @@ export let menuDrag = {
 
 export let file = { handle: null };
 
-export let counters = { battery: 0, resistor: 0, potentiometer: 0, switch_spdt: 0, capacitor: 0, inductor: 0, diode: 0, npn: 0, opamp: 0, not: 0, and: 0, nand: 0, or: 0, nor: 0, xor: 0, xnor: 0, d_flipflop: 0, jk_flipflop: 0, cd4511: 0, ic_74hc90: 0, led: 0, seg7: 0, voltmeter: 0, ammeter: 0, ohmmeter: 0, oscilloscope: 0, bode_analyzer: 0, speaker: 0, junction: 0, gnd: 0, vcc: 0, logic_terminal: 0, gimp: 0, gsin: 0, gsqr: 0 };
+export let counters = { battery: 0, resistor: 0, potentiometer: 0, switch_spdt: 0, push_button: 0, capacitor: 0, inductor: 0, diode: 0, npn: 0, opamp: 0, not: 0, and: 0, nand: 0, or: 0, nor: 0, xor: 0, xnor: 0, d_flipflop: 0, jk_flipflop: 0, cd4511: 0, ic_74hc90: 0, arduino_uno: 0, led: 0, seg7: 0, voltmeter: 0, ammeter: 0, ohmmeter: 0, oscilloscope: 0, bode_analyzer: 0, speaker: 0, junction: 0, gnd: 0, vcc: 0, logic_terminal: 0, gimp: 0, gsin: 0, gsqr: 0 };
 export let circuit = {
     components: [],
     wires: [],
