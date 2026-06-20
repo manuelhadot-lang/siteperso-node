@@ -98,6 +98,19 @@
             <span class="menu-icon">🤖</span> Arduino
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="arduino_uno">Arduino UNO R3</div>
+                <div class="dropdown-item dropdown-item--action" id="menu-arduino-editor">Éditeur de programme</div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">Capteurs Grove</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="grove_dht22">Grove DHT22 (T° / humidité)</div>
+                    </div>
+                </div>
+                <div class="dropdown-submenu">
+                    <span class="dropdown-item submenu-title">Affichage</span>
+                    <div class="submenu">
+                        <div class="dropdown-item" draggable="true" data-component="grove_lcd16x2">Grove LCD 2×16 I2C</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -106,6 +119,7 @@
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="led">LED (Rouge)</div>
                 <div class="dropdown-item" draggable="true" data-component="seg7">Afficheur 7 segments</div>
+                <div class="dropdown-item" draggable="true" data-component="bargraph_dc10h">Bargraph DC10H</div>
             </div>
         </div>
 
@@ -117,6 +131,7 @@
                 <div class="dropdown-item" draggable="true" data-component="ohmmeter">Ohmmètre</div>
                 <div class="dropdown-item" draggable="true" data-component="oscilloscope">Oscilloscope</div>
                 <div class="dropdown-item" draggable="true" data-component="bode_analyzer" title="Glisser-déposer sur le schéma, puis Lancer Simulation (avec un générateur Sin)">Analyse fréquentielle</div>
+                <div class="dropdown-item dropdown-item--action" id="menu-serial-monitor" data-action="serial-monitor">Moniteur série</div>
             </div>
         </div>
 
@@ -135,16 +150,47 @@
         <aside id="arduino-panel" class="right-panel hidden" aria-label="Éditeur Arduino">
             <div class="panel-header panel-header--arduino">
                 <span id="arduino-panel-title">Arduino UNO</span>
-                <button type="button" id="arduino-panel-close" class="panel-close" title="Fermer">&times;</button>
+                <div class="arduino-panel-header-actions">
+                    <button type="button" id="arduino-panel-doc" class="arduino-btn arduino-btn--small" title="Documentation broches UNO">?</button>
+                    <button type="button" id="arduino-panel-close" class="panel-close" title="Fermer">&times;</button>
+                </div>
             </div>
             <div class="arduino-panel-body">
-                <p id="arduino-cli-status" class="arduino-cli-status">…</p>
-                <label class="arduino-sketch-label" for="arduino-sketch-input">Sketch (.ino)</label>
-                <textarea id="arduino-sketch-input" class="arduino-sketch-input" spellcheck="false"></textarea>
+                <section class="arduino-editor-section" aria-label="Code Arduino">
+                    <label for="arduino-sketch-input" class="arduino-editor-label">Programme (.ino)</label>
+                    <div class="arduino-sketch-wrap">
+                        <div class="arduino-sketch-grid">
+                            <pre id="arduino-sketch-highlight" class="arduino-sketch-highlight" aria-hidden="true"></pre>
+                            <textarea id="arduino-sketch-input" class="arduino-sketch-input" spellcheck="false" wrap="off" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Code du sketch Arduino"></textarea>
+                        </div>
+                    </div>
+                </section>
                 <div class="arduino-panel-actions">
                     <button type="button" id="arduino-btn-compile" class="arduino-btn arduino-btn--primary">Compiler (arduino-cli)</button>
+                    <button type="button" id="arduino-btn-serial-monitor" class="arduino-btn arduino-btn--small" title="Ouvrir le moniteur série (TX D1 / RX D0)">Moniteur série</button>
+                    <span id="arduino-compile-status" class="arduino-compile-status" aria-live="polite"></span>
+                    <button type="button" id="arduino-btn-show-errors" class="arduino-btn arduino-btn--small arduino-btn--errors hidden">Voir les erreurs</button>
                 </div>
-                <pre id="arduino-compile-log" class="arduino-compile-log"></pre>
+                <pre id="arduino-compile-log" class="arduino-compile-log hidden" aria-label="Journal de compilation"></pre>
+                <details class="arduino-libs-details">
+                    <summary class="arduino-libs-summary">Bibliothèques Arduino</summary>
+                    <section class="arduino-libs-section" aria-label="Bibliothèques Arduino">
+                        <div class="arduino-libs-header">
+                            <button type="button" id="arduino-lib-refresh" class="arduino-btn arduino-btn--small" title="Actualiser la liste">↻ Actualiser</button>
+                        </div>
+                        <p class="arduino-lib-hint">Cliquez sur le nom d’une bibliothèque pour voir les commandes (fenêtre flottante).</p>
+                        <div class="arduino-lib-search-row">
+                            <input type="search" id="arduino-lib-search" class="arduino-lib-search-input"
+                                placeholder="Rechercher (ex. LiquidCrystal I2C)" autocomplete="off">
+                            <button type="button" id="arduino-lib-search-btn" class="arduino-btn arduino-btn--small">Chercher</button>
+                        </div>
+                        <ul id="arduino-lib-search-results" class="arduino-lib-list" aria-label="Résultats de recherche"></ul>
+                        <p class="arduino-lib-subtitle">Installées</p>
+                        <ul id="arduino-lib-installed" class="arduino-lib-list" aria-label="Bibliothèques installées"></ul>
+                        <p id="arduino-lib-msg" class="arduino-lib-msg" aria-live="polite"></p>
+                    </section>
+                </details>
+                <p id="arduino-cli-status" class="arduino-cli-status">…</p>
             </div>
         </aside>
     </div>
@@ -223,9 +269,9 @@
                     <option value="0.0005">500 µs/div</option>
                     <option value="0.0002">200 µs/div</option>
                     <option value="0.0001">100 µs/div</option>
-                    <option value="0.00005">50 µs/div</option>
+                    <option value="0.00005" selected>50 µs/div</option>
                     <option value="0.00001">10 µs/div</option>
-                    <option value="0.001" selected>1 ms/div</option>
+                    <option value="0.001">1 ms/div</option>
                     <option value="0.002">2 ms/div</option>
                     <option value="0.005">5 ms/div</option>
                     <option value="0.01">10 ms/div</option>
@@ -252,6 +298,11 @@
                 </select>
             </label>
             <label class="panel-field panel-field-range">
+                <span>Position horiz.</span>
+                <input type="range" id="scope-time-pos" min="-4" max="4" step="0.1" value="0">
+                <output id="scope-time-pos-val">0,0 div</output>
+            </label>
+            <label class="panel-field panel-field-range">
                 <span>Position CH1</span>
                 <input type="range" id="scope-ch1-pos" min="-4" max="4" step="0.1" value="0">
                 <output id="scope-ch1-pos-val">0,0 div</output>
@@ -273,6 +324,35 @@
             <button type="button" id="scope-popup-close" class="panel-close" title="Fermer">&times;</button>
         </div>
         <canvas id="scope-popup-canvas" width="640" height="360"></canvas>
+    </div>
+
+    <div id="serial-monitor-popup" class="scope-floating serial-monitor-floating hidden">
+        <div class="scope-floating-header" id="serial-monitor-drag-handle">
+            <span id="serial-monitor-title">Moniteur série</span>
+            <button type="button" id="serial-monitor-close" class="panel-close" title="Fermer">&times;</button>
+        </div>
+        <div class="serial-monitor-toolbar">
+            <label class="serial-monitor-board-label">
+                Carte
+                <select id="serial-monitor-board" class="serial-monitor-board-select"></select>
+            </label>
+            <span id="serial-monitor-baud" class="serial-monitor-baud">— baud</span>
+            <button type="button" id="serial-monitor-clear" class="arduino-btn arduino-btn--small">Effacer</button>
+        </div>
+        <pre id="serial-monitor-output" class="serial-monitor-output" aria-label="Sortie série"></pre>
+        <p id="serial-monitor-status" class="serial-monitor-status"></p>
+        <div class="serial-monitor-input-row">
+            <input type="text" id="serial-monitor-input" class="serial-monitor-input" placeholder="Envoyer vers RX (D0) — Entrée pour valider" autocomplete="off" spellcheck="false">
+            <button type="button" id="serial-monitor-send" class="arduino-btn arduino-btn--small arduino-btn--primary">Envoyer</button>
+        </div>
+    </div>
+
+    <div id="arduino-lib-popup" class="scope-floating arduino-lib-floating hidden">
+        <div class="scope-floating-header" id="arduino-lib-popup-drag-handle">
+            <span id="arduino-lib-popup-title">Bibliothèque Arduino</span>
+            <button type="button" id="arduino-lib-popup-close" class="panel-close" title="Fermer">&times;</button>
+        </div>
+        <div id="arduino-lib-popup-body" class="arduino-lib-popup-body"></div>
     </div>
 
     <div id="bode-popup" class="scope-floating hidden">
@@ -340,6 +420,57 @@
                     (<code>npm run check-ngspice</code>).
                 </p>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="bargraph-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-bargraph-doc">&times;</span>
+            <h2 id="bargraph-doc-title">Bargraph DC10H — Lite-On</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>DC10H</strong> (Lite-On, série LTA) est un afficheur à barres de
+                    <strong>10 segments LED</strong> en <strong>cathode commune</strong>.
+                    Chaque segment s’allume lorsque son anode est au niveau haut par rapport à la cathode commune (COM).
+                </p>
+                <h3>Couleur des segments</h3>
+                <p>Choisissez la couleur d’affichage (cosmétique — n’affecte pas la simulation SPICE) :</p>
+                <div id="bargraph-color-picker" class="bargraph-color-picker"></div>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th><th>Connexion typique</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>s1 … s10</td><td>Anodes des segments (s1 = barre du bas, s10 = barre du haut)</td><td>Sorties logiques ou résistances de limitation</td></tr>
+                        <tr><td>COM</td><td>Cathode commune</td><td>Relier à la <strong>masse (0 V)</strong></td></tr>
+                    </tbody>
+                </table>
+                <h3>Brochage réel (DIP 20 — repères courants LTA/DC10H)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broches DIP</th><th>Segment</th><th>Broches DIP</th><th>Segment</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1, 11</td><td>s1 (bas)</td><td>6, 16</td><td>s6</td></tr>
+                        <tr><td>2, 12</td><td>s2</td><td>7, 17</td><td>s7</td></tr>
+                        <tr><td>3, 13</td><td>s3</td><td>8, 18</td><td>s8</td></tr>
+                        <tr><td>4, 14</td><td>s4</td><td>9, 19</td><td>s9</td></tr>
+                        <tr><td>5, 15</td><td>s5</td><td>10, 20</td><td>s10 (haut)</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Les broches impaires (1–10) et paires (11–20) sont respectivement anode et cathode de chaque segment ;
+                    toutes les cathodes sont reliées en interne (cathode commune).
+                </p>
+                <h3>Câblage typique</h3>
+                <ul class="doc-list">
+                    <li>Relier <strong>COM</strong> à la masse du circuit.</li>
+                    <li>Placer une résistance (220 Ω … 1 kΩ) en série avec chaque anode si alimentation directe en 5 V.</li>
+                    <li>Pour un niveau analogique : comparateur ou sorties numériques décimales (CD4511, compteur, Arduino).</li>
+                </ul>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche et changer la couleur.</p>
             </div>
         </div>
     </div>
@@ -567,6 +698,6 @@ void loop() {
         </div>
     </div>
 
-    <script type="module" src="app.js?v=digitalread1"></script>
+    <script type="module" src="app.js?v=i2c-pro1"></script>
 </body>
 </html>

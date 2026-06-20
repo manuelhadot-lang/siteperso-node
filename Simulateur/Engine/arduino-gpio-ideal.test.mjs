@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { parseArduinoSketch, applyArduinoSketchToComponent, resolvePinLevelsAt } from "./arduino-sketch-parse.mjs";
-import { getIdealVoltmeterVoltage, getIdealSeg7FromArduino, getIdealArduinoBcdForCd4511 } from "./arduino-gpio-ideal.mjs";
+import { getIdealVoltmeterVoltage, getIdealSeg7FromArduino, getIdealBargraphFromArduino, getIdealArduinoBcdForCd4511 } from "./arduino-gpio-ideal.mjs";
 
 const sketch3 = `void setup(){
   pinMode(13, OUTPUT); pinMode(12, OUTPUT); pinMode(11, OUTPUT); pinMode(10, OUTPUT);
@@ -107,5 +107,19 @@ const wiresJunc = [
 ];
 const segJunc = getIdealSeg7FromArduino("SEG1", comp6, wiresJunc, 0, aj);
 assert.equal(segJunc?.bcd, 6, "SEG7 via jonction T");
+
+const barSketch = `void setup(){ DDRD=0b11111111; } void loop(){ PORTD=0xFF; }`;
+const barUno = { label: "UNO1", type: "arduino_uno", sketch: barSketch };
+applyArduinoSketchToComponent(barUno);
+const barComps = [barUno, { label: "BAR1", type: "bargraph_dc10h" }, { label: "GND1", type: "gnd" }];
+const barWires = [];
+for (let i = 0; i < 8; i++) {
+    barWires.push({ fromJonctionId: `UNO1_D${i}`, toJonctionId: `BAR1_s${i + 1}` });
+}
+barWires.push({ fromJonctionId: "BAR1_COM", toJonctionId: "GND1_out" });
+const barIdeal = getIdealBargraphFromArduino("BAR1", barComps, barWires);
+assert.ok(barIdeal?.segments?.s1 && barIdeal?.segments?.s8, "bargraph s1–s8 allumés");
+assert.equal(barIdeal?.segments?.s9, false);
+assert.equal(barIdeal?.segments?.s10, false);
 
 console.log("arduino-gpio-ideal.test.mjs OK");

@@ -21,7 +21,7 @@
     "appId": "fr.sti2d.simulateur-h",
     "productName": "Simulateur H",
     "directories": {
-      "output": "dist"
+      "output": "dist-out"
     },
     "files": [
       "main.js",

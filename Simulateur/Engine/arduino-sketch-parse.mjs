@@ -76,11 +76,24 @@ function extractFunctionBody(src, name) {
 
 function parseNumberLiteral(t) {
     const s = String(t).trim();
-    if (/^0[xX][0-9a-fA-F]+$/.test(s)) return parseInt(s, 16);
-    if (/^0[bB][01]+$/.test(s)) return parseInt(s.slice(2), 2);
-    if (/^B[01]+$/.test(s)) return parseInt(s.slice(1), 2);
-    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    if (/^0[xX][0-9a-fA-F]+$/.test(s)) return { v: parseInt(s, 16), f: false };
+    if (/^0[bB][01]+$/.test(s)) return { v: parseInt(s.slice(2), 2), f: false };
+    if (/^B[01]+$/.test(s)) return { v: parseInt(s.slice(1), 2), f: false };
+    if (/^(\d+\.\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return { v: parseFloat(s), f: true };
+    if (/^\d+$/.test(s)) return { v: parseInt(s, 10), f: false };
     return null;
+}
+
+function evVal(x) {
+    return x && typeof x === "object" && "v" in x ? x.v : (x ?? 0);
+}
+
+function evFloat(x) {
+    return !!(x && typeof x === "object" && x.f);
+}
+
+function evPack(v, f) {
+    return f ? { v, f: true } : v;
 }
 
 function tokenizeExpr(expr) {
@@ -91,7 +104,7 @@ function tokenizeExpr(expr) {
     while (i < s.length) {
         const c = s[i];
         if (/\s/.test(c)) { i++; continue; }
-        if (/[0-9]/.test(c)) {
+        if (/[0-9.]/.test(c)) {
             let j = i + 1;
             if (c === "0" && (s[i + 1] === "x" || s[i + 1] === "X")) {
                 j = i + 2;
@@ -100,9 +113,11 @@ function tokenizeExpr(expr) {
                 j = i + 2;
                 while (j < s.length && /[01]/.test(s[j])) j++;
             } else {
-                while (j < s.length && /[0-9]/.test(s[j])) j++;
+                while (j < s.length && /[0-9.]/.test(s[j])) j++;
             }
-            toks.push({ t: "num", v: parseNumberLiteral(s.slice(i, j)) ?? 0 });
+            const lit = parseNumberLiteral(s.slice(i, j));
+            if (!lit) return null;
+            toks.push({ t: "num", v: lit.v, f: lit.f });
             i = j;
             continue;
         }
@@ -131,7 +146,7 @@ const BIN_PREC = {
     "&&": 2, "||": 1,
 };
 
-function evalExpr(expr, vars) {
+function evalExpr(expr, vars, floatVars = new Set(), regs = {}) {
     const toks = tokenizeExpr(expr);
     if (!toks) return 0;
     const out = [];
@@ -141,42 +156,61 @@ function evalExpr(expr, vars) {
         const op = ops.pop();
         if (op.unary) {
             const a = out.pop() ?? 0;
-            if (op.v === "-") out.push(-a);
-            else if (op.v === "!") out.push(a ? 0 : 1);
-            else if (op.v === "~") out.push(~a);
+            const av = evVal(a);
+            if (op.v === "-") out.push(evPack(-av, evFloat(a)));
+            else if (op.v === "!") out.push(av ? 0 : 1);
+            else if (op.v === "~") out.push(~av);
             return;
         }
         const b = out.pop() ?? 0;
         const a = out.pop() ?? 0;
+        const av = evVal(a);
+        const bv = evVal(b);
+        const fp = evFloat(a) || evFloat(b);
         switch (op.v) {
-            case "*": out.push(a * b); break;
-            case "/": out.push(b === 0 ? 0 : Math.trunc(a / b)); break;
-            case "%": out.push(b === 0 ? 0 : a % b); break;
-            case "+": out.push(a + b); break;
-            case "-": out.push(a - b); break;
-            case "<<": out.push(a << b); break;
-            case ">>": out.push(a >> b); break;
-            case "<": out.push(a < b ? 1 : 0); break;
-            case "<=": out.push(a <= b ? 1 : 0); break;
-            case ">": out.push(a > b ? 1 : 0); break;
-            case ">=": out.push(a >= b ? 1 : 0); break;
-            case "==": out.push(a === b ? 1 : 0); break;
-            case "!=": out.push(a !== b ? 1 : 0); break;
-            case "&": out.push(a & b); break;
-            case "^": out.push(a ^ b); break;
-            case "|": out.push(a | b); break;
-            case "&&": out.push(a && b ? 1 : 0); break;
-            case "||": out.push(a || b ? 1 : 0); break;
+            case "*": out.push(evPack(av * bv, fp)); break;
+            case "/":
+                out.push(evPack(fp ? (bv === 0 ? 0 : av / bv) : (bv === 0 ? 0 : Math.trunc(av / bv)), fp));
+                break;
+            case "%": out.push(bv === 0 ? 0 : av % bv); break;
+            case "+": out.push(evPack(av + bv, fp)); break;
+            case "-": out.push(evPack(av - bv, fp)); break;
+            case "<<": out.push(av << bv); break;
+            case ">>": out.push(av >> bv); break;
+            case "<": out.push(av < bv ? 1 : 0); break;
+            case "<=": out.push(av <= bv ? 1 : 0); break;
+            case ">": out.push(av > bv ? 1 : 0); break;
+            case ">=": out.push(av >= bv ? 1 : 0); break;
+            case "==": out.push(av === bv ? 1 : 0); break;
+            case "!=": out.push(av !== bv ? 1 : 0); break;
+            case "&": out.push(av & bv); break;
+            case "^": out.push(av ^ bv); break;
+            case "|": out.push(av | bv); break;
+            case "&&": out.push(av && bv ? 1 : 0); break;
+            case "||": out.push(av || bv ? 1 : 0); break;
             default: out.push(0);
         }
     };
     for (const tok of toks) {
-        if (tok.t === "num") { out.push(tok.v); prevValue = true; continue; }
+        if (tok.t === "num") { out.push(evPack(tok.v, tok.f)); prevValue = true; continue; }
         if (tok.t === "id") {
             const name = tok.v;
             if (/^(HIGH|true)$/i.test(name)) out.push(1);
             else if (/^(LOW|false)$/i.test(name)) out.push(0);
-            else out.push(Number.isFinite(vars[name]) ? vars[name] : 0);
+            else if (/^(DDR|PORT)[BCD]$/.test(name)) {
+                out.push((regs[name] ?? 0) & 0xff);
+            } else {
+                const pin = resolvePinToken(name);
+                if (pin != null) out.push(pin);
+                else {
+                    const raw = vars[name];
+                    const n = Number.isFinite(raw) ? raw : 0;
+                    const asFloat =
+                        floatVars.has(name) ||
+                        (typeof raw === "number" && !Number.isInteger(raw));
+                    out.push(asFloat ? { v: n, f: true } : n);
+                }
+            }
             prevValue = true;
             continue;
         }
@@ -205,20 +239,48 @@ function evalExpr(expr, vars) {
         if (ops[ops.length - 1].v === "(") { ops.pop(); continue; }
         applyTop();
     }
-    return out.length ? Math.trunc(out[out.length - 1]) : 0;
+    const r = out[out.length - 1];
+    if (r == null) return 0;
+    return evFloat(r) ? evVal(r) : Math.trunc(evVal(r));
 }
 
-const DECL_RE = /\b(?:unsigned\s+)?(?:int|long|byte|char|short|uint8_t|uint16_t|volatile\s+int|volatile\s+byte)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;,]+)/g;
+const DECL_RE = /\b((?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|char|short|float|double|uint8_t|uint16_t|volatile\s+int|volatile\s+byte))\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;,]+)/g;
+const FLOAT_DECL_RE = /\b(?:const\s+)?(?:float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g;
 
 function collectInitialVars(src) {
     const vars = {};
+    const floatVars = new Set();
+    const globalPart = String(src || "").split(/\bvoid\s+setup\s*\(/i)[0];
     let m;
-    DECL_RE.lastIndex = 0;
-    while ((m = DECL_RE.exec(src)) !== null) {
-        vars[m[1]] = evalExpr(m[2], vars);
+    FLOAT_DECL_RE.lastIndex = 0;
+    while ((m = FLOAT_DECL_RE.exec(globalPart)) !== null) {
+        floatVars.add(m[1]);
+        if (!(m[1] in vars)) vars[m[1]] = 0;
     }
-    return vars;
+    DECL_RE.lastIndex = 0;
+    while ((m = DECL_RE.exec(globalPart)) !== null) {
+        const name = m[2];
+        vars[name] = evalExpr(m[3], vars, floatVars);
+        if (/\b(?:float|double)\b/i.test(m[1])) floatVars.add(name);
+    }
+    return { vars, floatVars };
 }
+
+function parseParenCondition(s, startIdx) {
+    let i = startIdx;
+    const n = s.length;
+    while (i < n && /\s/.test(s[i])) i++;
+    if (s[i] !== "(") return null;
+    let depth = 0;
+    let j = i;
+    for (; j < n; j++) {
+        if (s[j] === "(") depth++;
+        else if (s[j] === ")") { depth--; if (depth === 0) break; }
+    }
+    return { cond: s.slice(i + 1, j), next: j + 1 };
+}
+
+const MAX_WHILE_ITER = 10000;
 
 function parseStatementOrBlock(s, i) {
     const n = s.length;
@@ -252,18 +314,19 @@ function parseStatements(body) {
     while (i < n) {
         while (i < n && /\s/.test(s[i])) i++;
         if (i >= n) break;
+        if (s.slice(i, i + 5) === "while" && !/[A-Za-z0-9_]/.test(s[i + 5] || "")) {
+            const condPart = parseParenCondition(s, i + 5);
+            if (!condPart) { i++; continue; }
+            const bodyPart = parseStatementOrBlock(s, condPart.next);
+            stmts.push({ type: "while", cond: condPart.cond, body: bodyPart.stmt });
+            i = bodyPart.next;
+            continue;
+        }
         if (s.slice(i, i + 2) === "if" && !/[A-Za-z0-9_]/.test(s[i + 2] || "")) {
             i += 2;
-            while (i < n && /\s/.test(s[i])) i++;
-            if (s[i] !== "(") continue;
-            let depth = 0;
-            let j = i;
-            for (; j < n; j++) {
-                if (s[j] === "(") depth++;
-                else if (s[j] === ")") { depth--; if (depth === 0) break; }
-            }
-            const cond = s.slice(i + 1, j);
-            const thenPart = parseStatementOrBlock(s, j + 1);
+            const condPart = parseParenCondition(s, i);
+            if (!condPart) continue;
+            const thenPart = parseStatementOrBlock(s, condPart.next);
             let elsePart = null;
             let k = thenPart.next;
             while (k < n && /\s/.test(s[k])) k++;
@@ -274,7 +337,7 @@ function parseStatements(body) {
             } else {
                 i = thenPart.next;
             }
-            stmts.push({ type: "if", cond, body: thenPart.stmt, elseBody: elsePart });
+            stmts.push({ type: "if", cond: condPart.cond, body: thenPart.stmt, elseBody: elsePart });
             continue;
         }
         let j = i;
@@ -292,25 +355,159 @@ function parseStatements(body) {
     return stmts;
 }
 
+function resolvePinLabelFromExpr(expr, state) {
+    const t = String(expr || "").trim();
+    if (!t) return null;
+    try {
+        return pinLabel(evalExprState(substituteCalls(t, state), state));
+    } catch {
+        return pinLabel(resolvePinToken(t));
+    }
+}
+
 /**
  * Remplace les appels de fonction connus par leur valeur avant évaluation :
- * digitalRead(pin) → état d'entrée (1 par défaut, pull-up/relâché), millis()/micros()
- * → temps simulé, analogRead(pin) → 0.
+ * digitalRead(pin), analogRead(pin), millis()/micros(), Serial…
  */
 function substituteCalls(expr, state) {
     let s = String(expr);
     s = s.replace(/\bdigitalRead\s*\(\s*([^()]*?)\s*\)/gi, (_, p) => {
-        const label = pinLabel(resolvePinToken(p));
+        const label = resolvePinLabelFromExpr(p, state);
         const v = label && state.inputs ? state.inputs[label] : undefined;
         return v === 0 ? "0" : "1";
     });
-    s = s.replace(/\banalogRead\s*\(\s*[^()]*\)/gi, "0");
+    s = s.replace(/\banalogRead\s*\(\s*([^()]*?)\s*\)/gi, (_, p) => {
+        const label = resolvePinLabelFromExpr(p, state);
+        const adc = label && state.analogInputs ? state.analogInputs[label] : undefined;
+        return String(Number.isFinite(adc) ? Math.round(adc) : 0);
+    });
     s = s.replace(/\b(?:millis|micros)\s*\(\s*\)/gi, String(Math.trunc(state.simTimeMs || 0)));
+    s = s.replace(/\bSerial\.available\s*\(\s*\)/gi, String(serialAvailable(state)));
+    s = s.replace(/\bSerial\.read\s*\(\s*\)/gi, String(serialRead(state)));
+    s = s.replace(/\bSerial\b/g, "1");
     return s;
 }
 
+function createSerialState() {
+    return { tx: "", rx: [], baud: 9600, begun: false, schedule: [] };
+}
+
+function ensureSerial(state) {
+    if (!state.serial) state.serial = createSerialState();
+    return state.serial;
+}
+
+/** UART matériel UNO : TX=D1 (sortie), RX=D0 (entrée). */
+function configUartPins(state) {
+    state.regs.DDRD = ((state.regs.DDRD || 0) & ~0x01) | 0x02;
+    state.regs.PORTD = (state.regs.PORTD || 0) | 0x02;
+    state.pins.D1 = 1;
+}
+
+function serialAvailable(state) {
+    const ser = state.serial;
+    if (!ser?.begun) return 0;
+    if (ser.rx.length > 0) return ser.rx.length;
+    return 1;
+}
+
+function serialRead(state) {
+    const ser = ensureSerial(state);
+    if (!ser.rx.length) return -1;
+    return ser.rx.shift();
+}
+
+function unescapeCppString(s) {
+    return String(s)
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\\\/g, "\\")
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'");
+}
+
+function skipQuotedArg(src, i) {
+    const q = src[i];
+    i++;
+    while (i < src.length) {
+        if (src[i] === "\\") { i += 2; continue; }
+        if (src[i] === q) return i + 1;
+        i++;
+    }
+    return src.length;
+}
+
+function extractFirstCallArg(text) {
+    const open = text.indexOf("(");
+    if (open < 0) return null;
+    let depth = 0;
+    let i = open + 1;
+    const start = i;
+    while (i < text.length) {
+        const c = text[i];
+        if (c === '"' || c === "'") { i = skipQuotedArg(text, i); continue; }
+        if (c === "(") { depth++; i++; continue; }
+        if (c === ")") {
+            if (depth === 0) return text.slice(start, i).trim();
+            depth--;
+            i++;
+            continue;
+        }
+        if (c === "," && depth === 0) return text.slice(start, i).trim();
+        i++;
+    }
+    return null;
+}
+
 function evalExprState(expr, state) {
-    return evalExpr(substituteCalls(expr, state), state.vars);
+    return evalExpr(substituteCalls(expr, state), state.vars, state.floatVars, state.regs);
+}
+
+function formatSerialNumber(n, state, exprText) {
+    const name = String(exprText || "").trim();
+    const isFloat =
+        evFloat(n) ||
+        state.floatVars?.has(name) ||
+        (typeof n === "number" && !Number.isInteger(n));
+    const v = evVal(n);
+    if (isFloat) return v.toFixed(2);
+    return String(Math.trunc(v));
+}
+
+function evalSerialPrintArg(arg, state) {
+    const t = String(arg || "").trim();
+    if (!t) return "";
+    const strM = t.match(/^String\s*\(\s*([\s\S]+?)\s*\)$/i);
+    if (strM) return evalSerialPrintArg(strM[1], state);
+    const concatM = t.match(/^([\s\S]+?)\s*\+\s*([\s\S]+)$/);
+    if (concatM) {
+        return evalSerialPrintArg(concatM[1].trim(), state) + evalSerialPrintArg(concatM[2].trim(), state);
+    }
+    const fM = t.match(/^F\s*\(\s*(["'])([\s\S]*?)\1\s*\)/);
+    if (fM) return unescapeCppString(fM[2]);
+    if (t.startsWith('"') && t.endsWith('"')) return unescapeCppString(t.slice(1, -1));
+    if (t.startsWith("'") && t.endsWith("'") && t.length > 2) return unescapeCppString(t.slice(1, -1));
+    if (t.startsWith("'") && t.length === 3) return t[1];
+    try {
+        const n = evalExprState(t, state);
+        return formatSerialNumber(n, state, t);
+    } catch {
+        return t;
+    }
+}
+
+function appendSerialTx(state, text, newline = false) {
+    const ser = ensureSerial(state);
+    if (!ser.begun) {
+        ser.begun = true;
+        ser.baud = ser.baud || 9600;
+        configUartPins(state);
+    }
+    const chunk = String(text) + (newline ? "\n" : "");
+    ser.tx += chunk;
+    ser.schedule.push({ startMs: state.simTimeMs || 0, data: chunk });
+    configUartPins(state);
 }
 
 /** Exécute une instruction simple ; renvoie la durée delay() en ms (0 sinon). */
@@ -320,6 +517,26 @@ function execExprStatement(text, state, onDelay) {
         const ms = Math.max(0, evalExprState(delayM[1], state));
         if (onDelay) onDelay(ms);
         return ms;
+    }
+    if (/^Serial\.begin\s*\(/i.test(text)) {
+        const ser = ensureSerial(state);
+        const arg = extractFirstCallArg(text);
+        ser.baud = arg ? Math.max(300, evalExprState(arg, state)) : 9600;
+        ser.begun = true;
+        configUartPins(state);
+        return 0;
+    }
+    if (/^Serial\.print(ln)?\s*\(/i.test(text)) {
+        const ln = /^Serial\.println\s*\(/i.test(text);
+        const arg = extractFirstCallArg(text);
+        appendSerialTx(state, evalSerialPrintArg(arg, state), ln);
+        return 0;
+    }
+    if (/^Serial\.write\s*\(/i.test(text)) {
+        const arg = extractFirstCallArg(text);
+        const code = evalExprState(arg || "0", state) & 0xff;
+        appendSerialTx(state, String.fromCharCode(code), false);
+        return 0;
     }
     if (/^digitalWrite\s*\(/i.test(text)) {
         const m = text.match(/^digitalWrite\s*\(\s*([^,]+)\s*,\s*(.+)\)$/i);
@@ -331,6 +548,30 @@ function execExprStatement(text, state, onDelay) {
     }
     if (/^pinMode\s*\(/i.test(text)) return 0;
 
+    const localDecl = text.match(
+        /^(?:const\s+)?(?:unsigned\s+)?(int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([\s\S]+)$/i
+    );
+    if (localDecl) {
+        const type = localDecl[1];
+        const name = localDecl[2];
+        const isFloat = /^(?:float|double)$/i.test(type);
+        if (isFloat) {
+            state.floatVars = state.floatVars || new Set();
+            state.floatVars.add(name);
+        }
+        const val = evalExprState(localDecl[3], state);
+        state.vars[name] = isFloat ? val : Math.trunc(val);
+        return 0;
+    }
+
+    const localFloatOnly = text.match(/^(?:const\s+)?(?:float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i);
+    if (localFloatOnly) {
+        state.floatVars = state.floatVars || new Set();
+        state.floatVars.add(localFloatOnly[1]);
+        if (!(localFloatOnly[1] in state.vars)) state.vars[localFloatOnly[1]] = 0;
+        return 0;
+    }
+
     let m = text.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(\+\+|--)$/) ||
         text.match(/^(\+\+|--)\s*([A-Za-z_][A-Za-z0-9_]*)$/);
     if (m) {
@@ -340,7 +581,7 @@ function execExprStatement(text, state, onDelay) {
         return 0;
     }
 
-    m = text.match(/^(DDR[BCD]|PORT[BCD]|[A-Za-z_][A-Za-z0-9_]*)\s*(\|=|&=|\^=|\+=|-=|\*=|\/=|%=|<<=|>>=|=)\s*(.+)$/);
+    m = text.match(/^(DDR[BCD]|PORT[BCD]|[A-Za-z_][A-Za-z0-9_]*)\s*(\|=|&=|\^=|\+=|-=|\*=|\/=|%=|<<=|>>=|=)\s*([\s\S]+)$/);
     if (!m) return 0;
     const target = m[1];
     const op = m[2];
@@ -367,7 +608,8 @@ function execExprStatement(text, state, onDelay) {
         state.regs[target] = val & 0xff;
         if (state.assignedRegs) state.assignedRegs.add(target);
     } else {
-        state.vars[target] = val;
+        const isFloat = state.floatVars?.has(target);
+        state.vars[target] = isFloat ? val : Math.trunc(val);
     }
     return 0;
 }
@@ -378,6 +620,12 @@ function execStatements(stmts, state, onDelay) {
         else if (st.type === "if") {
             if (evalExprState(st.cond, state)) execStatements(st.body, state, onDelay);
             else if (st.elseBody) execStatements(st.elseBody, state, onDelay);
+        } else if (st.type === "while") {
+            let guard = 0;
+            while (evalExprState(st.cond, state) && guard < MAX_WHILE_ITER) {
+                guard++;
+                execStatements(st.body, state, onDelay);
+            }
         }
     }
 }
@@ -394,6 +642,12 @@ function* runLoopGen(stmts, state) {
         } else if (st.type === "if") {
             if (evalExprState(st.cond, state)) yield* runLoopGen(st.body, state);
             else if (st.elseBody) yield* runLoopGen(st.elseBody, state);
+        } else if (st.type === "while") {
+            let guard = 0;
+            while (evalExprState(st.cond, state) && guard < MAX_WHILE_ITER) {
+                guard++;
+                yield* runLoopGen(st.body, state);
+            }
         }
     }
 }
@@ -419,23 +673,43 @@ function resolveOutputLevels(state) {
 }
 
 /* ---------------------------------------------------------------------------
- * Runtime temps réel : exécute setup() une fois puis loop() en boucle, en
- * lisant les entrées (digitalRead) en direct et en respectant delay() comme
- * une vraie temporisation. Permet aux sketches pilotés par un bouton de
- * fonctionner pendant la simulation.
+ * Runtime temps réel : exécute setup() une fois puis loop() en boucle pendant
+ * la simulation (delay(), digitalWrite, registres PORT, digitalRead…).
  * ------------------------------------------------------------------------- */
 
-/** Le loop() lit-il une entrée (digitalRead) ? → nécessite le runtime live. */
+/** Le sketch définit-il une fonction loop() non vide ? */
+export function sketchHasLoop(sketch) {
+    const loop = extractFunctionBody(stripComments(sketch || ""), "loop");
+    return !!loop.trim();
+}
+
+/** Le loop() lit-il une entrée (digitalRead) ? */
 export function sketchUsesLiveInput(sketch) {
     const loop = extractFunctionBody(stripComments(sketch || ""), "loop");
     return /\bdigitalRead\s*\(/i.test(loop);
+}
+
+/** Le loop() utilise-t-il analogRead ? */
+export function sketchUsesAnalogInput(sketch) {
+    const loop = extractFunctionBody(stripComments(sketch || ""), "loop");
+    return /\banalogRead\s*\(/i.test(loop);
 }
 
 export function createArduinoRuntime(uno) {
     const src = stripComments(uno?.sketch || "");
     const setupBody = extractFunctionBody(src, "setup");
     const loopBody = extractFunctionBody(src, "loop");
-    const state = { vars: collectInitialVars(src), regs: {}, pins: {}, inputs: {}, simTimeMs: 0 };
+    const init = collectInitialVars(src);
+    const state = {
+        vars: init.vars,
+        floatVars: init.floatVars,
+        regs: {},
+        pins: {},
+        inputs: {},
+        analogInputs: {},
+        simTimeMs: 0,
+        serial: createSerialState(),
+    };
     execStatements(parseStatements(setupBody), state, (ms) => { state.simTimeMs += ms; });
     return {
         sketch: uno?.sketch || "",
@@ -454,10 +728,12 @@ export function createArduinoRuntime(uno) {
  * @param {object} rt runtime créé par createArduinoRuntime
  * @param {number} deltaMs durée écoulée depuis le dernier pas
  * @param {Record<string, number>} inputs niveaux d'entrée live (ex. { D13: 0 })
+ * @param {Record<string, number>} [analogInputs] valeurs ADC 0–1023 (ex. { A0: 512 })
  */
-export function stepArduinoRuntime(rt, deltaMs, inputs) {
+export function stepArduinoRuntime(rt, deltaMs, inputs, analogInputs) {
     if (!rt) return;
     rt.state.inputs = inputs || {};
+    rt.state.analogInputs = analogInputs || {};
     const inKey = JSON.stringify(rt.state.inputs);
     if (rt.lastInputs !== inKey) rt.idle = false;
     rt.lastInputs = inKey;
@@ -477,10 +753,17 @@ export function stepArduinoRuntime(rt, deltaMs, inputs) {
         if (!rt.gen) { rt.gen = runLoopGen(rt.loopStmts, rt.state); rt.passDelays = 0; }
         const r = rt.gen.next();
         if (r.done) {
-            const hadDelay = rt.passDelays > 0;
             rt.gen = null;
-            if (!hadDelay) { rt.idle = true; break; }
-            continue;
+            if (!rt.loopStmts.length) {
+                rt.idle = true;
+                break;
+            }
+            if (rt.passDelays > 0) {
+                rt.passDelays = 0;
+                continue;
+            }
+            // loop() sans delay : une itération par frame (effets cumulatifs, digitalRead…)
+            break;
         }
         rt.sleepMs = Math.max(0, Number(r.value) || 0);
         rt.passDelays++;
@@ -489,6 +772,65 @@ export function stepArduinoRuntime(rt, deltaMs, inputs) {
 
 export function arduinoRuntimeLevels(rt) {
     return rt ? resolveOutputLevels(rt.state) : {};
+}
+
+export function getRuntimeSerialTx(rt) {
+    return rt?.state?.serial?.tx ?? "";
+}
+
+export function injectRuntimeSerialRx(rt, text) {
+    if (!rt) return;
+    const ser = ensureSerial(rt.state);
+    for (const ch of String(text)) ser.rx.push(ch.charCodeAt(0) & 0xff);
+}
+
+export function getRuntimeSerialMeta(rt) {
+    const ser = rt?.state?.serial;
+    return { begun: !!ser?.begun, baud: ser?.baud ?? 0 };
+}
+
+function formatBindingValue(name, value, floatVars) {
+    const v = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(v)) return "0";
+    if (floatVars?.has(name) || !Number.isInteger(v)) return v.toFixed(2);
+    return String(Math.trunc(v));
+}
+
+/**
+ * Évalue les variables locales du loop() (analogRead, calculs float…) pour lcd.print(var).
+ * @param {string} sketch
+ * @param {Record<string, number>} [analogInputs] ex. { A0: 512 }
+ * @returns {Record<string, string>}
+ */
+export function evaluateLoopVarBindings(sketch, analogInputs = {}) {
+    const src = stripComments(sketch || "");
+    const loopBody = extractFunctionBody(src, "loop");
+    if (!loopBody.trim()) return {};
+    const init = collectInitialVars(src);
+    const state = {
+        vars: { ...init.vars },
+        floatVars: new Set(init.floatVars),
+        regs: {},
+        pins: {},
+        inputs: {},
+        analogInputs: analogInputs || {},
+        simTimeMs: 0,
+    };
+    const bindings = {};
+    for (const st of parseStatements(loopBody)) {
+        if (st.type !== "expr") continue;
+        const text = st.text.trim();
+        const isLocalDecl = /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|short|float|double)\s+[A-Za-z_]\w*\s*=/i.test(text);
+        if (!isLocalDecl) continue;
+        execExprStatement(text, state, null);
+        const m = text.match(
+            /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/i
+        );
+        if (m && Object.prototype.hasOwnProperty.call(state.vars, m[1])) {
+            bindings[m[1]] = formatBindingValue(m[1], state.vars[m[1]], state.floatVars);
+        }
+    }
+    return bindings;
 }
 
 /**
@@ -500,7 +842,8 @@ function interpretRegisterState(src) {
     const loopBody = extractFunctionBody(src, "loop");
     if (!setupBody && !loopBody) return null;
     if (!/\b(?:DDR|PORT)[BCD]\s*(?:\|=|&=|\^=|=)/.test(`${setupBody};${loopBody}`)) return null;
-    const state = { vars: collectInitialVars(src), regs: {}, pins: {}, assignedRegs: new Set() };
+    const init = collectInitialVars(src);
+    const state = { vars: init.vars, floatVars: init.floatVars, regs: {}, pins: {}, assignedRegs: new Set() };
     execStatements(parseStatements(setupBody), state, () => {});
     execStatements(parseStatements(loopBody), state, () => {});
     return { regs: state.regs, assigned: state.assignedRegs };
@@ -514,9 +857,10 @@ function interpretRegisterPhases(src) {
     if (!/\bdelay\s*\(/i.test(loopBody)) return null;
     // Réservé aux écritures registre PORTx dans loop() (compteurs, séquences).
     // Les clignotements digitalWrite restent gérés par la logique dédiée.
-    if (!/\bPORT[BCD]\s*(?:\|=|&=|\^=|=)/.test(loopBody)) return null;
+    if (!/\bPORT[BCD]\s*(?:\|=|&=|\^=|\+=|-=|<<=|>>=|=)/.test(loopBody)) return null;
 
-    const state = { vars: collectInitialVars(src), regs: {}, pins: {} };
+    const init = collectInitialVars(src);
+    const state = { vars: init.vars, floatVars: init.floatVars, regs: {}, pins: {} };
     execStatements(parseStatements(setupBody), state, () => {});
 
     const loopStmts = parseStatements(loopBody);
@@ -538,6 +882,22 @@ function interpretRegisterPhases(src) {
     }
 
     return phases.length >= 2 ? phases : null;
+}
+
+/**
+ * Niveau logique d'une broche à l'instant tSec (phases / pulsations du sketch).
+ * N'utilise pas liveLevels — adapté à l'oscilloscope et aux courbes idéales.
+ */
+export function resolveArduinoPinLevelAt(uno, pinLabel, tSec = 0) {
+    if (!uno || !pinLabel) return 0;
+    const dynamic = computeDynamicPinLevels(uno, tSec);
+    if (Object.prototype.hasOwnProperty.call(dynamic, pinLabel)) {
+        return dynamic[pinLabel] ? 1 : 0;
+    }
+    const lv = uno.pinLevels?.[pinLabel];
+    if (lv === 1 || lv === "1" || lv === true) return 1;
+    if (lv === 0 || lv === "0" || lv === false) return 0;
+    return 0;
 }
 
 function computeDynamicPinLevels(uno, tSec = 0) {
@@ -763,6 +1123,12 @@ export function parseArduinoSketch(sketch) {
         if (pinLevels[label] === undefined && !pinPulses[label] && pinPhases.length < 2) {
             pinLevels[label] = 0;
         }
+    }
+
+    if (/\bSerial\.begin\s*\(/i.test(src)) {
+        pinModes.D1 = "OUTPUT";
+        pinLevels.D1 = 1;
+        if (!pinModes.D0) pinModes.D0 = "INPUT_PULLUP";
     }
 
     const avrRegisters = buildAvrRegistersFromParsed(

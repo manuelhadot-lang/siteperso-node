@@ -20,6 +20,33 @@ import {
     UNO_HIT_DX,
     UNO_HIT_DY,
 } from './arduino-uno-layout.js';
+import {
+    GROVE_LCD_PINS,
+    GROVE_LCD_PIN_Y,
+    GROVE_LCD_JUNC_X,
+    GROVE_LCD_HIT_DX,
+    GROVE_LCD_HIT_DY,
+} from './grove-lcd-layout.js';
+import {
+    GROVE_DHT22_PINS,
+    GROVE_DHT22_PIN_Y,
+    GROVE_DHT22_JUNC_X,
+    GROVE_DHT22_HIT_DX,
+    GROVE_DHT22_HIT_DY,
+} from './dht22-layout.js';
+import {
+    DC10H_PIN_Y,
+    DC10H_SEG_NAMES,
+    DC10H_JUNC_L,
+    DC10H_JUNC_R,
+    DC10H_COM_X,
+    DC10H_COM_Y,
+    DC10H_SEL_L,
+    DC10H_SEL_T,
+    DC10H_SEL_W,
+    DC10H_SEL_H,
+    dc10hComX,
+} from './bargraph-dc10h-layout.js';
 
 export function isPointOnSegment(px, py, p1, p2, tolerance = 1) {
     const minX = Math.min(p1.x, p2.x) - tolerance, maxX = Math.max(p1.x, p2.x) + tolerance;
@@ -88,6 +115,31 @@ export function getComponentJonctions(comp) {
         const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
         localPts = names.map((n, i) => ({ id: `${comp.label}_${n}`, x: -40, y: ys[i] }));
         localPts.push({ id: `${comp.label}_COM`, x: 20, y: 100 });
+    } else if (comp.type === 'bargraph_dc10h') {
+        const jx = comp.flipX ? DC10H_JUNC_R : DC10H_JUNC_L;
+        const comX = dc10hComX(!!comp.flipX);
+        localPts = DC10H_SEG_NAMES.map((n, i) => ({ id: `${comp.label}_${n}`, x: jx, y: DC10H_PIN_Y[i] }));
+        localPts.push({ id: `${comp.label}_COM`, x: comX, y: DC10H_COM_Y });
+    } else if (comp.type === 'grove_lcd16x2') {
+        const jx = comp.flipX ? -GROVE_LCD_JUNC_X : GROVE_LCD_JUNC_X;
+        GROVE_LCD_PINS.forEach((n, i) => {
+            list.push({
+                id: `${comp.label}_${n}`,
+                x: snapToGrid(comp.x + jx),
+                y: snapToGrid(comp.y + GROVE_LCD_PIN_Y[i]),
+            });
+        });
+        return list;
+    } else if (comp.type === 'grove_dht22') {
+        const jx = comp.flipX ? -GROVE_DHT22_JUNC_X : GROVE_DHT22_JUNC_X;
+        GROVE_DHT22_PINS.forEach((n, i) => {
+            list.push({
+                id: `${comp.label}_${n}`,
+                x: snapToGrid(comp.x + jx),
+                y: snapToGrid(comp.y + GROVE_DHT22_PIN_Y[i]),
+            });
+        });
+        return list;
     } else if (['capacitor', 'inductor', 'diode'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'gsqr') {
@@ -160,7 +212,7 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'grove_lcd16x2' && comp.type !== 'grove_dht22') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
@@ -185,6 +237,14 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
     if (comp.type === 'seg7') return dx < 60 && dy < 110;
+    if (comp.type === 'bargraph_dc10h') {
+        const x = mx - comp.x;
+        const y = my - comp.y;
+        return x >= DC10H_SEL_L && x <= DC10H_SEL_L + DC10H_SEL_W
+            && y >= DC10H_SEL_T && y <= DC10H_SEL_T + DC10H_SEL_H;
+    }
+    if (comp.type === 'grove_lcd16x2') return dx < GROVE_LCD_HIT_DX && dy < GROVE_LCD_HIT_DY;
+    if (comp.type === 'grove_dht22') return dx < GROVE_DHT22_HIT_DX && dy < GROVE_DHT22_HIT_DY;
     if (comp.type === 'opamp') return dx < 44 && dy < 42;
     if (comp.type === 'npn') return dx < 44 && dy < 44;
     if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;

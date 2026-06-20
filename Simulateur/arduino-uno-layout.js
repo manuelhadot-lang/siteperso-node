@@ -45,6 +45,40 @@ export const UNO_JONCTION_SUFFIX = { ...UNO_PIN };
 export const UNO_DIGITAL_PINS = UNO_RIGHT_PINS.slice().reverse();
 export const UNO_ANALOG_PINS = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
 
+/**
+ * Numéro de broche du boîtier DIP-28 ATmega328P (datasheet Microchip).
+ * Correspond aux signaux GPIO du header Arduino UNO R3.
+ */
+export const UNO_ATMEGA328P_DIP = {
+    RESET: 1,
+    D0: 2,
+    D1: 3,
+    D2: 4,
+    D3: 5,
+    D4: 6,
+    D5: 11,
+    D6: 12,
+    D7: 13,
+    D8: 14,
+    D9: 15,
+    D10: 16,
+    D11: 17,
+    D12: 18,
+    D13: 19,
+    A0: 23,
+    A1: 24,
+    A2: 25,
+    A3: 26,
+    A4: 27,
+    A5: 28,
+};
+
+/** Libellé broche header : « D0 (2) » si numéro MCU connu. */
+export function formatUnoPinLabel(pinName) {
+    const n = UNO_ATMEGA328P_DIP[pinName];
+    return n != null ? `${pinName} (${n})` : pinName;
+}
+
 export function arduinoUnoJonctionToTerminalKey(label, jonctionId) {
     if (!label || !jonctionId?.startsWith(`${label}_`)) return null;
     const suffix = jonctionId.slice(label.length + 1);

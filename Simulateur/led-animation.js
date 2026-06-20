@@ -1,5 +1,5 @@
 // led-animation.js — clignotement LED à partir des courbes .tran (wrdata)
-import { circuit } from './state.js';
+import { circuit, flags, simulationResults } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
 import { quantizeVoltmeterReading } from './Engine/voltmeter-display.mjs';
 
@@ -24,14 +24,25 @@ import {
     createArduinoRuntime,
     stepArduinoRuntime,
     arduinoRuntimeLevels,
+    sketchHasLoop,
+    sketchUsesAnalogInput,
+    getRuntimeSerialTx,
+    injectRuntimeSerialRx,
+    getRuntimeSerialMeta,
 } from './Engine/arduino-sketch-parse.mjs';
+import { readUnoAnalogInputs } from './Engine/arduino-analog-ideal.mjs';
+import { sketchUsesSerial } from './Engine/arduino-uart-wave.mjs';
+import { getVoltageAtJonction } from './geometry.js';
 import { reachableJonctions } from './Engine/hc90-cascade.mjs';
 import { UNO_JONCTION_SUFFIX } from './arduino-uno-layout.js';
 import { syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
 import {
     getIdealSeg7FromArduino,
+    getIdealBargraphFromArduino,
     getIdealVoltmeterVoltage,
 } from './Engine/arduino-gpio-ideal.mjs';
+import { isGroveLcdWiredToUno, refreshGroveLcdDisplayCache, getIdealGroveLcdDisplay } from './Engine/grove-lcd-ideal.mjs';
+import { isGroveDht22WiredToUno, getIdealDht22Reading } from './Engine/dht22-ideal.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -51,6 +62,7 @@ export function isLedOvercurrent(current) {
 
 let redraw = () => {};
 const SEG7_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+const BARGRAPH_SEG_NAMES = Array.from({ length: 10 }, (_, i) => `s${i + 1}`);
 const SEG7_LIT_DELTA_V = 0.35;
 
 let anim = {
@@ -59,6 +71,7 @@ let anim = {
     plots: {},
     vmPlots: {},
     seg7Plots: {},
+    bargraphPlots: {},
     /** @type {Record<string, { q: Array<{ time: number[]; voltage: number[]; vth?: number } | null>; span: number }>} */
     hc90QPlots: {},
     /** Dernier BCD valide 0–9 par HC90 (filtre états transitoires > 9). */
@@ -79,6 +92,13 @@ let anim = {
 
 export function bindLedAnimationRedraw(fn) {
     redraw = typeof fn === 'function' ? fn : () => {};
+}
+
+let onArduinoRuntimeTick = () => {};
+
+/** Callback après chaque pas runtime UNO (ex. rafraîchir le moniteur série). */
+export function bindArduinoRuntimeTick(fn) {
+    onArduinoRuntimeTick = typeof fn === 'function' ? fn : () => {};
 }
 
 /* --- Runtime Arduino temps réel (sketches pilotés par digitalRead) --------- */
@@ -134,7 +154,7 @@ function readUnoInputs(uno) {
     return inputs;
 }
 
-/** Avance (une fois par frame) les runtimes des UNO pilotés par digitalRead. */
+/** Avance (une fois par frame) les runtimes des UNO dont le sketch a un loop(). */
 function updateArduinoRuntimes() {
     const now = performance.now();
     if (lastRuntimeStepMs <= 0) lastRuntimeStepMs = now;
@@ -144,30 +164,98 @@ function updateArduinoRuntimes() {
     for (const comp of circuit.components) {
         if (comp.type !== 'arduino_uno') continue;
         applyArduinoSketchToComponent(comp);
-        if (!comp.usesLiveInput) {
+        if (!sketchHasLoop(comp.sketch || '')) {
             comp.liveLevels = null;
             continue;
         }
         seen.add(comp.label);
         let entry = arduinoRuntimes.get(comp.label);
         if (!entry || entry.sketch !== (comp.sketch || '')) {
-            entry = { rt: createArduinoRuntime(comp), sketch: comp.sketch || '' };
+            entry = { rt: createArduinoRuntime(comp), sketch: comp.sketch || '', lastAnalogKey: '' };
             arduinoRuntimes.set(comp.label, entry);
         }
-        stepArduinoRuntime(entry.rt, deltaMs, readUnoInputs(comp));
+        const analogInputs = readUnoAnalogInputs(comp, {
+            components: circuit.components,
+            wires: circuit.wires,
+            autoJunctions: circuit.autoJunctions,
+            tSec: getSimulationElapsedSec(),
+            getVoltageAtJonction,
+            voltmeters: simulationResults.voltmeters,
+        });
+        if (sketchUsesAnalogInput(comp.sketch || '')) {
+            const analogKey = JSON.stringify(analogInputs);
+            if (entry.lastAnalogKey && entry.lastAnalogKey !== analogKey) {
+                entry.rt.gen = null;
+                entry.rt.sleepMs = 0;
+                entry.rt.idle = false;
+            }
+            entry.lastAnalogKey = analogKey;
+        }
+        stepArduinoRuntime(entry.rt, deltaMs, readUnoInputs(comp), analogInputs);
         comp.liveLevels = arduinoRuntimeLevels(entry.rt);
+        comp.serialLog = getRuntimeSerialTx(entry.rt);
+        const serMeta = getRuntimeSerialMeta(entry.rt);
+        comp.serialBegun = serMeta.begun;
+        comp.serialBaud = serMeta.baud;
+        if (entry.rt.state.regs) {
+            comp.avrRegisters = { ...(comp.avrRegisters || {}), ...entry.rt.state.regs };
+        }
     }
     for (const key of [...arduinoRuntimes.keys()]) {
         if (!seen.has(key)) arduinoRuntimes.delete(key);
     }
+    onArduinoRuntimeTick();
 }
 
 function resetArduinoRuntimes() {
     arduinoRuntimes.clear();
     lastRuntimeStepMs = 0;
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') comp.liveLevels = null;
+        if (comp.type === 'arduino_uno') {
+            comp.liveLevels = null;
+            comp.serialLog = '';
+            comp.serialBegun = false;
+            comp.serialBaud = 0;
+        }
     }
+}
+
+export { resetArduinoRuntimes };
+
+/** Cartes UNO présentes sur le schéma. */
+export function listUnoBoardLabels() {
+    return circuit.components
+        .filter((c) => c.type === 'arduino_uno' && c.label)
+        .map((c) => c.label);
+}
+
+export function getUnoSerialOutput(label) {
+    const entry = arduinoRuntimes.get(label);
+    if (entry) return getRuntimeSerialTx(entry.rt);
+    const comp = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === label);
+    return comp?.serialLog ?? '';
+}
+
+export function sendUnoSerialInput(label, text) {
+    const entry = arduinoRuntimes.get(label);
+    if (entry) injectRuntimeSerialRx(entry.rt, text);
+}
+
+export function clearUnoSerialOutput(label) {
+    const entry = arduinoRuntimes.get(label);
+    if (entry?.rt?.state?.serial) entry.rt.state.serial.tx = '';
+    const comp = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === label);
+    if (comp) comp.serialLog = '';
+}
+
+/** Après ouverture / chargement d'un schéma JSON (sketch depuis JSON, pas l'éditeur). */
+export function onCircuitLoaded() {
+    for (const comp of circuit.components) {
+        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+    }
+    refreshGroveLcdDisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
+    resetArduinoRuntimes();
+    indexArduinoLedDrives();
 }
 
 /** Sketch recompilé ou modifié : réinitialise runtime, LED pilotées et phase d'animation. */
@@ -176,8 +264,10 @@ export function onArduinoSketchUpdated() {
     for (const comp of circuit.components) {
         if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
     }
+    refreshGroveLcdDisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
     resetArduinoRuntimes();
     indexArduinoLedDrives();
+    if (!flags.isSimulating) return;
     if (anim.startMs > 0 || anim.rafId != null) anim.startMs = performance.now();
     ensureArduinoLedAnimation();
 }
@@ -363,6 +453,47 @@ function indexArduinoLedDrives() {
     }
 }
 
+function hasLcdTimeVaryingDisplay() {
+    for (const comp of circuit.components) {
+        if (comp.type !== 'grove_lcd16x2') continue;
+        if (comp.lcdDisplayCache?.hasTiming) return true;
+    }
+    return false;
+}
+
+/** LCD Grove avec delay() dans le sketch — affichage selon le temps de simulation. */
+export function getAnimatedGroveLcdDisplay(label) {
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    return getIdealGroveLcdDisplay(
+        label,
+        circuit.components,
+        circuit.wires,
+        circuit.autoJunctions,
+        elapsed,
+        {
+            getVoltageAtJonction,
+            voltmeters: simulationResults.voltmeters,
+        }
+    );
+}
+
+/** Temps écoulé depuis le début de la simulation animée (s). */
+export function getSimulationElapsedSec() {
+    return anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+}
+
+/** Mesures DHT22 animées pendant la simulation. */
+export function getAnimatedDht22Reading(label) {
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    return getIdealDht22Reading(
+        label,
+        circuit.components,
+        circuit.wires,
+        circuit.autoJunctions,
+        elapsed
+    );
+}
+
 function hasArduinoStaticIdealDisplay() {
     syncArduinoSketchesFromEditor();
     for (const comp of circuit.components) {
@@ -377,6 +508,17 @@ function hasArduinoStaticIdealDisplay() {
         if (ideal?.segments && !ideal.blank) return true;
     }
     for (const comp of circuit.components) {
+        if (comp.type !== 'bargraph_dc10h') continue;
+        const ideal = getIdealBargraphFromArduino(
+            comp.label,
+            circuit.components,
+            circuit.wires,
+            0,
+            circuit.autoJunctions
+        );
+        if (ideal?.segments && Object.values(ideal.segments).some(Boolean)) return true;
+    }
+    for (const comp of circuit.components) {
         if (comp.type !== 'voltmeter') continue;
         const v = getIdealVoltmeterVoltage(
             comp.label,
@@ -386,6 +528,12 @@ function hasArduinoStaticIdealDisplay() {
             circuit.autoJunctions
         );
         if (v != null && Number.isFinite(v)) return true;
+    }
+    for (const comp of circuit.components) {
+        if (comp.type !== 'grove_lcd16x2') continue;
+        if (isGroveLcdWiredToUno(comp.label, circuit.components, circuit.wires, circuit.autoJunctions)) {
+            return true;
+        }
     }
     return false;
 }
@@ -398,6 +546,21 @@ export function getIdealSeg7Display(label) {
         circuit.components,
         circuit.wires,
         0,
+        circuit.autoJunctions
+    );
+}
+
+/** Bargraph DC10H piloté directement par GPIO Arduino (sans attendre SPICE). */
+export function getIdealBargraphDisplay(label, tSec) {
+    syncArduinoSketchesFromEditor();
+    const elapsed =
+        tSec ??
+        (anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0);
+    return getIdealBargraphFromArduino(
+        label,
+        circuit.components,
+        circuit.wires,
+        elapsed,
         circuit.autoJunctions
     );
 }
@@ -423,12 +586,36 @@ function hasArduinoTimeVaryingGpio() {
     return circuit.components.some((c) => c.type === 'arduino_uno' && arduinoGpioIsTimeVarying(c));
 }
 
+function hasArduinoInteractiveSketch() {
+    syncArduinoSketchesFromEditor();
+    return circuit.components.some((c) => {
+        if (c.type !== 'arduino_uno') return false;
+        const sk = c.sketch || '';
+        return sketchHasLoop(sk) || sketchUsesAnalogInput(sk) || sketchUsesSerial(sk);
+    });
+}
+
+function hasArduinoLoopSimulation() {
+    return hasArduinoInteractiveSketch();
+}
+
+function hasDht22Simulation() {
+    syncArduinoSketchesFromEditor();
+    return circuit.components.some(
+        (c) => c.type === 'grove_dht22' && isGroveDht22WiredToUno(c.label, circuit.components, circuit.wires, circuit.autoJunctions)
+    );
+}
+
 export function ensureArduinoLedAnimation() {
+    if (!flags.isSimulating) return;
     indexArduinoLedDrives();
     if (
         !hasArduinoTimeVaryingGpio() &&
+        !hasArduinoLoopSimulation() &&
+        !hasDht22Simulation() &&
         !Object.keys(anim.arduinoLedDrive).length &&
-        !hasArduinoStaticIdealDisplay()
+        !hasArduinoStaticIdealDisplay() &&
+        !hasLcdTimeVaryingDisplay()
     ) {
         return;
     }
@@ -500,6 +687,16 @@ function seg7LitFromVoltages(segmentV, vCom) {
     for (let i = 0; i < 7; i++) {
         const v = segmentV[i];
         lit[SEG7_NAMES[i]] = Number.isFinite(v) && v - vc >= SEG7_LIT_DELTA_V;
+    }
+    return lit;
+}
+
+function bargraphLitFromVoltages(segmentV, vCom) {
+    const lit = {};
+    const vc = Number.isFinite(vCom) ? vCom : 0;
+    for (let i = 0; i < 10; i++) {
+        const v = segmentV[i];
+        lit[BARGRAPH_SEG_NAMES[i]] = Number.isFinite(v) && v - vc >= SEG7_LIT_DELTA_V;
     }
     return lit;
 }
@@ -708,6 +905,23 @@ export function getAnimatedSeg7Segments(label) {
     return { segments: seg7LitFromVoltages(segmentV, vCom) };
 }
 
+/** Segments bargraph allumés à l'instant courant de la simulation live (.tran). */
+export function getAnimatedBargraphSegments(label) {
+    const plot = anim.bargraphPlots[label];
+    if (!plot?.time?.length) {
+        const ideal = getIdealBargraphDisplay(label);
+        return ideal?.segments ? { segments: ideal.segments } : null;
+    }
+    const clockPeriod = getGimpPeriodSec() ?? 1;
+    const elapsedPlot = (performance.now() - anim.startMs) / 1000;
+    const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
+    const tSample = sampleTimeSec(elapsedPlot, clockPeriod);
+    const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
+    const vCom = interpolateSeries(plot.time, plot.common, tAbs);
+    const segmentV = BARGRAPH_SEG_NAMES.map((n) => interpolateSeries(plot.time, plot.segments[n], tAbs));
+    return { segments: bargraphLitFromVoltages(segmentV, vCom) };
+}
+
 export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGateTranPlots = {}, opts = {}) {
     const mrActive = isHc90MasterResetActive(circuit.components, circuit.wires, circuit.autoJunctions);
     const mrReleased = anim.hc90MrActive && !mrActive;
@@ -716,15 +930,18 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     const hasLeds = plots && Object.keys(plots).length > 0;
     const hasVm = vmPlots && Object.keys(vmPlots).length > 0;
     const hasSeg7 = seg7Plots && Object.keys(seg7Plots).length > 0;
+    const bargraphPlots = opts.bargraphPlots || {};
+    const hasBargraph = bargraphPlots && Object.keys(bargraphPlots).length > 0;
     anim.hc90QPlots = indexHc90QPlots(logicGateTranPlots);
     anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires, circuit.autoJunctions);
     anim.hc90MrActive = mrActive;
     const hasHc90Anim = Object.keys(anim.hc90QPlots).length > 0;
-    if (!hasLeds && !hasVm && !hasSeg7 && !hasHc90Anim) return;
+    if (!hasLeds && !hasVm && !hasSeg7 && !hasBargraph && !hasHc90Anim) return;
 
     anim.plots = plots || {};
     anim.vmPlots = vmPlots || {};
     anim.seg7Plots = seg7Plots || {};
+    anim.bargraphPlots = bargraphPlots || {};
     anim.startMs = savedStartMs > 0 ? savedStartMs : performance.now();
     if (hasLeds) prepareLedTiming(plots);
     if (hasVm) prepareVmTiming(vmPlots);
@@ -733,6 +950,7 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
         Object.keys(anim.plots).some((id) => !anim.ledPersistence[id]) ||
         hasVm ||
         hasSeg7 ||
+        hasBargraph ||
         hasHc90Anim;
     if (!needsFrameLoop) {
         redraw();
@@ -769,6 +987,7 @@ export function stopLedAnimation(preserveArduino = false) {
     anim.plots = {};
     anim.vmPlots = {};
     anim.seg7Plots = {};
+    anim.bargraphPlots = {};
     anim.hc90QPlots = {};
     anim.hc90LastBcd = {};
     anim.hc90MrActive = false;
@@ -778,6 +997,7 @@ export function stopLedAnimation(preserveArduino = false) {
     anim.ledPersistence = {};
     anim.steadyCurrent = {};
     anim.arduinoLedDrive = {};
+    anim.startMs = 0;
     if (!preserveArduino) resetArduinoRuntimes();
     stopBurntLedSmokeLoop();
 }

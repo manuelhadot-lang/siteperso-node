@@ -20,6 +20,7 @@ const {
     resolveDigitalCmSourcePath,
 } = require("./tools/ngspice-bundle.cjs");
 const { mountArduinoRoutes } = require("./tools/arduino-routes.cjs");
+const { readJsonFileSafe } = require("./tools/read-json-safe.cjs");
 
 const XSPICE_DIGITAL_CM_PLACEHOLDER = "__XSPICE_DIGITAL_CM__";
 
@@ -419,8 +420,7 @@ function isWin32Platform() {
 }
 
 // --- CHARGEMENT DES ELEVES ---
-let baseEleves = {};
-if (fs.existsSync('./eleves.json')) baseEleves = JSON.parse(fs.readFileSync('./eleves.json'));
+let baseEleves = readJsonFileSafe("./eleves.json", {});
 
 // Route pour vérifier si un code élève existe
 app.get('/api/check-student/:code', (req, res) => {
@@ -455,15 +455,16 @@ mesSousDossiersDocs.forEach(sd => {
 const mesClasses = ["Tle_STI2D1", "Tle_STI2D2", "1ere_STI2D1", "1ere_STI2D2"];
 
 // --- 2. CHARGEMENT DES PLANNINGS ---
-let planningProjets = { "Robotique": "2026-03-01", "UltraSon": "2026-03-01", "Station_Meteo": "2026-03-01", "Digicode": "2026-03-01", "Robo_Cytron_ESP32": "2026-03-01" };
-let planningDocs = {};
-let quizzes = {};
-let chatMessages = [];
-
-if (fs.existsSync('./planning_projets.json')) planningProjets = JSON.parse(fs.readFileSync('./planning_projets.json'));
-if (fs.existsSync('./planning_docs.json')) planningDocs = JSON.parse(fs.readFileSync('./planning_docs.json'));
-if (fs.existsSync('./quizzes.json')) quizzes = JSON.parse(fs.readFileSync('./quizzes.json'));
-if (fs.existsSync('./chat_messages.json')) chatMessages = JSON.parse(fs.readFileSync('./chat_messages.json'));
+let planningProjets = readJsonFileSafe("./planning_projets.json", {
+    Robotique: "2026-03-01",
+    UltraSon: "2026-03-01",
+    Station_Meteo: "2026-03-01",
+    Digicode: "2026-03-01",
+    Robo_Cytron_ESP32: "2026-03-01",
+});
+let planningDocs = readJsonFileSafe("./planning_docs.json", {});
+let quizzes = readJsonFileSafe("./quizzes.json", {});
+let chatMessages = readJsonFileSafe("./chat_messages.json", []);
 
 // --- 3. CONFIGURATION MULTER ---
 const storage = multer.diskStorage({
@@ -1189,8 +1190,7 @@ app.post("/api/simulate", async (req, res) => {
 mountArduinoRoutes(app);
 
 // --- 5. COMPTEUR ---
-let visitCount = 0;
-if (fs.existsSync('./visits.json')) visitCount = JSON.parse(fs.readFileSync('./visits.json')).count || 0;
+let visitCount = readJsonFileSafe("./visits.json", { count: 0 }).count || 0;
 app.get('/api/counter', (req, res) => {
     visitCount++;
     fs.writeFileSync('./visits.json', JSON.stringify({ count: visitCount }));

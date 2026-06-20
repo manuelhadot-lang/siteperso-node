@@ -104,6 +104,9 @@ function isLikelySecuritySoftwareBlock(error, exeTried) {
 
 function isWin32Platform() {
     return process.platform === "win32";
+}
+
+// --- CHARGEMENT DES ELEVES ---
 
 
 /** @param {string} filePath chemin absolu du module .js à importer à chaud */
@@ -169,6 +172,27 @@ async function getMergeSeg7TranPlotsFromWrdata() {
     if (typeof module.mergeSeg7TranPlotsFromWrdata !== "function")
         throw new Error("Module mergeSeg7TranPlotsFromWrdata introuvable.");
     return module.mergeSeg7TranPlotsFromWrdata;
+}
+
+async function getMergeBargraphMeasurements() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeBargraphMeasurements !== "function")
+        throw new Error("Module mergeBargraphMeasurements introuvable.");
+    return module.mergeBargraphMeasurements;
+}
+
+async function getMergeBargraphFromTranWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeBargraphFromTranWrdata !== "function")
+        throw new Error("Module mergeBargraphFromTranWrdata introuvable.");
+    return module.mergeBargraphFromTranWrdata;
+}
+
+async function getMergeBargraphTranPlotsFromWrdata() {
+    const module = await importFresh(ngspiceResultParserModulePath);
+    if (typeof module.mergeBargraphTranPlotsFromWrdata !== "function")
+        throw new Error("Module mergeBargraphTranPlotsFromWrdata introuvable.");
+    return module.mergeBargraphTranPlotsFromWrdata;
 }
 
 async function getMergeLedTranPlotsFromWrdata() {
@@ -330,6 +354,7 @@ function runNgspice(netlistPath, outputPath, opts = {}) {
             }
         );
     });
+}
 
 app.get("/api/simulate", (req, res) => {
     res.status(405).json({
@@ -383,6 +408,9 @@ app.post("/api/simulate", async (req, res) => {
     let mergeSeg7Measurements;
     let mergeSeg7FromTranWrdata;
     let mergeSeg7TranPlotsFromWrdata;
+    let mergeBargraphMeasurements;
+    let mergeBargraphFromTranWrdata;
+    let mergeBargraphTranPlotsFromWrdata;
     try {
         buildNgspiceDeck = await getBuildNgspiceDeck();
         mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
@@ -407,6 +435,9 @@ app.post("/api/simulate", async (req, res) => {
         mergeSeg7Measurements = await getMergeSeg7Measurements();
         mergeSeg7FromTranWrdata = await getMergeSeg7FromTranWrdata();
         mergeSeg7TranPlotsFromWrdata = await getMergeSeg7TranPlotsFromWrdata();
+        mergeBargraphMeasurements = await getMergeBargraphMeasurements();
+        mergeBargraphFromTranWrdata = await getMergeBargraphFromTranWrdata();
+        mergeBargraphTranPlotsFromWrdata = await getMergeBargraphTranPlotsFromWrdata();
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -524,7 +555,9 @@ app.post("/api/simulate", async (req, res) => {
         let scopePlots = {};
         let bodePlots = {};
         let seg7Values = mergeSeg7Measurements(combinedLog, built.seg7Displays || []);
+        let bargraphValues = mergeBargraphMeasurements(combinedLog, built.bargraphDisplays || []);
         let seg7TranPlots = {};
+        let bargraphTranPlots = {};
         let logicGateTranPlots = {};
         let ledTranPlots = {};
         let voltmeterTranPlots = {};
@@ -577,6 +610,10 @@ app.post("/api/simulate", async (req, res) => {
             const fromTranSeg7 = mergeSeg7FromTranWrdata(waveTxt, seg7Meta);
             if (Object.keys(fromTranSeg7).length > 0) seg7Values = fromTranSeg7;
             seg7TranPlots = mergeSeg7TranPlotsFromWrdata(waveTxt, seg7Meta);
+            const bargraphMeta = Array.isArray(built.bargraphTranMeta) ? built.bargraphTranMeta : [];
+            const fromTranBargraph = mergeBargraphFromTranWrdata(waveTxt, bargraphMeta);
+            if (Object.keys(fromTranBargraph).length > 0) bargraphValues = fromTranBargraph;
+            bargraphTranPlots = mergeBargraphTranPlotsFromWrdata(waveTxt, bargraphMeta);
             /* Diagnostic visible dans Vérification → Journal */
             const linesCnt = waveTxt ? waveTxt.split("\n").length : 0;
             const plotKeys = Object.keys(scopePlots);
@@ -689,8 +726,11 @@ app.post("/api/simulate", async (req, res) => {
             bodePlots,
             seg7Values,
             seg7TranPlots,
+            bargraphValues,
+            bargraphTranPlots,
             logicGateTranPlots,
             seg7Displays: Array.isArray(built.seg7Displays) ? built.seg7Displays : [],
+            bargraphDisplays: Array.isArray(built.bargraphDisplays) ? built.bargraphDisplays : [],
         });
     } catch (error) {
         const exeTried = /** @type {{ ngspiceExe?: string }} */ (error)?.ngspiceExe || ngspiceExecutablePath();
@@ -745,6 +785,7 @@ app.post("/api/simulate", async (req, res) => {
     } finally {
         await rm(tempDir, { recursive: true, force: true });
     }
+});
 
     app.get("/api/version", (req, res) => {
         res.json({

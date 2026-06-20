@@ -3,7 +3,6 @@ import { flags, saveState } from './state.js';
 import { draw, resizeCanvas } from './renderer.js';
 import { clearSourceSelection } from './source-panel.js';
 import { openScopePopup, refreshScopePopup, closeScopePopup, isScopePopupOpen } from './scope-popup.js';
-import { requestLiveSimulation } from './simulation.js';
 
 let activeScope = null;
 
@@ -11,10 +10,12 @@ const panel = () => document.getElementById('source-panel');
 const titleEl = () => document.getElementById('source-panel-title');
 const scopeFields = () => document.getElementById('scope-fields');
 const timeDivEl = () => document.getElementById('scope-time-div');
+const timePosEl = () => document.getElementById('scope-time-pos');
 const ch1VdivEl = () => document.getElementById('scope-ch1-vdiv');
 const ch2VdivEl = () => document.getElementById('scope-ch2-vdiv');
 const ch1PosEl = () => document.getElementById('scope-ch1-pos');
 const ch2PosEl = () => document.getElementById('scope-ch2-pos');
+const timePosVal = () => document.getElementById('scope-time-pos-val');
 const ch1PosVal = () => document.getElementById('scope-ch1-pos-val');
 const ch2PosVal = () => document.getElementById('scope-ch2-pos-val');
 const openWindowBtn = () => document.getElementById('scope-open-window');
@@ -37,16 +38,23 @@ export function getActiveScope() {
     return activeScope;
 }
 
+export function refreshScopePanelFields() {
+    if (activeScope) syncFieldsFromComponent(activeScope);
+}
+
 function syncFieldsFromComponent(comp) {
     if (!comp) return;
     if (titleEl()) titleEl().textContent = `${comp.label} — Oscilloscope`;
     if (timeDivEl()) timeDivEl().value = String(comp.timeDivSec ?? 0.001);
     if (ch1VdivEl()) ch1VdivEl().value = String(comp.ch1VoltsPerDiv ?? 1);
     if (ch2VdivEl()) ch2VdivEl().value = String(comp.ch2VoltsPerDiv ?? 1);
+    const tp = comp.timePositionDiv ?? 0;
     const p1 = comp.ch1PositionDiv ?? 0;
     const p2 = comp.ch2PositionDiv ?? 0;
+    if (timePosEl()) timePosEl().value = String(tp);
     if (ch1PosEl()) ch1PosEl().value = String(p1);
     if (ch2PosEl()) ch2PosEl().value = String(p2);
+    if (timePosVal()) timePosVal().textContent = formatPosDiv(tp);
     if (ch1PosVal()) ch1PosVal().textContent = formatPosDiv(p1);
     if (ch2PosVal()) ch2PosVal().textContent = formatPosDiv(p2);
     updateOpenWindowButton();
@@ -63,13 +71,14 @@ function applyFieldsToComponent() {
     activeScope.timeDivSec = parseFloat(timeDivEl()?.value) || 0.001;
     activeScope.ch1VoltsPerDiv = parseFloat(ch1VdivEl()?.value) || 1;
     activeScope.ch2VoltsPerDiv = parseFloat(ch2VdivEl()?.value) || 1;
+    activeScope.timePositionDiv = parseFloat(timePosEl()?.value) || 0;
     activeScope.ch1PositionDiv = parseFloat(ch1PosEl()?.value) || 0;
     activeScope.ch2PositionDiv = parseFloat(ch2PosEl()?.value) || 0;
+    if (timePosVal()) timePosVal().textContent = formatPosDiv(activeScope.timePositionDiv);
     if (ch1PosVal()) ch1PosVal().textContent = formatPosDiv(activeScope.ch1PositionDiv);
     if (ch2PosVal()) ch2PosVal().textContent = formatPosDiv(activeScope.ch2PositionDiv);
     refreshScopePopup();
     draw();
-    if (flags.isSimulating) requestLiveSimulation();
 }
 
 /** Ouvre le panneau bas (sans forcer la popup). */
@@ -117,11 +126,13 @@ export function initScopePanel() {
     };
 
     timeDivEl()?.addEventListener('change', onChange);
+    timePosEl()?.addEventListener('change', onChange);
     ch1VdivEl()?.addEventListener('change', onChange);
     ch2VdivEl()?.addEventListener('change', onChange);
     ch1PosEl()?.addEventListener('change', onChange);
     ch2PosEl()?.addEventListener('change', onChange);
     timeDivEl()?.addEventListener('input', apply);
+    timePosEl()?.addEventListener('input', apply);
     ch1VdivEl()?.addEventListener('input', apply);
     ch2VdivEl()?.addEventListener('input', apply);
     ch1PosEl()?.addEventListener('input', apply);

@@ -4,17 +4,30 @@ import { isPointOnSegment, findWireIntersection, getComponentJonctions, componen
 import { resizeCanvas, draw } from './renderer.js';
 import { triggerSimulation, stopSimulation, requestLiveSimulation } from './simulation.js';
 import { openSourcePanel, closeSourcePanel, onSourceRemoved, initSourcePanel } from './source-panel.js';
-import { openScopePanel, closeScopePanelFully, onScopeRemoved, initScopePanel, onScopePopupClosed } from './scope-panel.js';
-import { initScopePopup, refreshScopePopup, setScopePopupCloseCallback } from './scope-popup.js';
+import { openScopePanel, closeScopePanelFully, onScopeRemoved, initScopePanel, onScopePopupClosed, refreshScopePanelFields } from './scope-panel.js';
+import { initScopePopup, refreshScopePopup, setScopePopupCloseCallback, setScopeViewChangeCallback } from './scope-popup.js';
+import { initSerialMonitor, openSerialMonitor, refreshSerialMonitor } from './serial-monitor-popup.js';
+import { initArduinoLibPopup } from './arduino-lib-popup.js';
 import { initBodePopup, openBodePopup } from './bode-popup.js';
-import { bindLedAnimationRedraw } from './led-animation.js';
+import { bindLedAnimationRedraw, onCircuitLoaded } from './led-animation.js';
+import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { bindSpeakerAudioRedraw } from './speaker-audio.js';
 import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animation.js';
 import { initEditorTheme, setEditorTheme } from './theme.js';
 import { initValuePrompt, showValuePrompt } from './value-prompt.js';
-import { initArduinoEditor, openArduinoEditor, onArduinoBoardRemoved } from './arduino-editor.js';
+import {
+    initArduinoEditor,
+    openArduinoEditor,
+    openArduinoEditorForCircuit,
+    getActiveArduinoBoard,
+    onArduinoBoardRemoved,
+    resetArduinoEditorOnCircuitLoad,
+    flushArduinoSketchesBeforeSave,
+} from './arduino-editor.js';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { showModal, hideModal, initModalUi } from './modal-ui.js';
+import { parseJsonText, normalizeCircuitPayload, migrateLoadedComponents } from './json-utils.js';
+import { DC10H_COLOR_IDS, DC10H_COLORS } from './bargraph-dc10h-layout.js';
 
 /** « Simulateur H » (application Windows) ou site web. */
 const APP_PRODUCT_NAME =
@@ -26,10 +39,10 @@ const COMPONENT_PREFIX = {
     battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', push_button: 'BP', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', opamp: 'AOP',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
-    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', led: 'LED', seg7: 'SEG',
+    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', led: 'LED', seg7: 'SEG', bargraph_dc10h: 'BAR', grove_lcd16x2: 'LCD', grove_dht22: 'DHT',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7', 'bargraph_dc10h', 'grove_lcd16x2', 'grove_dht22']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
@@ -87,6 +100,7 @@ function redo() {
 
 // --- FICHIERS ET SAUVEGARDE ---
 function getCircuitDataJSON() {
+    flushArduinoSketchesBeforeSave();
     return JSON.stringify(
         {
             name: circuitDisplayName,
@@ -120,28 +134,84 @@ async function openFile() {
         setCircuitDisplayName(handle.name);
         loadCircuitFromJSON(await (await handle.getFile()).text());
     } catch (err) {
-        const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+        if (err?.name === 'AbortError') return;
+        const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json';
         input.onchange = e => {
             const file = e.target.files?.[0];
-            if (file) {
-                fileHandle = null;
-                setCircuitDisplayName(file.name);
-            }
+            if (!file) return;
+            fileHandle = null;
+            setCircuitDisplayName(file.name);
             const r = new FileReader();
             r.onload = ev => loadCircuitFromJSON(ev.target.result);
-            if (file) r.readAsText(file);
+            r.onerror = () => alert('Impossible de lire le fichier sélectionné.');
+            r.readAsText(file, 'UTF-8');
         };
         input.click();
     }
 }
+function syncCountersFromLabels(components) {
+    for (const comp of components) {
+        const pfx = COMPONENT_PREFIX[comp.type];
+        if (!pfx || !comp.label?.startsWith(pfx)) continue;
+        const n = parseInt(comp.label.slice(pfx.length), 10);
+        if (Number.isFinite(n) && n > (counters[comp.type] || 0)) {
+            counters[comp.type] = n;
+        }
+    }
+}
+
+function repairComponentsAfterLoad(components) {
+    migrateLoadedComponents(components);
+    for (const comp of components) {
+        if (comp.type === 'arduino_uno') {
+            if (typeof comp.sketch !== 'string') comp.sketch = DEFAULT_ARDUINO_SKETCH;
+            if (!comp.fqbn) comp.fqbn = 'arduino:avr:uno';
+            comp.pinModes = comp.pinModes || {};
+            comp.pinLevels = comp.pinLevels || {};
+            comp.lastCompileLog = typeof comp.lastCompileLog === 'string' ? comp.lastCompileLog : '';
+            applyArduinoSketchToComponent(comp);
+        }
+    }
+}
+
+function resetUiAfterCircuitLoad() {
+    flags.isDraggingFromMenu = false;
+    menuDrag.draggedComponentType = null;
+    flags.isPanning = false;
+    interaction.activeWire = null;
+    document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
+    document.querySelectorAll('.dropdown-submenu.open').forEach((s) => s.classList.remove('open'));
+    hideModal(document.getElementById('value-prompt-modal'));
+}
+
 function loadCircuitFromJSON(jsonText) {
     try {
-        const data = JSON.parse(jsonText);
+        const data = normalizeCircuitPayload(parseJsonText(jsonText));
         if (data.name) setCircuitDisplayName(data.name);
-        circuit.components = data.components || []; circuit.wires = data.wires || []; circuit.autoJunctions = data.autoJunctions || [];
-        Object.assign(counters, data.counters || {}); ensureAllCounters(); interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
-        undoStack.length = 0; redoStack.length = 0; stopSimulation(); closeSourcePanel(); draw();
-    } catch (e) { alert("Erreur lors de la lecture du fichier JSON."); }
+        resetArduinoEditorOnCircuitLoad();
+        for (const k of Object.keys(counters)) counters[k] = 0;
+        circuit.components = data.components;
+        circuit.wires = data.wires;
+        circuit.autoJunctions = data.autoJunctions;
+        Object.assign(counters, data.counters);
+        repairComponentsAfterLoad(circuit.components);
+        ensureAllCounters();
+        syncCountersFromLabels(circuit.components);
+        interaction.selectedComponents = [];
+        interaction.selectedAutoJunctions = [];
+        interaction.selectedWire = null;
+        undoStack.length = 0;
+        redoStack.length = 0;
+        stopSimulation();
+        closeSourcePanel();
+        closeScopePanelFully();
+        resetUiAfterCircuitLoad();
+        onCircuitLoaded();
+        draw();
+    } catch (e) {
+        console.error('loadCircuitFromJSON', e);
+        alert(`Erreur lors de la lecture du fichier JSON.\n\n${e?.message || e}`);
+    }
 }
 
 // --- CLAVIER & RECOPIE ---
@@ -168,7 +238,7 @@ window.addEventListener('keydown', (e) => {
     if (key === 'x' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
         const flippable = interaction.selectedComponents.filter(comp =>
-            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp');
+            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'bargraph_dc10h');
         if (flippable.length === 0) return;
         saveState(); flippable.forEach(comp => { comp.flipX = !comp.flipX; }); draw(); return;
     }
@@ -337,6 +407,12 @@ canvas.addEventListener('mousedown', (e) => {
                 draw();
                 return;
             }
+            if (hc.type === 'arduino_uno') {
+                openArduinoEditor(hc);
+                interaction.selectedComponents = [hc];
+                draw();
+                return;
+            }
             if (!interaction.selectedComponents.includes(hc)) {
                 interaction.selectedComponents = [hc];
                 interaction.selectedAutoJunctions = [];
@@ -452,11 +528,62 @@ function closeUnoDocModal() {
     hideModal(document.getElementById('uno-doc-modal'));
 }
 
+let activeBargraphDocComp = null;
+
+function refreshBargraphColorPicker(selectedId) {
+    const picker = document.getElementById('bargraph-color-picker');
+    if (!picker) return;
+    picker.innerHTML = '';
+    for (const id of DC10H_COLOR_IDS) {
+        const pal = DC10H_COLORS[id];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bargraph-color-btn' + (id === selectedId ? ' is-active' : '');
+        btn.dataset.colorId = id;
+        btn.title = pal.label;
+        const swatch = document.createElement('span');
+        swatch.className = 'bargraph-color-swatch';
+        swatch.style.background = pal.lit;
+        btn.appendChild(swatch);
+        btn.appendChild(document.createTextNode(pal.label));
+        btn.addEventListener('click', () => {
+            if (!activeBargraphDocComp) return;
+            activeBargraphDocComp.barColor = id;
+            refreshBargraphColorPicker(id);
+            draw();
+        });
+        picker.appendChild(btn);
+    }
+}
+
+function openBargraphDocModal(comp) {
+    const modal = document.getElementById('bargraph-doc-modal');
+    const title = document.getElementById('bargraph-doc-title');
+    if (!modal || !comp) return;
+    activeBargraphDocComp = comp;
+    if (title) {
+        title.textContent = comp.label
+            ? `Bargraph DC10H — ${comp.label}`
+            : 'Bargraph DC10H — Lite-On';
+    }
+    refreshBargraphColorPicker(comp.barColor || 'red');
+    showModal(modal);
+}
+
+function closeBargraphDocModal() {
+    activeBargraphDocComp = null;
+    hideModal(document.getElementById('bargraph-doc-modal'));
+}
+
 canvas.addEventListener('dblclick', async (e) => {
     const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
         if (target.type === 'cd4511') {
             openCd4511DocModal(target.label);
+            return;
+        }
+        if (target.type === 'bargraph_dc10h') {
+            openBargraphDocModal(target);
             return;
         }
         if (target.type === 'ic_74hc90') {
@@ -537,6 +664,23 @@ canvas.addEventListener('dblclick', async (e) => {
             let v = await showValuePrompt("Tension Niveau Haut (Volts) :", target.highVoltage !== undefined ? String(target.highVoltage) : "5");
             if (v && !isNaN(parseFloat(v))) { saveState(); target.highVoltage = parseFloat(v); draw(); }
         }
+        else if (target.type === 'grove_dht22') {
+            const curT = target.temperature ?? 24;
+            const curH = target.humidity ?? 55;
+            const t = await showValuePrompt(`Température simulée ${target.label} (°C) :`, String(curT));
+            if (t === null || t.trim() === '') return;
+            const tVal = parseFloat(t);
+            if (!Number.isFinite(tVal)) return;
+            const h = await showValuePrompt(`Humidité simulée ${target.label} (%) :`, String(curH));
+            if (h === null || h.trim() === '') return;
+            const hVal = parseFloat(h);
+            if (!Number.isFinite(hVal)) return;
+            if (!live) saveState();
+            target.temperature = Math.max(-40, Math.min(80, tVal));
+            target.humidity = Math.max(0, Math.min(100, hVal));
+            draw();
+            if (live) requestLiveSimulation();
+        }
         else if (target.type === 'push_button') {
             const cur = target.maintained ? 'maintenu' : 'momentane';
             let v = await showValuePrompt(
@@ -564,58 +708,69 @@ canvas.addEventListener('wheel', (e) => {
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- DRAG & DROP DEPUIS MENU ---
-canvas.addEventListener('dragover', (e) => { e.preventDefault(); if (!flags.isDraggingFromMenu) return; const gp = toGridCoords(e.clientX, e.clientY); menuDrag.x = gp.x; menuDrag.y = gp.y; draw(); });
-canvas.addEventListener('dragend', () => { flags.isDraggingFromMenu = false; menuDrag.draggedComponentType = null; draw(); });
-canvas.addEventListener('drop', (e) => {
-    e.preventDefault(); if (!menuDrag.draggedComponentType) return; saveState();
+function finishMenuDrag() {
+    flags.isDraggingFromMenu = false;
+    menuDrag.draggedComponentType = null;
+    draw();
+}
+
+function onMenuDragOver(e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    if (!flags.isDraggingFromMenu || !menuDrag.draggedComponentType) return;
     const gp = toGridCoords(e.clientX, e.clientY);
-    const type = menuDrag.draggedComponentType;
-    const nc = { type, x: snapToGrid(gp.x), y: snapToGrid(gp.y), label: newComponentLabel(type), rotation: 0, state: 0, highVoltage: 5 };
-    if (menuDrag.draggedComponentType === 'gimp') {
+    menuDrag.x = gp.x;
+    menuDrag.y = gp.y;
+    draw();
+}
+
+function applyNewComponentDefaults(nc, type) {
+    if (type === 'gimp') {
         nc.frequency = 2;
         nc.dutyCycle = 50;
         nc.voltageRail = 5;
         nc.flipX = false;
-    } else if (menuDrag.draggedComponentType === 'potentiometer') {
+    } else if (type === 'potentiometer') {
         nc.value = '10k';
         nc.position = 50;
-    } else if (menuDrag.draggedComponentType === 'switch_spdt') {
+    } else if (type === 'switch_spdt') {
         nc.state = 0;
-    } else if (menuDrag.draggedComponentType === 'push_button') {
+    } else if (type === 'push_button') {
         nc.state = 0;
         nc.maintained = false;
-    } else if (menuDrag.draggedComponentType === 'speaker') {
+    } else if (type === 'speaker') {
         nc.value = '8';
-    } else if (menuDrag.draggedComponentType === 'gsin') {
+    } else if (type === 'gsin') {
         nc.peakAmplitude = 5;
         nc.frequency = 440;
         nc.offset = 0;
-    } else if (menuDrag.draggedComponentType === 'gsqr') {
+    } else if (type === 'gsqr') {
         nc.peakAmplitude = 5;
         nc.frequency = 1000;
         nc.offset = 0;
-    } else if (menuDrag.draggedComponentType === 'capacitor') {
+    } else if (type === 'capacitor') {
         nc.value = '1u';
-    } else if (menuDrag.draggedComponentType === 'inductor') {
+    } else if (type === 'inductor') {
         nc.value = '1m';
-    } else if (menuDrag.draggedComponentType === 'diode') {
+    } else if (type === 'diode') {
         nc.value = '1N4148';
-    } else if (menuDrag.draggedComponentType === 'npn') {
+    } else if (type === 'npn') {
         nc.value = '2N2222';
         nc.flipX = false;
-    } else if (menuDrag.draggedComponentType === 'opamp') {
+    } else if (type === 'opamp') {
         nc.value = 'uA741';
         nc.vp = 15;
         nc.vn = -15;
         nc.flipX = false;
         nc.flipY = false;
-    } else if (menuDrag.draggedComponentType === 'oscilloscope') {
+    } else if (type === 'oscilloscope') {
         nc.timeDivSec = 0.001;
         nc.ch1VoltsPerDiv = 1;
         nc.ch2VoltsPerDiv = 1;
         nc.ch1PositionDiv = 0;
         nc.ch2PositionDiv = 0;
-    } else if (menuDrag.draggedComponentType === 'arduino_uno') {
+        nc.timePositionDiv = 0;
+    } else if (type === 'arduino_uno') {
         nc.sketch = DEFAULT_ARDUINO_SKETCH;
         nc.fqbn = 'arduino:avr:uno';
         nc.pinModes = {};
@@ -623,12 +778,60 @@ canvas.addEventListener('drop', (e) => {
         nc.avrRegisters = null;
         nc.lastCompileOk = null;
         nc.lastCompileLog = '';
+    } else if (type === 'grove_lcd16x2') {
+        nc.i2cAddress = 0x3e;
+        nc.flipX = false;
+    } else if (type === 'bargraph_dc10h') {
+        nc.barColor = 'red';
+        nc.flipX = false;
+    } else if (type === 'grove_dht22') {
+        nc.flipX = false;
+        nc.temperature = 24;
+        nc.humidity = 55;
     }
-    circuit.components.push(nc); interaction.selectedComponents = [nc]; interaction.selectedAutoJunctions = []; interaction.selectedWire = null; flags.isDraggingFromMenu = false; menuDrag.draggedComponentType = null; draw();
-    if (nc.type === 'gimp' || nc.type === 'gsin' || nc.type === 'gsqr') { closeScopePanelFully(); openSourcePanel(nc); }
-    else if (nc.type === 'oscilloscope') { closeSourcePanel(); openScopePanel(nc); }
-    else if (nc.type === 'arduino_uno') { openArduinoEditor(nc); }
-});
+}
+
+function onMenuDrop(e) {
+    e.preventDefault();
+    const type = menuDrag.draggedComponentType
+        || e.dataTransfer?.getData('text/plain')
+        || '';
+    if (!type) return;
+    if (flags.isSimulating) {
+        alert('Arrêtez la simulation pour ajouter un composant.');
+        finishMenuDrag();
+        return;
+    }
+    saveState();
+    const gp = toGridCoords(e.clientX, e.clientY);
+    const nc = {
+        type,
+        x: snapToGrid(gp.x),
+        y: snapToGrid(gp.y),
+        label: newComponentLabel(type),
+        rotation: 0,
+        state: 0,
+        highVoltage: 5,
+    };
+    applyNewComponentDefaults(nc, type);
+    circuit.components.push(nc);
+    interaction.selectedComponents = [nc];
+    interaction.selectedAutoJunctions = [];
+    interaction.selectedWire = null;
+    finishMenuDrag();
+    if (nc.type === 'gimp' || nc.type === 'gsin' || nc.type === 'gsqr') {
+        closeScopePanelFully();
+        openSourcePanel(nc);
+    } else if (nc.type === 'oscilloscope') {
+        closeSourcePanel();
+        openScopePanel(nc);
+    } else if (nc.type === 'arduino_uno') {
+        openArduinoEditor(nc);
+    }
+}
+
+canvas.addEventListener('dragover', onMenuDragOver);
+canvas.addEventListener('drop', onMenuDrop);
 
 /** Retire les emoji / symboles décoratifs des entrées de menu déroulant. */
 function stripMenuDecorations(text) {
@@ -660,8 +863,32 @@ function initApp() {
     document.querySelectorAll('.dropdown-item[draggable=true]').forEach(item => {
         item.addEventListener('dragstart', (e) => {
             if (flags.isSimulating) { alert("Arrêtez la simulation pour ajouter."); e.preventDefault(); return; }
-            menuDrag.draggedComponentType = e.currentTarget.getAttribute('data-component'); flags.isDraggingFromMenu = true; e.dataTransfer.setDragImage(emptyDragImage, 0, 0);
+            menuDrag.draggedComponentType = e.currentTarget.getAttribute('data-component');
+            flags.isDraggingFromMenu = true;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', menuDrag.draggedComponentType);
+                e.dataTransfer.setDragImage(emptyDragImage, 0, 0);
+            }
         });
+        item.addEventListener('dragend', finishMenuDrag);
+    });
+    document.getElementById('menu-serial-monitor')?.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
+        openSerialMonitor(getActiveArduinoBoard()?.label);
+    });
+    document.getElementById('menu-arduino-editor')?.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
+        openArduinoEditorForCircuit();
+    });
+    document.getElementById('arduino-btn-serial-monitor')?.addEventListener('click', () => {
+        openSerialMonitor(getActiveArduinoBoard()?.label);
     });
     document.querySelectorAll('.dropdown-submenu .submenu-title').forEach(title => {
         title.addEventListener('click', (e) => {
@@ -704,20 +931,29 @@ function initApp() {
             stopSimulation();
         }
     });
-    document.getElementById('btn-open').addEventListener('click', openFile); document.getElementById('btn-save').addEventListener('click', saveFile); document.getElementById('btn-save-as').addEventListener('click', saveAs);
+    document.getElementById('btn-open').addEventListener('click', () => {
+        document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
+        openFile();
+    }); document.getElementById('btn-save').addEventListener('click', saveFile); document.getElementById('btn-save-as').addEventListener('click', saveAs);
     document.getElementById('btn-simulate').addEventListener('click', () => { if (!flags.isSimulating) triggerSimulation(); }); document.getElementById('btn-stop').addEventListener('click', stopSimulation);
     initSourcePanel();
     initValuePrompt();
     initArduinoEditor();
     initScopePanel();
     initScopePopup();
+    initSerialMonitor();
+    initArduinoLibPopup();
     initBodePopup();
     setScopePopupCloseCallback(onScopePopupClosed);
+    setScopeViewChangeCallback(() => refreshScopePanelFields());
     document.getElementById('source-panel-close')?.addEventListener('click', () => {
         closeSourcePanel();
         closeScopePanelFully();
     });
-    bindLedAnimationRedraw(draw);
+    bindLedAnimationRedraw(() => {
+        draw();
+        refreshSerialMonitor();
+    });
     bindSpeakerAudioRedraw(draw);
     bindScopeAnimationRedraw(draw);
     bindScopePopupRedraw(refreshScopePopup);
@@ -734,6 +970,9 @@ function initApp() {
     const unoDoc = document.getElementById('uno-doc-modal');
     document.getElementById('close-uno-doc')?.addEventListener('click', closeUnoDocModal);
     window.addEventListener('click', (e) => { if (e.target === unoDoc) closeUnoDocModal(); });
+    const bargraphDoc = document.getElementById('bargraph-doc-modal');
+    document.getElementById('close-bargraph-doc')?.addEventListener('click', closeBargraphDocModal);
+    window.addEventListener('click', (e) => { if (e.target === bargraphDoc) closeBargraphDocModal(); });
 }
 
 if (document.readyState === 'loading') {

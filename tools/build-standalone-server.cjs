@@ -76,13 +76,13 @@ function startStandaloneSimulateServer(options = {}) {
 module.exports = { createSimulateStandaloneApp, startStandaloneSimulateServer, SIM_ENGINE_BUILD_TAG };
 `;
 
-let bodyA = lines.slice(341, 418).join("\n");
+let bodyA = lines.slice(341, 421).join("\n");
 bodyA = bodyA.replace(/__dirname/g, "repoRoot");
-let bodyB = lines.slice(538, 763).join("\n");
+let bodyB = lines.slice(538, 764).join("\n");
 bodyB = bodyB.replace(/__dirname/g, "repoRoot");
 const body = bodyA + "\n\n" + bodyB;
 
-let routes = lines.slice(764, 1186).join("\n");
+let routes = lines.slice(764, 1187).join("\n");
 routes = routes.replace(/__dirname/g, "repoRoot");
 routes = routes.replace(
     /\s*if \(\s*\n\s*siteAccessPasswordConfigured\(\)[\s\S]*?\) \{\s*\n\s*return sendSiteAccessDenied\(res, req\);\s*\n\s*\}\s*\n/,
@@ -97,4 +97,9 @@ const targets = [
 for (const target of targets) {
     fs.writeFileSync(target, out);
     console.log("OK", path.relative(root, target), out.length, "bytes");
+}
+
+const { execSync } = require("child_process");
+for (const target of targets) {
+    execSync(`node --check "${target}"`, { stdio: "inherit" });
 }

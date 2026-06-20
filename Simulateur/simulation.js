@@ -4,10 +4,11 @@ import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
 import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
 import { draw } from './renderer.js';
-import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay } from './led-animation.js';
-import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
-import { openScopePanel, isScopePanelOpen, getActiveScope } from './scope-panel.js';
+import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes } from './led-animation.js';
+import { startScopeAnimation, stopScopeAnimation, SCOPE_H_DIVS } from './scope-animation.js';
+import { openScopePanel, isScopePanelOpen, getActiveScope, refreshScopePanelFields } from './scope-panel.js';
 import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
+import { isSerialMonitorOpen, refreshSerialMonitor } from './serial-monitor-popup.js';
 import { isBodePopupOpen, openBodePopup, refreshBodePopup } from './bode-popup.js';
 import { startSpeakerAudio, stopSpeakerAudio } from './speaker-audio.js';
 
@@ -25,13 +26,56 @@ export function requestLiveSimulation() {
 }
 
 import { prepareArduinoForSimulation } from './arduino-editor.js';
-import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
+import { arduinoUnoMinPulsePeriodSec, applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
+import { arduinoUartScopePeriodSec } from './Engine/arduino-uart-wave.mjs';
+import { annotateUnoI2cBusEngine } from './Engine/i2c-bus-ideal.mjs';
+
+/** Base de temps adaptée à l'I²C (100 kHz) si le scope est encore en ms/div. */
+function autoTuneScopeForI2c() {
+    const simWires = circuit.wires
+        .filter((w) => w.fromJonctionId && w.toJonctionId)
+        .map((w) => ({
+            solid: true,
+            fromKey: jonctionIdToTerminalKey(w.fromJonctionId),
+            toKey: jonctionIdToTerminalKey(w.toJonctionId),
+            points: [],
+        }))
+        .filter((w) => w.fromKey && w.toKey);
+    let hasI2c = false;
+    for (const comp of circuit.components) {
+        if (comp.type !== 'arduino_uno') continue;
+        annotateUnoI2cBusEngine(comp, circuit.components, simWires);
+        if (comp.i2cBus?.active) hasI2c = true;
+    }
+    if (!hasI2c) return;
+    for (const osc of circuit.components) {
+        if (osc.type !== 'oscilloscope') continue;
+        if ((osc.timeDivSec ?? 0.001) > 0.0001) osc.timeDivSec = 0.00005;
+    }
+}
+
+/** Base de temps adaptée au clignotement Arduino (delay) sur l'oscilloscope. */
+function autoTuneScopeForArduino() {
+    for (const comp of circuit.components) {
+        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+    }
+    const uartPeriod = arduinoUartScopePeriodSec(circuit.components);
+    const gpioPeriod = arduinoUnoMinPulsePeriodSec(circuit.components);
+    const period = uartPeriod > 0 ? uartPeriod : gpioPeriod;
+    if (!period || period <= 0) return;
+    const idealDiv = Math.min(0.1, period / SCOPE_H_DIVS);
+    for (const osc of circuit.components) {
+        if (osc.type !== 'oscilloscope') continue;
+        const cur = osc.timeDivSec ?? 0.001;
+        if (cur < idealDiv * 0.5) osc.timeDivSec = idealDiv;
+    }
+}
 
 const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
-    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', led: 'diode_led', seg7: 'seg7',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -123,6 +167,21 @@ function jonctionIdToTerminalKey(jonctionId) {
                 if (jonctionId === `${id}_${segs[i]}`) return `${id}#${i}`;
             }
             if (jonctionId === `${id}_COM`) return `${id}#7`;
+        } else if (comp.type === 'bargraph_dc10h') {
+            for (let i = 0; i < 10; i++) {
+                if (jonctionId === `${id}_s${i + 1}`) return `${id}#${i}`;
+            }
+            if (jonctionId === `${id}_COM`) return `${id}#10`;
+        } else if (comp.type === 'grove_lcd16x2') {
+            const pins = ['SDA', 'SCL', 'VCC', 'GND'];
+            for (let i = 0; i < pins.length; i++) {
+                if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
+            }
+        } else if (comp.type === 'grove_dht22') {
+            const pins = ['DATA', 'VCC', 'NC', 'GND'];
+            for (let i = 0; i < pins.length; i++) {
+                if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
+            }
         } else if (comp.type === 'cd4511') {
             const key = cd4511JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
@@ -190,6 +249,7 @@ function buildSimulationState() {
             out.ch2VoltsPerDiv = comp.ch2VoltsPerDiv ?? 1;
             out.ch1PositionDiv = comp.ch1PositionDiv ?? 0;
             out.ch2PositionDiv = comp.ch2PositionDiv ?? 0;
+            out.timePositionDiv = comp.timePositionDiv ?? 0;
         }
         if (comp.type === 'arduino_uno') {
             applyArduinoSketchToComponent(comp);
@@ -298,6 +358,11 @@ export async function triggerSimulation(isSilentUpdate = false) {
     }
     simulationInFlight = true;
     prepareArduinoForSimulation();
+    if (!isSilentUpdate) {
+        autoTuneScopeForI2c();
+        autoTuneScopeForArduino();
+        refreshScopePanelFields();
+    }
     const baseUrl = resolveSimulationApiBaseUrl();
     const payload = { state: buildSimulationState(), gridStep: GRID_SIZE };
     const wiredCount = circuit.wires.filter((w) => w.fromJonctionId && w.toJonctionId).length;
@@ -335,9 +400,11 @@ export async function triggerSimulation(isSilentUpdate = false) {
             simulationResults.scopePlots = result.scopePlots || {};
             simulationResults.bodePlots = result.bodePlots || {};
             simulationResults.seg7 = result.seg7Values || {};
+            simulationResults.bargraph = result.bargraphValues || {};
             simulationResults.logicValues = result.logicValues || {};
             const scopePlotKeys = Object.keys(simulationResults.scopePlots);
-            if (scopePlotKeys.length > 0) {
+            const hasOsc = circuit.components.some((c) => c.type === 'oscilloscope');
+            if (scopePlotKeys.length > 0 || hasOsc) {
                 startScopeAnimation(simulationResults.scopePlots);
             } else {
                 stopScopeAnimation();
@@ -355,6 +422,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
                     refreshScopePopup();
                 }
             }
+            if (isSerialMonitorOpen()) refreshSerialMonitor();
             const bodeComp = circuit.components.find((c) => c.type === 'bode_analyzer');
             if (bodeComp && (result.analysisAc || Object.keys(simulationResults.bodePlots).length > 0)) {
                 if (!isSilentUpdate) {
@@ -367,16 +435,19 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 const vmPlots = result.voltmeterTranPlots || {};
                 const ledPlots = result.ledTranPlots || {};
                 const seg7Plots = result.seg7TranPlots || {};
+                const bargraphPlots = result.bargraphTranPlots || {};
                 const logicGateTranPlots = result.logicGateTranPlots || {};
                 const arduinoIdeal = hasArduinoStaticIdealDisplay();
                 if (
                     Object.keys(vmPlots).length ||
                     Object.keys(ledPlots).length ||
                     Object.keys(seg7Plots).length ||
+                    Object.keys(bargraphPlots).length ||
                     Object.keys(logicGateTranPlots).length
                 ) {
                     startLedAnimation(ledPlots, vmPlots, seg7Plots, logicGateTranPlots, {
                         keepClock: isSilentUpdate,
+                        bargraphPlots,
                     });
                 } else if (!arduinoIdeal) {
                     stopLedAnimation();
@@ -388,7 +459,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
                     stopSpeakerAudio();
                 }
             } else {
-                stopLedAnimation();
+                stopLedAnimation(true);
                 stopSpeakerAudio();
             }
             const hasBurntLed = Object.values(simulationResults.leds).some((m) => {
@@ -397,6 +468,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
             });
             if (hasBurntLed && !hasLedAnimation() && !hasVoltmeterAnimation()) startBurntLedSmokeLoop();
             flags.isSimulating = true;
+            resetArduinoRuntimes();
             ensureArduinoLedAnimation();
             if (btnSim) { btnSim.innerText = "▶️ Simulation Live"; btnSim.style.background = "#00bcd4"; }
             if (btnStop) btnStop.classList.remove('disabled');
@@ -424,7 +496,7 @@ export function stopSimulation() {
     stopScopeAnimation();
     stopSpeakerAudio();
     flags.isSimulating = false;
-    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.bodePlots = {}; simulationResults.seg7 = {}; simulationResults.logicValues = {};
+    simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.bodePlots = {}; simulationResults.seg7 = {}; simulationResults.bargraph = {}; simulationResults.logicValues = {};
     const btnSim = document.getElementById('btn-simulate'); const btnStop = document.getElementById('btn-stop');
     if (btnSim) { btnSim.innerText = "🚀 Lancer Simulation"; btnSim.style.background = "#00ca71"; }
     if (btnStop) btnStop.classList.add('disabled');

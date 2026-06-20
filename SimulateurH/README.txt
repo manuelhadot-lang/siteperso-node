@@ -18,7 +18,7 @@ Construire l'installateur Windows (.exe)
   npm install
   npm run dist
 
-Les fichiers générés se trouvent dans SimulateurH/dist/
+Les fichiers générés se trouvent dans SimulateurH/dist-out/
   - Simulateur H Setup x.x.x.exe  (installateur NSIS)
   - Simulateur H x.x.x.exe        (version portable)
 

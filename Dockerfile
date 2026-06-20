@@ -23,6 +23,8 @@ RUN mkdir -p "$ARDUINO_DIRECTORIES_DATA" \
     && /usr/local/bin/arduino-cli core update-index \
     && /usr/local/bin/arduino-cli core install arduino:avr
 ENV ARDUINO_CLI=/usr/local/bin/arduino-cli
+# Bibliothèque LCD I2C courante (Grove) — l'utilisateur peut aussi ajouter des libs dans arduino-libraries/
+RUN /usr/local/bin/arduino-cli lib install "LiquidCrystal I2C" || true
 
 # 3. Définition du répertoire de travail dans le conteneur
 WORKDIR /app

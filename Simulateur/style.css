@@ -40,6 +40,14 @@ body.theme-light .close-modal:hover {
     user-select: none;
 }
 
+input,
+textarea,
+select,
+[contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 body {
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     background-color: var(--bg-color);
@@ -292,13 +300,14 @@ body.theme-light .circuit-name {
 }
 
 .right-panel {
-    width: min(360px, 38vw);
+    width: min(420px, 42vw);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     background-color: var(--panel-bg);
     border-left: 2px solid var(--border-color);
     z-index: 20;
+    min-height: 0;
 }
 
 .right-panel.hidden {
@@ -309,20 +318,256 @@ body.theme-light .circuit-name {
     color: #00979d;
 }
 
+.arduino-panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .arduino-panel-body {
     flex: 1;
     display: flex;
     flex-direction: column;
     padding: 12px;
     min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.arduino-editor-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #00979d;
+    margin-bottom: 6px;
+}
+
+.arduino-editor-section {
+    flex: 1 1 280px;
+    display: flex;
+    flex-direction: column;
+    min-height: 280px;
+    margin-bottom: 10px;
+}
+
+.arduino-sketch-wrap {
+    flex: 1;
+    min-height: 240px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--canvas-bg);
+    scrollbar-gutter: stable;
+}
+
+.arduino-sketch-grid {
+    display: grid;
+    min-height: 100%;
+}
+
+.arduino-sketch-highlight,
+.arduino-sketch-input {
+    grid-area: 1 / 1;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 240px;
+    margin: 0;
+    padding: 10px;
+    border: none;
+    border-radius: 0;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1.45;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    letter-spacing: normal;
+    font-variant-ligatures: none;
+}
+
+.arduino-sketch-highlight {
+    z-index: 0;
+    pointer-events: none;
+    overflow: visible;
+    background: transparent;
+    color: var(--text-color, #d4d4d4);
+}
+
+.arduino-sketch-input {
+    z-index: 1;
+    resize: none;
     overflow: hidden;
+    background: transparent;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    caret-color: var(--text-color, #d4d4d4);
+    user-select: text;
+    -webkit-user-select: text;
+    outline: none;
+}
+
+.arduino-sketch-input:focus {
+    outline: none;
+}
+
+.arduino-sketch-input::selection {
+    background: rgba(0, 151, 157, 0.35);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+.ard-hl-kw { color: #569cd6; }
+.ard-hl-type { color: #4ec9b0; }
+.ard-hl-fn { color: #dcdcaa; }
+.ard-hl-str { color: #ce9178; }
+.ard-hl-cmt { color: #6a9955; }
+.ard-hl-pre { color: #9b6e4a; }
+.ard-hl-lib { color: #6a9fb5; }
+.ard-hl-num { color: #b5cea8; }
+.ard-hl-macro { color: #c586c0; }
+
+.dropdown-item--action {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.dropdown-item--action:hover {
+    background: rgba(0, 151, 157, 0.2);
+}
+
+.serial-monitor-floating {
+    width: min(520px, calc(100vw - 32px));
+    z-index: 100010;
+}
+
+.serial-monitor-floating .scope-floating-header {
+    touch-action: none;
+}
+
+.serial-monitor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+
+.serial-monitor-board-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.serial-monitor-board-select {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--canvas-bg);
+    color: inherit;
+}
+
+.serial-monitor-baud {
+    color: var(--text-muted, #8899aa);
+    font-family: Consolas, monospace;
+}
+
+.serial-monitor-output {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 200px;
+    max-height: 280px;
+    overflow: auto;
+    margin: 0 0 8px;
+    padding: 10px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    background: #0a0a0a;
+    color: #c5e8c5;
+    border: 1px solid #1a3a1a;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.serial-monitor-status {
+    font-size: 11px;
+    color: var(--text-muted, #8899aa);
+    margin: 0 0 8px;
+    min-height: 1.2em;
+}
+
+.serial-monitor-input-row {
+    display: flex;
+    gap: 8px;
+}
+
+.serial-monitor-input {
+    flex: 1;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--canvas-bg);
+    color: inherit;
 }
 
 .arduino-panel-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
     margin-bottom: 8px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.arduino-compile-status {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: auto;
+}
+
+.arduino-compile-status--ok {
+    color: #76ff03;
+}
+
+.arduino-compile-status--busy {
+    color: var(--text-muted);
+}
+
+.arduino-btn--errors {
+    margin-left: auto;
+    background: #c62828;
+    border-color: #8e0000;
+    color: #fff;
+}
+
+.arduino-compile-log {
+    flex: 0 1 auto;
+    min-height: 60px;
+    max-height: 160px;
+    overflow: auto;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    padding: 8px;
+    background: #0a0a0a;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+.arduino-compile-log.hidden {
+    display: none;
 }
 
 .modal-content--prompt {
@@ -390,27 +635,250 @@ body.theme-light .circuit-name {
 .arduino-cli-status--ok { color: #76ff03; }
 .arduino-cli-status--warn { color: #ffb74d; }
 
-.arduino-sketch-label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
+.arduino-lib-hint {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-muted);
+    margin: 0 0 8px;
 }
 
-.arduino-sketch-input {
-    width: 100%;
-    box-sizing: border-box;
+.arduino-lib-hint code {
+    font-size: 10px;
+    color: #80cbc4;
+}
+
+.arduino-libs-details {
+    flex-shrink: 0;
+    margin-top: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.arduino-libs-summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #00979d;
+    list-style: none;
+}
+
+.arduino-libs-summary::-webkit-details-marker {
+    display: none;
+}
+
+.arduino-libs-details[open] .arduino-libs-summary {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.arduino-libs-section {
+    flex-shrink: 0;
+    margin-bottom: 0;
+    padding: 8px 10px 10px;
+    border: none;
+    border-radius: 0;
+    max-height: none;
+    overflow: visible;
+    background: transparent;
+}
+
+.arduino-libs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.arduino-libs-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #00979d;
+}
+
+.arduino-lib-search-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.arduino-lib-search-input {
     flex: 1;
-    min-height: 120px;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 13px;
-    padding: 10px;
-    margin-bottom: 10px;
+    min-width: 0;
+    padding: 5px 8px;
+    font-size: 12px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     background: var(--canvas-bg);
     color: inherit;
-    resize: none;
 }
+
+.arduino-lib-subtitle {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 8px 0 4px;
+}
+
+.arduino-lib-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.arduino-lib-list:empty {
+    display: none;
+}
+
+.arduino-lib-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.arduino-lib-item:last-child {
+    border-bottom: none;
+}
+
+.arduino-lib-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.arduino-lib-item-name {
+    font-weight: 600;
+    color: #80deea;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.arduino-lib-item-name:hover {
+    color: #b2ebf2;
+}
+
+.arduino-lib-floating {
+    width: min(520px, calc(100vw - 24px));
+    max-height: min(85vh, 640px);
+}
+
+.arduino-lib-popup-body {
+    overflow: auto;
+    max-height: min(70vh, 520px);
+    padding-right: 4px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #cfd8dc;
+}
+
+.arduino-lib-doc-note {
+    margin: 0 0 12px;
+    color: #90a4ae;
+}
+
+.arduino-lib-doc-code {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    background: #0a1218;
+    border: 1px solid #1a3a4a;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #a5d6a7;
+    overflow-x: auto;
+}
+
+.arduino-lib-doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+    font-size: 12px;
+}
+
+.arduino-lib-doc-table th,
+.arduino-lib-doc-table td {
+    border: 1px solid #2a3a4a;
+    padding: 6px 8px;
+    vertical-align: top;
+    text-align: left;
+}
+
+.arduino-lib-doc-table th {
+    background: #0f1a22;
+    color: #b0bec5;
+}
+
+.arduino-lib-doc-sig {
+    display: block;
+    margin-bottom: 4px;
+    color: #ffeb3b;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.arduino-lib-doc-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #37474f;
+    color: #b0bec5;
+    vertical-align: middle;
+}
+
+.arduino-lib-doc-badge--sim {
+    background: #1b5e20;
+    color: #c8e6c9;
+}
+
+.arduino-lib-doc-legend {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #78909c;
+}
+
+.arduino-lib-item-meta {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.arduino-lib-msg {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin: 6px 0 0;
+    min-height: 14px;
+}
+
+.arduino-lib-msg--ok { color: #76ff03; }
+.arduino-lib-msg--err { color: #ffb74d; }
+
+.arduino-btn--small {
+    padding: 4px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.arduino-btn--install {
+    background: #00979d;
+    border-color: #006064;
+    color: #fff;
+}
+
+.arduino-btn--uninstall {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
 
 .arduino-modal-actions {
     display: flex;
@@ -434,20 +902,6 @@ body.theme-light .circuit-name {
     color: #fff;
 }
 
-.arduino-compile-log {
-    flex: 0 1 40%;
-    min-height: 80px;
-    max-height: 220px;
-    overflow: auto;
-    font-family: Consolas, monospace;
-    font-size: 11px;
-    padding: 8px;
-    background: #0a0a0a;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    white-space: pre-wrap;
-    margin: 0;
-}
 
 .modal {
     display: none !important;
@@ -529,6 +983,42 @@ body.theme-light .circuit-name {
     color: #80cbc4;
 }
 
+.bargraph-color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 16px;
+}
+
+.bargraph-color-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 2px solid #444;
+    border-radius: 6px;
+    background: #1e1e1e;
+    color: #ddd;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.bargraph-color-btn:hover {
+    border-color: #888;
+}
+
+.bargraph-color-btn.is-active {
+    border-color: #80cbc4;
+    box-shadow: 0 0 0 1px #80cbc4;
+}
+
+.bargraph-color-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 .close-modal {
     color: #aaa;
     float: right;
@@ -553,7 +1043,7 @@ body.theme-light .circuit-name {
     position: fixed;
     left: 120px;
     top: 70px;
-    z-index: 200;
+    z-index: 100010;
     background-color: var(--panel-bg);
     border: 2px solid var(--border-color);
     border-radius: 8px;
@@ -591,6 +1081,14 @@ body.theme-light .circuit-name {
     border-radius: 4px;
     max-width: min(640px, calc(100vw - 40px));
     height: auto;
+}
+
+#scope-popup-canvas {
+    cursor: grab;
+}
+
+#scope-popup-canvas:active {
+    cursor: grabbing;
 }
 
 .bode-popup-info {

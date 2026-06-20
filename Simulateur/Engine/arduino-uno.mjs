@@ -4,6 +4,8 @@
  * GPIO sortie : source DC ou PULSE selon le sketch interprété (pinModes / pinLevels / pinPulses).
  */
 
+import { appendI2cBusNetlist } from "./i2c-bus-ideal.mjs";
+
 function formatSpiceTime(seconds) {
     const s = Math.abs(Number(seconds));
     if (!Number.isFinite(s)) return "1n";
@@ -131,7 +133,7 @@ export function arduinoUnoGpioPinName(pinIndex) {
  * @param {string[]} lines
  * @param {(prefix: string, id: string) => string} spiceBranchName
  */
-export function appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName) {
+export function appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName, opts = {}) {
     const id = c.id;
     const n5 = nodeFor(`${id}#${UNO_PIN["5V"]}`);
     const n33 = nodeFor(`${id}#${UNO_PIN["3V3"]}`);
@@ -156,6 +158,7 @@ export function appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName) {
 
     for (const pinIdx of arduinoUnoGpioPinIndices()) {
         const pinName = arduinoUnoGpioPinName(pinIdx);
+        if (c.i2cBus?.active && (pinName === "A4" || pinName === "A5")) continue;
         const nPin = nodeFor(`${id}#${pinIdx}`);
         if (pinModes[pinName] === "OUTPUT") {
             const pulse = pinPulses[pinName];
@@ -184,5 +187,9 @@ export function appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName) {
         } else {
             lines.push(`${spiceBranchName("R", `${id}_${pinName}_z`)} ${nPin} 0 10Meg`);
         }
+    }
+
+    if (c.i2cBus?.active) {
+        appendI2cBusNetlist(c, nodeFor, lines, spiceBranchName, opts.i2cRepeatSec ?? 0.02);
     }
 }

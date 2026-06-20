@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { parseArduinoSketch } from "./arduino-sketch-parse.mjs";
+import {
+    parseArduinoSketch,
+    createArduinoRuntime,
+    stepArduinoRuntime,
+    arduinoRuntimeLevels,
+    sketchHasLoop,
+    getRuntimeSerialTx,
+} from "./arduino-sketch-parse.mjs";
 
 const blink = `
 void setup() {
@@ -73,5 +80,53 @@ assert.equal(toggle.pinPhases[0].levels.D13, 1);
 assert.equal(toggle.pinPhases[0].levels.D10, 1);
 assert.equal(toggle.pinPhases[1].levels.D13, 0);
 assert.equal(toggle.pinLevels.D13, undefined);
+
+assert.equal(sketchHasLoop(blink), true);
+assert.equal(sketchHasLoop("void setup() {}"), false);
+
+const counterSketch = `
+void setup() {
+  DDRD = 0xFF;
+}
+byte x = 0;
+void loop() {
+  PORTD = x;
+  x++;
+}
+`;
+const rtCounter = createArduinoRuntime({ sketch: counterSketch });
+stepArduinoRuntime(rtCounter, 16, {});
+stepArduinoRuntime(rtCounter, 16, {});
+assert.equal(arduinoRuntimeLevels(rtCounter).D0, 1);
+
+const rtBlink = createArduinoRuntime({ sketch: blink });
+stepArduinoRuntime(rtBlink, 600, {});
+assert.equal(arduinoRuntimeLevels(rtBlink).D13, 0);
+
+const serialSketch = `
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Hello");
+}
+void loop() {
+  Serial.print("T=");
+  Serial.println(42);
+  delay(1000);
+}
+`;
+const rtSerial = createArduinoRuntime({ sketch: serialSketch });
+assert.equal(getRuntimeSerialTx(rtSerial), "Hello\n");
+stepArduinoRuntime(rtSerial, 100, {});
+assert.ok(getRuntimeSerialTx(rtSerial).includes("T=42"));
+assert.equal(arduinoRuntimeLevels(rtSerial).D1, 1);
+
+const shiftParsed = parseArduinoSketch(`void setup(){ DDRD=0xFF; PORTD=1; } void loop(){ PORTD=PORTD<<1; delay(500); }`);
+assert.ok(shiftParsed.pinPhases?.length >= 2, "PORTD<<1 phases");
+assert.equal(shiftParsed.pinPhases[0].levels.D1, 1);
+
+const incParsed = parseArduinoSketch(`void setup(){ DDRD=0xFF; PORTD=0; } void loop(){ PORTD=PORTD+1; delay(500); }`);
+assert.ok(incParsed.pinPhases?.length >= 2, "PORTD+1 phases");
+assert.equal(incParsed.pinPhases[0].levels.D0, 1);
+assert.equal(incParsed.pinPhases[1].levels.D1, 1);
 
 console.log("arduino-sketch-parse.test.mjs OK");

@@ -44,15 +44,92 @@ import {
     UNO_LEFT_PIN_Y,
     UNO_RIGHT_PIN_Y,
     UNO_DIGITAL_PINS,
+    formatUnoPinLabel,
 } from './arduino-uno-layout.js';
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
 import { getArduinoPanelWidth } from './arduino-editor.js';
-import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedVoltmeterVoltage, getIdealSeg7Display, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { isGroveLcdWiredToUno } from './Engine/grove-lcd-ideal.mjs';
+import {
+    GROVE_LCD_CONN_L,
+    GROVE_LCD_BOX_L,
+    GROVE_LCD_BOX_R,
+    GROVE_LCD_BOX_T,
+    GROVE_LCD_BOX_B,
+    GROVE_LCD_JUNC_X,
+    GROVE_LCD_PIN_Y,
+    GROVE_LCD_HIT_DX,
+    GROVE_LCD_HIT_DY,
+    GROVE_LCD_PINS,
+    GROVE_LCD_COLS,
+    GROVE_LCD_ROWS,
+    GROVE_LCD_BEZEL,
+    GROVE_LCD_CONNECTOR_W,
+    GROVE_LCD_SCREEN_L,
+    GROVE_LCD_SCREEN_R,
+    GROVE_LCD_SCREEN_T,
+    GROVE_LCD_SCREEN_B,
+    GROVE_LCD_SEL_L,
+    GROVE_LCD_SEL_T,
+    GROVE_LCD_SEL_W,
+    GROVE_LCD_SEL_H,
+    GROVE_LCD_PIN_LABEL_X,
+    GROVE_LCD_STUB_LEN,
+} from './grove-lcd-layout.js';
+import {
+    GROVE_DHT22_CONN_L,
+    GROVE_DHT22_BOX_L,
+    GROVE_DHT22_BOX_R,
+    GROVE_DHT22_BOX_T,
+    GROVE_DHT22_BOX_B,
+    GROVE_DHT22_JUNC_X,
+    GROVE_DHT22_PIN_Y,
+    GROVE_DHT22_PINS,
+    GROVE_DHT22_CONNECTOR_W,
+    GROVE_DHT22_SENSOR_L,
+    GROVE_DHT22_SENSOR_R,
+    GROVE_DHT22_SENSOR_T,
+    GROVE_DHT22_SENSOR_B,
+    GROVE_DHT22_SEL_L,
+    GROVE_DHT22_SEL_T,
+    GROVE_DHT22_SEL_W,
+    GROVE_DHT22_SEL_H,
+    GROVE_DHT22_PIN_LABEL_X,
+} from './dht22-layout.js';
+import {
+    DC10H_SEG_COUNT,
+    DC10H_SEG_NAMES,
+    DC10H_PIN_Y,
+    DC10H_BOX_L,
+    DC10H_BOX_R,
+    DC10H_BOX_T,
+    DC10H_BOX_B,
+    DC10H_BAR_H,
+    DC10H_COM_X,
+    DC10H_COM_Y,
+    DC10H_JUNC_L,
+    DC10H_JUNC_R,
+    DC10H_SEL_L,
+    DC10H_SEL_T,
+    DC10H_SEL_W,
+    DC10H_SEL_H,
+    DC10H_COMP_LABEL_OFFSET,
+    DC10H_TYPE_LABEL_OFFSET,
+    DC10H_PIN_LABEL_OFFSET_X,
+    DC10H_COM_LABEL_OFFSET_X,
+    dc10hBarTopY,
+    dc10hComX,
+    dc10hPalette,
+} from './bargraph-dc10h-layout.js';
+import {
+    getHd44780Glyph,
+    HD44780_CHAR_W,
+    HD44780_CHAR_H,
+    HD44780_NATIVE_W,
+} from './hd44780-font.js';
+import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedBargraphSegments, getAnimatedVoltmeterVoltage, getIdealSeg7Display, getIdealBargraphDisplay, getAnimatedGroveLcdDisplay, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
 import { isSpeakerAudioPlaying } from './speaker-audio.js';
 import { COLORS } from './theme.js';
-import { formatAvrRegistersSummary } from './Engine/arduino-avr-registers.mjs';
-
 function hc90SimCount(comp) {
     if (!flags.isSimulating || !comp?.label) return null;
     const bcdAnim = getAnimatedHc90Bcd(comp.label);
@@ -87,6 +164,34 @@ function drawUprightText(angle, fn) {
     if (angle) ctx.rotate(-angle * Math.PI / 180);
     fn();
     ctx.restore();
+}
+
+/** Texte horizontal à un point (x,y) du repère composant déjà pivoté. */
+function drawUprightTextAt(angle, x, y, fn) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (angle) ctx.rotate(-angle * Math.PI / 180);
+    fn();
+    ctx.restore();
+}
+
+/** Décalage en repère composant (tourne avec le symbole), puis texte horizontal. */
+function drawUprightTextAtLocal(angle, x, y, localOffX, localOffY, fn) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.translate(localOffX, localOffY);
+    if (angle) ctx.rotate(-angle * Math.PI / 180);
+    fn();
+    ctx.restore();
+}
+
+function drawOutlinedText(text) {
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(8, 8, 12, 0.92)';
+    ctx.strokeText(text, 0, 0);
+    ctx.fillStyle = COLORS.ink;
+    ctx.fillText(text, 0, 0);
 }
 
 function formatDisplayValue(val) {
@@ -209,22 +314,16 @@ function seg7SetFrom(segments) {
 }
 
 function getSeg7LitSet(comp) {
-    if (flags.isSimulating) {
-        // En simulation : valeur animée (compteurs, phases) basée sur le temps écoulé.
-        const anim = getAnimatedSeg7Segments(comp.label);
-        if (anim?.segments) return seg7SetFrom(anim.segments);
-        const data = simulationResults.seg7?.[comp.label];
-        if (data?.segments) return seg7SetFrom(data.segments);
-        return new Set();
-    }
-    // Hors simulation : aperçu statique piloté par le sketch Arduino (valeur initiale).
+    if (!flags.isSimulating) return new Set();
+    const anim = getAnimatedSeg7Segments(comp.label);
+    if (anim?.segments) return seg7SetFrom(anim.segments);
+    const data = simulationResults.seg7?.[comp.label];
+    if (data?.segments) return seg7SetFrom(data.segments);
     const idealArduino = getIdealSeg7Display(comp.label);
     if (idealArduino?.segments && !idealArduino.blank) {
         return seg7SetFrom(idealArduino.segments);
     }
-    const data = simulationResults.seg7?.[comp.label];
-    if (!data?.segments) return new Set();
-    return seg7SetFrom(data.segments);
+    return new Set();
 }
 
 function drawSeg7Display(comp) {
@@ -307,6 +406,418 @@ function drawSeg7Display(comp) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText(comp.label, 26, boxT - 6);
+}
+
+function bargraphLitSetFrom(segments) {
+    return new Set(Object.entries(segments).filter(([, on]) => on).map(([k]) => k));
+}
+
+function getBargraphLitSet(comp) {
+    if (!flags.isSimulating) return new Set();
+    const anim = getAnimatedBargraphSegments(comp.label);
+    if (anim?.segments) return bargraphLitSetFrom(anim.segments);
+    const data = simulationResults.bargraph?.[comp.label];
+    const spiceSet = data?.segments ? bargraphLitSetFrom(data.segments) : new Set();
+    const ideal = getIdealBargraphDisplay(comp.label);
+    const idealSet = ideal?.segments ? bargraphLitSetFrom(ideal.segments) : new Set();
+    if (spiceSet.size > 0) return spiceSet;
+    if (idealSet.size > 0) return idealSet;
+    return spiceSet;
+}
+
+function drawBargraphLabel(text, x, y, opts = {}) {
+    const {
+        font = 'bold 8px Arial',
+        align = 'center',
+        baseline = 'middle',
+        outlined = false,
+        fill = COLORS.ink,
+    } = opts;
+    ctx.font = font;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    if (outlined) drawOutlinedTextAt(text, x, y, { font, align, baseline });
+    else {
+        ctx.fillStyle = fill;
+        ctx.fillText(text, x, y);
+    }
+}
+
+function drawBargraphDc10h(comp) {
+    const lit = getBargraphLitSet(comp);
+    const pal = dc10hPalette(comp.barColor || 'red');
+    const segColor = (name) => (lit.has(name) ? pal.lit : pal.dim);
+    const pinYs = DC10H_PIN_Y;
+    const names = DC10H_SEG_NAMES;
+    const pinColor = pal.pin;
+    const flip = !!comp.flipX;
+
+    const boxL = DC10H_BOX_L;
+    const boxR = DC10H_BOX_R;
+    const boxT = DC10H_BOX_T;
+    const boxB = DC10H_BOX_B;
+    const comY = DC10H_COM_Y;
+
+    const juncX = flip ? DC10H_JUNC_R : DC10H_JUNC_L;
+    const boxPinX = flip ? DC10H_BOX_R : DC10H_BOX_L;
+    const comX = dc10hComX(flip);
+
+    ctx.strokeStyle = pinColor;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < DC10H_SEG_COUNT; i++) {
+        ctx.beginPath();
+        ctx.moveTo(juncX, pinYs[i]);
+        ctx.lineTo(boxPinX, pinYs[i]);
+        ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(comX, boxB);
+    ctx.lineTo(comX, comY);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.componentStroke;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxL, boxT, boxR - boxL, boxB - boxT);
+
+    const barL = boxL + 6;
+    const barR = boxR - 6;
+    for (let i = 0; i < DC10H_SEG_COUNT; i++) {
+        const segName = names[i];
+        const y = dc10hBarTopY(i);
+        ctx.fillStyle = segColor(segName);
+        ctx.fillRect(barL, y, barR - barL, DC10H_BAR_H);
+        if (lit.has(segName)) {
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fillRect(barL, y, barR - barL, DC10H_BAR_H * 0.35);
+        }
+    }
+
+    const cx = (boxL + boxR) / 2;
+    const pinLabelX = juncX + (flip ? -DC10H_PIN_LABEL_OFFSET_X : DC10H_PIN_LABEL_OFFSET_X);
+    const comLabelX = comX + (flip ? -DC10H_COM_LABEL_OFFSET_X : DC10H_COM_LABEL_OFFSET_X);
+
+    for (let i = 0; i < DC10H_SEG_COUNT; i++) {
+        drawBargraphLabel(names[i], pinLabelX, pinYs[i], {
+            font: 'bold 8px Arial',
+            align: flip ? 'left' : 'right',
+            baseline: 'middle',
+            outlined: true,
+        });
+    }
+
+    drawBargraphLabel('COM', comLabelX, (boxB + comY) / 2, {
+        font: 'bold 8px Arial',
+        align: flip ? 'right' : 'left',
+        baseline: 'middle',
+        outlined: true,
+    });
+
+    drawBargraphLabel(comp.label, cx, boxT - DC10H_COMP_LABEL_OFFSET, {
+        font: '11px Arial',
+        align: 'center',
+        baseline: 'bottom',
+        outlined: true,
+    });
+
+    drawBargraphLabel('DC10H', cx, comY + DC10H_TYPE_LABEL_OFFSET, {
+        font: '9px Arial',
+        align: 'center',
+        baseline: 'top',
+        fill: '#aaa',
+    });
+}
+
+function drawOutlinedTextAt(text, x, y, { font, align, baseline }) {
+    ctx.font = font;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(8, 8, 12, 0.92)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = COLORS.ink;
+    ctx.fillText(text, x, y);
+}
+
+function getGroveLcdDisplayState(comp) {
+    if (!comp?.label) {
+        return { lines: ['', ''], backlight: false, wired: false, blank: true };
+    }
+    if (!flags.isSimulating) {
+        const wired = isGroveLcdWiredToUno(
+            comp.label,
+            circuit.components,
+            circuit.wires,
+            circuit.autoJunctions
+        );
+        return { lines: ['', ''], backlight: false, wired, blank: true, rgb: null };
+    }
+    return getAnimatedGroveLcdDisplay(comp.label);
+}
+
+/** Grille native HD44780 : 16×5 = 80 px/ligne, 2×8 = 16 px haut → 1280 points. */
+const LCD_NATIVE_H = HD44780_CHAR_H * GROVE_LCD_ROWS;
+/** Marge 1 px natif (haut, gauche, droite) pour ne pas toucher le cadre vert. */
+const LCD_MARGIN_L = 1;
+const LCD_MARGIN_T = 1;
+const LCD_MARGIN_R = 1;
+const LCD_FRAME_W = HD44780_NATIVE_W + LCD_MARGIN_L + LCD_MARGIN_R;
+const LCD_FRAME_H = LCD_NATIVE_H + LCD_MARGIN_T;
+
+function groveLcdTextColor(state, screenOn) {
+    if (!screenOn) return state.wired ? '#1a2a1a' : '#6a8a6a';
+    const rgb = state.rgb;
+    if (rgb && rgb.r != null) {
+        const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+        return lum > 0.45 ? '#111111' : '#e8e8e8';
+    }
+    return '#111111';
+}
+
+function groveLcdBacklightFill(state, screenOn) {
+    if (!screenOn) return '#1e2a1e';
+    const rgb = state.rgb;
+    if (rgb && rgb.r != null) {
+        return `rgb(${rgb.r | 0},${rgb.g | 0},${rgb.b | 0})`;
+    }
+    return '#c5d84a';
+}
+
+function drawGroveLcdCharGrid(scrL, scrT, scrW, scrH, lines, screenOn, state, flipX, fx) {
+    if (state.blank && state.wired) return;
+    const fg = groveLcdTextColor(state, screenOn);
+    const pxW = scrW / LCD_FRAME_W;
+    const pxH = scrH / LCD_FRAME_H;
+
+    ctx.save();
+    ctx.fillStyle = fg;
+    ctx.imageSmoothingEnabled = false;
+    for (let row = 0; row < GROVE_LCD_ROWS; row++) {
+        const line = String(lines[row] || '').padEnd(GROVE_LCD_COLS, ' ').slice(0, GROVE_LCD_COLS);
+        for (let col = 0; col < GROVE_LCD_COLS; col++) {
+            const glyph = getHd44780Glyph(line[col]);
+            const baseNx = col * HD44780_CHAR_W;
+            const baseNy = row * HD44780_CHAR_H;
+            for (let r = 0; r < HD44780_CHAR_H; r++) {
+                const bits = glyph[r] & 0x1f;
+                for (let c = 0; c < HD44780_CHAR_W; c++) {
+                    if ((bits >> (4 - c)) & 1) {
+                        const nx = baseNx + c;
+                        const ny = baseNy + r;
+                        const x = scrL + (LCD_MARGIN_L + nx) * pxW;
+                        const y = scrT + (LCD_MARGIN_T + ny) * pxH;
+                        const xa = fx(x);
+                        const xb = fx(x + pxW);
+                        ctx.fillRect(Math.min(xa, xb), y, Math.abs(pxW), pxH);
+                    }
+                }
+            }
+        }
+    }
+    ctx.restore();
+}
+
+function drawGroveLcd16x2(comp) {
+    const state = getGroveLcdDisplayState(comp);
+    const flip = comp.flipX ? -1 : 1;
+    const fx = (x) => flip * x;
+    const fillRectFx = (x, y, w, h) => {
+        const xa = fx(x);
+        const xb = fx(x + w);
+        ctx.fillRect(Math.min(xa, xb), y, Math.abs(w), h);
+    };
+    const strokeRectFx = (x, y, w, h) => {
+        const xa = fx(x);
+        const xb = fx(x + w);
+        ctx.strokeRect(Math.min(xa, xb), y, Math.abs(w), h);
+    };
+    const drawTextFx = (text, x, y) => {
+        ctx.save();
+        if (comp.flipX) {
+            ctx.translate(fx(x), y);
+            ctx.scale(-1, 1);
+            ctx.fillText(text, 0, 0);
+        } else {
+            ctx.fillText(text, x, y);
+        }
+        ctx.restore();
+    };
+
+    const boxL = GROVE_LCD_BOX_L;
+    const boxR = GROVE_LCD_BOX_R;
+    const boxT = GROVE_LCD_BOX_T;
+    const boxB = GROVE_LCD_BOX_B;
+    const connL = GROVE_LCD_CONN_L;
+
+    const scrL = GROVE_LCD_SCREEN_L;
+    const scrT = GROVE_LCD_SCREEN_T;
+    const scrW = GROVE_LCD_SCREEN_R - GROVE_LCD_SCREEN_L;
+    const scrH = GROVE_LCD_SCREEN_B - GROVE_LCD_SCREEN_T;
+
+    // Connecteur Grove (colonne gauche, 1 pas)
+    ctx.fillStyle = '#141414';
+    fillRectFx(connL, boxT, GROVE_LCD_CONNECTOR_W, boxB - boxT);
+
+    // Cadre noir
+    ctx.fillStyle = '#1c1c1c';
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 2;
+    fillRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+    strokeRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+
+    // Écran vert 16×2 (couleur rétroéclairage jaune-vert)
+    const screenOn = flags.isSimulating
+        && state.wired
+        && state.backlight !== false
+        && !state.blank;
+    ctx.fillStyle = groveLcdBacklightFill(state, screenOn);
+    fillRectFx(scrL, scrT, scrW, scrH);
+
+    const lines = state.lines || ['', ''];
+    drawGroveLcdCharGrid(scrL, scrT, scrW, scrH, lines, screenOn, state, comp.flipX, fx);
+
+    // Fils/pattes vers les jonctions
+    ctx.strokeStyle = COLORS.strokeMuted;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < GROVE_LCD_PINS.length; i++) {
+        const py = GROVE_LCD_PIN_Y[i];
+        ctx.beginPath();
+        ctx.moveTo(fx(GROVE_LCD_JUNC_X), py);
+        ctx.lineTo(fx(connL), py);
+        ctx.stroke();
+    }
+
+    const pinStep = GROVE_LCD_PIN_Y.length > 1
+        ? GROVE_LCD_PIN_Y[1] - GROVE_LCD_PIN_Y[0]
+        : 14;
+    const labelGap = 3;
+    const pinLabelFontSize = Math.min(9, Math.max(7, Math.floor(pinStep - labelGap - 2)));
+    const labelX = GROVE_LCD_PIN_LABEL_X;
+    ctx.font = `bold ${pinLabelFontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = COLORS.ink;
+    for (let i = 0; i < GROVE_LCD_PINS.length; i++) {
+        const py = GROVE_LCD_PIN_Y[i];
+        drawTextFx(GROVE_LCD_PINS[i], labelX, py - labelGap);
+    }
+
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    drawTextFx(comp.label, 0, boxB + 10);
+}
+
+function drawGroveDht22SensorGrid(sx, sy, sw, sh, fx) {
+    const cols = 6;
+    const rows = 3;
+    const gap = 2;
+    const cellW = (sw - gap * (cols - 1)) / cols;
+    const cellH = (sh - gap * (rows - 1)) / rows;
+    ctx.fillStyle = '#f4f4f0';
+    ctx.strokeStyle = '#c8c8c0';
+    ctx.lineWidth = 1;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = sx + c * (cellW + gap);
+            const y = sy + r * (cellH + gap);
+            const xa = fx(x);
+            const xb = fx(x + cellW);
+            ctx.fillRect(Math.min(xa, xb), y, Math.abs(cellW), cellH);
+            ctx.strokeRect(Math.min(xa, xb), y, Math.abs(cellW), cellH);
+            const hx = x + cellW * 0.22;
+            const hy = y + cellH * 0.22;
+            const hw = cellW * 0.56;
+            const hh = cellH * 0.56;
+            ctx.fillStyle = '#d8d8d0';
+            const hxa = fx(hx);
+            const hxb = fx(hx + hw);
+            ctx.fillRect(Math.min(hxa, hxb), hy, Math.abs(hw), hh);
+            ctx.fillStyle = '#f4f4f0';
+        }
+    }
+}
+
+function drawGroveDht22(comp) {
+    const flip = comp.flipX ? -1 : 1;
+    const fx = (x) => flip * x;
+    const fillRectFx = (x, y, w, h) => {
+        const xa = fx(x);
+        const xb = fx(x + w);
+        ctx.fillRect(Math.min(xa, xb), y, Math.abs(w), h);
+    };
+    const strokeRectFx = (x, y, w, h) => {
+        const xa = fx(x);
+        const xb = fx(x + w);
+        ctx.strokeRect(Math.min(xa, xb), y, Math.abs(w), h);
+    };
+    const drawTextFx = (text, x, y) => {
+        ctx.save();
+        if (comp.flipX) {
+            ctx.translate(fx(x), y);
+            ctx.scale(-1, 1);
+            ctx.fillText(text, 0, 0);
+        } else {
+            ctx.fillText(text, x, y);
+        }
+        ctx.restore();
+    };
+
+    const boxL = GROVE_DHT22_BOX_L;
+    const boxR = GROVE_DHT22_BOX_R;
+    const boxT = GROVE_DHT22_BOX_T;
+    const boxB = GROVE_DHT22_BOX_B;
+    const connL = GROVE_DHT22_CONN_L;
+
+    ctx.fillStyle = '#141414';
+    fillRectFx(connL, boxT, GROVE_DHT22_CONNECTOR_W, boxB - boxT);
+
+    ctx.fillStyle = '#1a3d7a';
+    ctx.strokeStyle = '#0f2448';
+    ctx.lineWidth = 2;
+    fillRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+    strokeRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+
+    const sx = GROVE_DHT22_SENSOR_L;
+    const sy = GROVE_DHT22_SENSOR_T;
+    const sw = GROVE_DHT22_SENSOR_R - GROVE_DHT22_SENSOR_L;
+    const sh = GROVE_DHT22_SENSOR_B - GROVE_DHT22_SENSOR_T;
+    drawGroveDht22SensorGrid(sx, sy, sw, sh, fx);
+
+    ctx.strokeStyle = COLORS.strokeMuted;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < GROVE_DHT22_PINS.length; i++) {
+        const py = GROVE_DHT22_PIN_Y[i];
+        ctx.beginPath();
+        ctx.moveTo(fx(GROVE_DHT22_JUNC_X), py);
+        ctx.lineTo(fx(connL), py);
+        ctx.stroke();
+    }
+
+    const pinStep = GROVE_DHT22_PIN_Y.length > 1
+        ? GROVE_DHT22_PIN_Y[1] - GROVE_DHT22_PIN_Y[0]
+        : 14;
+    const labelGap = 3;
+    const pinLabelFontSize = Math.min(8, Math.max(6, Math.floor(pinStep - labelGap - 2)));
+    ctx.font = `bold ${pinLabelFontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = COLORS.ink;
+    for (let i = 0; i < GROVE_DHT22_PINS.length; i++) {
+        const py = GROVE_DHT22_PIN_Y[i];
+        drawTextFx(GROVE_DHT22_PINS[i], GROVE_DHT22_PIN_LABEL_X, py - labelGap);
+    }
+
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    drawTextFx('DHT22', 0, boxT - 12);
+    drawTextFx(comp.label, 0, boxB + 8);
 }
 
 function drawLogicGateSymbol(gateType) {
@@ -469,7 +980,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     ctx.save(); ctx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     ctx.rotate(rot * Math.PI / 180);
 
@@ -486,6 +997,21 @@ function drawComponentBody(comp) {
         else if (comp.type === 'npn') ctx.strokeRect(-42, -42, 64, 84);
         else if (comp.type === 'opamp') ctx.strokeRect(-44, -40, 88, 80);
         else if (comp.type === 'seg7') ctx.strokeRect(-52, -86, 124, 200);
+        else if (comp.type === 'bargraph_dc10h') {
+            ctx.strokeRect(DC10H_SEL_L, DC10H_SEL_T, DC10H_SEL_W, DC10H_SEL_H);
+        }
+        else if (comp.type === 'grove_lcd16x2') {
+            const flip = comp.flipX ? -1 : 1;
+            const fx = (x) => flip * x;
+            const selL = Math.min(fx(GROVE_LCD_SEL_L), fx(GROVE_LCD_SEL_L + GROVE_LCD_SEL_W));
+            ctx.strokeRect(selL, GROVE_LCD_SEL_T, GROVE_LCD_SEL_W, GROVE_LCD_SEL_H);
+        }
+        else if (comp.type === 'grove_dht22') {
+            const flip = comp.flipX ? -1 : 1;
+            const fx = (x) => flip * x;
+            const selL = Math.min(fx(GROVE_DHT22_SEL_L), fx(GROVE_DHT22_SEL_L + GROVE_DHT22_SEL_W));
+            ctx.strokeRect(selL, GROVE_DHT22_SEL_T, GROVE_DHT22_SEL_W, GROVE_DHT22_SEL_H);
+        }
         else if (comp.type === 'logic_terminal') ctx.strokeRect(-14, -10, 24, 20);
         else if (comp.type !== 'logic_terminal') ctx.strokeRect(-45, -25, 90, 50);
     }
@@ -850,26 +1376,18 @@ function drawComponentBody(comp) {
         ctx.strokeStyle = '#004d40';
         ctx.stroke();
         ctx.fillStyle = '#ffffff';
-        ctx.font = '7px Arial';
+        ctx.font = '6px Arial';
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
-        UNO_LEFT_PINS.forEach((t, i) => ctx.fillText(t, UNO_LABEL_L, UNO_LEFT_PIN_Y[i]));
+        UNO_LEFT_PINS.forEach((t, i) => ctx.fillText(formatUnoPinLabel(t), UNO_LABEL_L, UNO_LEFT_PIN_Y[i]));
         ctx.textAlign = 'right';
-        UNO_RIGHT_PINS.forEach((t, i) => ctx.fillText(t, UNO_LABEL_R, UNO_RIGHT_PIN_Y[i]));
+        UNO_RIGHT_PINS.forEach((t, i) => ctx.fillText(formatUnoPinLabel(t), UNO_LABEL_R, UNO_RIGHT_PIN_Y[i]));
         ctx.font = 'bold 10px Arial';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ffffff';
         ctx.fillText('UNO', 0, 0);
         ctx.font = '8px Arial';
         ctx.fillText('ATmega328P', 0, 12);
-        if (flags.isSimulating && comp.avrRegisters) {
-            const regText = formatAvrRegistersSummary(comp.avrRegisters);
-            ctx.font = '5px monospace';
-            ctx.fillStyle = '#b2ebf2';
-            ctx.textAlign = 'center';
-            ctx.fillText(regText.slice(0, 48), 0, 22);
-            if (regText.length > 48) ctx.fillText(regText.slice(48), 0, 29);
-        }
         if (flags.isSimulating && comp.label) {
             UNO_DIGITAL_PINS.forEach((pinName) => {
                 const lv = simulationResults.logicValues?.[`${comp.label}_${pinName}`]
@@ -902,6 +1420,15 @@ function drawComponentBody(comp) {
     }
     else if (comp.type === 'seg7') {
         drawSeg7Display(comp);
+    }
+    else if (comp.type === 'bargraph_dc10h') {
+        drawBargraphDc10h(comp);
+    }
+    else if (comp.type === 'grove_lcd16x2') {
+        drawGroveLcd16x2(comp);
+    }
+    else if (comp.type === 'grove_dht22') {
+        drawGroveDht22(comp);
     }
     else if (comp.type === 'led') {
         const ledCurrent = getLedCurrentAmps(comp);
@@ -1133,15 +1660,31 @@ function drawGrid() {
 export function draw() {
     ctx.fillStyle = COLORS.canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.save(); ctx.translate(pan.x, pan.y); ctx.scale(scale.value, scale.value);
-    drawGrid(); drawWires(); circuit.components.forEach(comp => drawComponentBody(comp)); 
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(scale.value, scale.value);
+    drawGrid();
+    drawWires();
+    circuit.components.forEach(comp => drawComponentBody(comp));
     if (flags.isSelectingZone) {
         ctx.save(); ctx.strokeStyle = 'rgba(0, 188, 212, 0.7)'; ctx.fillStyle = 'rgba(0, 188, 212, 0.15)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
         ctx.fillRect(zone.start.x, zone.start.y, zone.end.x - zone.start.x, zone.end.y - zone.start.y);
         ctx.strokeRect(zone.start.x, zone.start.y, zone.end.x - zone.start.x, zone.end.y - zone.start.y); ctx.restore();
     }
     if (flags.isDraggingFromMenu && menuDrag.draggedComponentType) {
-        ctx.globalAlpha = 0.5; drawComponentBody({ type: menuDrag.draggedComponentType, x: snapToGrid(menuDrag.x), y: snapToGrid(menuDrag.y), label: "", rotation: 0, state: 0 }); ctx.globalAlpha = 1.0;
+        ctx.globalAlpha = 0.5;
+        const preview = {
+            type: menuDrag.draggedComponentType,
+            x: snapToGrid(menuDrag.x),
+            y: snapToGrid(menuDrag.y),
+            label: '',
+            rotation: 0,
+            state: 0,
+            flipX: false,
+        };
+        if (preview.type === 'grove_lcd16x2') preview.i2cAddress = 0x3e;
+        drawComponentBody(preview);
+        ctx.globalAlpha = 1.0;
     }
     ctx.restore();
 }

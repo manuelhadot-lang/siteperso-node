@@ -75,6 +75,7 @@ import {
     isArduinoUnoType,
 } from "./arduino-uno.mjs";
 import { arduinoUnoMinPulsePeriodSec, applyArduinoSketchToComponent } from "./arduino-sketch-parse.mjs";
+import { annotateUnoI2cBusEngine, i2cBusMinPeriodSec } from "./i2c-bus-ideal.mjs";
 import {
     detectHc90Mod60FromGraphicalState,
     detectHc90MrAndQ1Q3OnSameChip,
@@ -190,9 +191,27 @@ function isSeg7Type(t) {
     return t === "seg7";
 }
 
+function isBargraphDc10hType(t) {
+    return t === "bargraph_dc10h";
+}
+
+function isGroveLcdType(t) {
+    return t === "grove_lcd16x2";
+}
+
+function isGroveDht22Type(t) {
+    return t === "grove_dht22";
+}
+
 function seg7TerminalKeys(c) {
     const keys = [];
     for (let i = 0; i < 8; i++) keys.push(`${c.id}#${i}`);
+    return keys;
+}
+
+function bargraphTerminalKeys(c) {
+    const keys = [];
+    for (let i = 0; i < 11; i++) keys.push(`${c.id}#${i}`);
     return keys;
 }
 
@@ -200,6 +219,9 @@ function seg7TerminalKeys(c) {
 function terminalKeysForComponent(c) {
     if (!c || !c.id) return [];
     if (isSeg7Type(c.type)) return seg7TerminalKeys(c);
+    if (isBargraphDc10hType(c.type)) return bargraphTerminalKeys(c);
+    if (isGroveLcdType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
+    if (isGroveDht22Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isOscilloscopeType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
     if (isThreeTerminalType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
     if (isLogicGateComponentType(c.type)) {
@@ -916,6 +938,8 @@ function computeTranTiming(components, deckOpts = {}) {
     }
     const arduinoPeriod = arduinoUnoMinPulsePeriodSec(components);
     if (arduinoPeriod > 0) minPeriod = Math.min(minPeriod, arduinoPeriod);
+    const i2cPeriod = i2cBusMinPeriodSec(components);
+    if (i2cPeriod > 0) minPeriod = Math.min(minPeriod, i2cPeriod);
     if (!Number.isFinite(minPeriod) || minPeriod <= 0) minPeriod = 1;
 
     const lcHz = estimateParallelLcResonantHz(components);
@@ -1073,7 +1097,10 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const wires = Array.isArray(state.wires) ? state.wires : [];
 
     for (const c of components) {
-        if (isArduinoUnoType(c.type)) applyArduinoSketchToComponent(c);
+        if (isArduinoUnoType(c.type)) {
+            applyArduinoSketchToComponent(c);
+            annotateUnoI2cBusEngine(c, components, wires);
+        }
     }
 
     const parent = new Map();
@@ -1329,6 +1356,12 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     let oscillatorCapKickDone = false;
     let oscillatorTankNode = null;
+    let i2cRepeatSec = 0.02;
+    for (const c of components) {
+        if (c.type === "oscilloscope" && Number(c.timeDivSec) > 0) {
+            i2cRepeatSec = Math.max(i2cRepeatSec, c.timeDivSec * TRAN_SCOPE_H_DIVS);
+        }
+    }
     for (const c of components) {
         if (c.type === "resistor") {
             const n0 = nodeFor(`${c.id}#0`);
@@ -1437,6 +1470,21 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 lines.push(`${spiceBranchName("VIL", `${c.id}_s${i}`)} ${nSeg} ${mid} 0`);
                 lines.push(`${spiceBranchName("D", `${c.id}_s${i}`)} ${mid} ${nCom} DLED`);
             }
+        } else if (c.type === "bargraph_dc10h") {
+            const nCom = nodeFor(`${c.id}#10`);
+            if (!declaredDiodeModels.has("DLED")) {
+                declaredDiodeModels.add("DLED");
+                lines.push(
+                    `.model DLED D (IS=1.05E-15 N=1.8 RS=15 BV=50 IBV=10u CJO=10p)`
+                );
+            }
+            for (let i = 0; i < 10; i++) {
+                const nSeg = nodeFor(`${c.id}#${i}`);
+                touch(`${c.id}#__seg${i}`);
+                const mid = nodeFor(`${c.id}#__seg${i}`);
+                lines.push(`${spiceBranchName("VIL", `${c.id}_bg${i}`)} ${nSeg} ${mid} 0`);
+                lines.push(`${spiceBranchName("D", `${c.id}_bg${i}`)} ${mid} ${nCom} DLED`);
+            }
         } else if (c.type === "npn") {
             const nb = nodeFor(`${c.id}#0`);
             const nc = nodeFor(`${c.id}#1`);
@@ -1521,7 +1569,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const vhi = resolveIc74hc90Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, deckOpts);
         } else if (isArduinoUnoType(c.type)) {
-            appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName);
+            appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isLogicCd4511Type(c.type)) {
             const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
@@ -1796,9 +1844,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             ((c.pinPulses && Object.keys(c.pinPulses).length > 0) ||
                 (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2))
     );
+    const hasI2cBus = components.some((c) => isArduinoUnoType(c.type) && c.i2cBus?.active);
     let useTran =
         hasPulseSource ||
         hasArduinoPulse ||
+        hasI2cBus ||
         hasLogicGates ||
         hasAutonomousLcOscillator ||
         (acSources.length > 0 &&
@@ -1850,6 +1900,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const scopesTranMeta = [];
     const ledsTranMeta = [];
     const seg7TranMeta = [];
+    const bargraphTranMeta = [];
     const logicGatesTranMeta = [];
     const metersTranMeta = { voltmetersRms: [], ammetersRms: [], voltmeters: [], ammeters: [], ohmmeters: [], speakers: [] };
     let analysisTran = false;
@@ -2243,6 +2294,25 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             });
         }
         seg7TranMeta.push(...seg7TranMetaLocal);
+        const bargraphTranMetaLocal = [];
+        for (const c of components) {
+            if (c.type !== "bargraph_dc10h") continue;
+            const segWr = [];
+            for (let i = 0; i < 10; i++) {
+                const n = nodeFor(`${c.id}#${i}`);
+                addWrNode(n);
+                segWr.push(nodeCol.get(n));
+            }
+            const nCom = nodeFor(`${c.id}#10`);
+            addWrNode(nCom);
+            bargraphTranMetaLocal.push({
+                id: c.id,
+                timeCol: 0,
+                segmentWrIndex: segWr,
+                commonWrIndex: nodeCol.get(nCom),
+            });
+        }
+        bargraphTranMeta.push(...bargraphTranMetaLocal);
         const finalWrVarCount = wrVars.length;
         for (const m of ledsTranMeta) {
             m.wrVarCount = finalWrVarCount;
@@ -2261,6 +2331,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             m.wrVarCount = finalWrVarCount;
         }
         for (const m of seg7TranMeta) {
+            m.wrVarCount = finalWrVarCount;
+        }
+        for (const m of bargraphTranMeta) {
             m.wrVarCount = finalWrVarCount;
         }
         for (const vm of metersTranMeta.voltmetersRms) {
@@ -2379,6 +2452,18 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const nCom = nodeFor(`${c.id}#7`);
             if (nCom !== "0") nodes.add(nCom);
             lines.push(`echo @@S7:${c.id}@@`);
+            for (const n of nodes) lines.push(`print v(${n})`);
+        }
+        for (const c of components) {
+            if (c.type !== "bargraph_dc10h") continue;
+            const nodes = new Set();
+            for (let i = 0; i < 10; i++) {
+                const n = nodeFor(`${c.id}#${i}`);
+                if (n !== "0") nodes.add(n);
+            }
+            const nCom = nodeFor(`${c.id}#10`);
+            if (nCom !== "0") nodes.add(nCom);
+            lines.push(`echo @@BG:${c.id}@@`);
             for (const n of nodes) lines.push(`print v(${n})`);
         }
         if (oscilloscopes.length > 0 && acSources.length === 0) {
@@ -2543,11 +2628,29 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const labels = { lamp: "Lampe", lcd: "LCD" };
             warnings.push(`${labels[c.type] || c.type} ${c.id} : non simulé pour l'instant.`);
         }
+        if (c.type === "grove_lcd16x2") {
+            warnings.push(
+                `${c.id} (Grove LCD I²C) : protocole PCF8574/HD44780 simulé sur SDA/SCL (100 kHz). Scope : CH1=SDA, CH2=SCL, GND commun, 20–50 µs/div.`
+            );
+        }
+        if (c.type === "grove_dht22") {
+            warnings.push(
+                `${c.id} (Grove DHT22) : lecture T°/humidité simulée via bibliothèque DHT.h sur broche DATA (câbler DATA→Dx, VCC→5V, GND).`
+            );
+        }
         if (c.type === "seg7") {
             const comKey = `${c.id}#7`;
             if ((terminalWireCount.get(comKey) || 0) === 0) {
                 warnings.push(
                     `7 Segments ${c.id} : reliez la cathode commune (broche C, bas) à la masse.`
+                );
+            }
+        }
+        if (c.type === "bargraph_dc10h") {
+            const comKey = `${c.id}#10`;
+            if ((terminalWireCount.get(comKey) || 0) === 0) {
+                warnings.push(
+                    `Bargraph ${c.id} : reliez la cathode commune (COM) à la masse.`
                 );
             }
         }
@@ -2734,6 +2837,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         logicGatesTranMeta,
         metersTranMeta,
         seg7TranMeta,
+        bargraphTranMeta,
         analysisTran,
         analysisAc,
         bodeAnalyzers,
@@ -2744,6 +2848,13 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 id: c.id,
                 segmentNodes: [0, 1, 2, 3, 4, 5, 6].map(i => nodeFor(`${c.id}#${i}`)),
                 commonNode: nodeFor(`${c.id}#7`),
+            })),
+        bargraphDisplays: components
+            .filter(c => c.type === "bargraph_dc10h")
+            .map(c => ({
+                id: c.id,
+                segmentNodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => nodeFor(`${c.id}#${i}`)),
+                commonNode: nodeFor(`${c.id}#10`),
             })),
     };
 }

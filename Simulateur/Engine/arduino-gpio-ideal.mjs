@@ -196,3 +196,25 @@ export function getIdealSeg7FromArduino(segLabel, components, wires, tSec = 0, a
     if (bcd > 9) return { segments: { ...SEG7_OFF }, bcd, blank: true };
     return { segments: bcdDigitToSeg7Segments(bcd), bcd };
 }
+
+const BARGRAPH_LIT_DELTA_V = 0.35;
+
+/** Bargraph DC10H câblé directement sur des sorties GPIO Arduino (s1…s10, COM→GND). */
+export function getIdealBargraphFromArduino(barLabel, components, wires, tSec = 0, autoJunctions = []) {
+    if (!barLabel) return null;
+    const vCom = traceJonctionToIdealVolts(`${barLabel}_COM`, components, wires, tSec, autoJunctions);
+    const vc = vCom != null ? vCom : 0;
+    const segments = {};
+    let anyDrive = false;
+    for (let i = 1; i <= 10; i++) {
+        const name = `s${i}`;
+        const v = traceJonctionToIdealVolts(`${barLabel}_${name}`, components, wires, tSec, autoJunctions);
+        if (v == null) {
+            segments[name] = false;
+            continue;
+        }
+        anyDrive = true;
+        segments[name] = v - vc >= BARGRAPH_LIT_DELTA_V;
+    }
+    return anyDrive ? { segments } : null;
+}

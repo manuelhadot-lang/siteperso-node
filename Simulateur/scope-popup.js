@@ -1,9 +1,11 @@
 // scope-popup.js — fenêtre oscilloscope flottante (CH1 + CH2 superposées)
 import { flags } from './state.js';
-import { getScopeTraceWindow, SCOPE_H_DIVS, SCOPE_V_DIVS } from './scope-animation.js';
+import { getScopeTraceWindow, drawScopeTrace, SCOPE_H_DIVS, SCOPE_V_DIVS } from './scope-animation.js';
+import { draw } from './renderer.js';
 
 let popupComp = null;
 let onCloseCallback = () => {};
+let onViewChanged = () => {};
 let popupCanvas = null;
 let popupCtx = null;
 
@@ -12,6 +14,11 @@ let floatY = 70;
 let dragging = false;
 let dragOffX = 0;
 let dragOffY = 0;
+let panning = false;
+let panStartX = 0;
+let panStartPosDiv = 0;
+
+const TIME_DIV_STEPS = [0.00001, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05, 0.1];
 
 const popupEl = () => document.getElementById('scope-popup');
 const titleEl = () => document.getElementById('scope-popup-title');
@@ -20,34 +27,15 @@ export function setScopePopupCloseCallback(fn) {
     onCloseCallback = typeof fn === 'function' ? fn : () => {};
 }
 
+export function setScopeViewChangeCallback(fn) {
+    onViewChanged = typeof fn === 'function' ? fn : () => {};
+}
+
 function applyFloatPosition() {
     const el = popupEl();
     if (!el) return;
     el.style.left = `${floatX}px`;
     el.style.top = `${floatY}px`;
-}
-
-function drawTraceOnCtx(ctx, points, windowSec, vdiv, posDiv, x0, y0, w, h, color) {
-    if (!points?.length || windowSec <= 0 || vdiv <= 0) return;
-    const pxPerDivY = h / SCOPE_V_DIVS;
-    const midY = y0 + h / 2;
-    const pos = Number.isFinite(posDiv) ? posDiv : 0;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x0, y0, w, h);
-    ctx.clip();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    let started = false;
-    for (const pt of points) {
-        const x = x0 + (pt.t / windowSec) * w;
-        const y = midY - ((pt.v / vdiv) + pos) * pxPerDivY;
-        if (!started) { ctx.moveTo(x, y); started = true; }
-        else ctx.lineTo(x, y);
-    }
-    if (started) ctx.stroke();
-    ctx.restore();
 }
 
 export function isScopePopupOpen() {
@@ -96,15 +84,21 @@ export function renderScopePopup() {
     if (flags.isSimulating) {
         const win = getScopeTraceWindow(popupComp);
         if (win && (win.ch1.length || win.ch2.length)) {
-            drawTraceOnCtx(popupCtx, win.ch1, win.windowSec, win.ch1Vdiv, win.ch1PosDiv, x0, y0, plotW, plotH, '#ffeb3b');
-            drawTraceOnCtx(popupCtx, win.ch2, win.windowSec, win.ch2Vdiv, win.ch2PosDiv, x0, y0, plotW, plotH, '#00e5ff');
+            drawScopeTrace(popupCtx, win.ch1, win.windowSec, win.ch1Vdiv, win.ch1PosDiv, x0, y0, plotW, plotH, '#ffeb3b', { digital: win.ch1Digital });
+            drawScopeTrace(popupCtx, win.ch2, win.windowSec, win.ch2Vdiv, win.ch2PosDiv, x0, y0, plotW, plotH, '#00e5ff', { digital: win.ch2Digital });
             popupCtx.fillStyle = '#8899aa';
             popupCtx.font = '11px Arial';
             popupCtx.textAlign = 'right';
             const td = win.timeDiv >= 0.001
                 ? `${(win.timeDiv * 1000).toFixed(win.timeDiv >= 0.01 ? 1 : 2)} ms/div`
                 : `${(win.timeDiv * 1e6).toFixed(0)} µs/div`;
-            popupCtx.fillText(`${td}  |  CH1: ${win.ch1Vdiv} V/div  |  CH2: ${win.ch2Vdiv} V/div`, w - margin.r, h - 10);
+            const tpos = Number.isFinite(popupComp?.timePositionDiv) ? popupComp.timePositionDiv : 0;
+            const tposStr = `${tpos >= 0 ? '+' : ''}${tpos.toFixed(1)} div`;
+            popupCtx.fillText(
+                `${td}  |  pos ${tposStr}  |  CH1: ${win.ch1Vdiv} V/div  |  CH2: ${win.ch2Vdiv} V/div`,
+                w - margin.r,
+                h - 10
+            );
         } else {
             popupCtx.fillStyle = '#556677';
             popupCtx.font = '14px Arial';
@@ -158,6 +152,14 @@ function clampFloatPosition() {
     floatY = Math.max(48, Math.min(window.innerHeight - h - 4, floatY));
 }
 
+function stepTimeDiv(cur, zoomIn) {
+    const idx = TIME_DIV_STEPS.findIndex((v) => Math.abs(v - cur) < cur * 0.01);
+    const base = idx >= 0 ? idx : TIME_DIV_STEPS.findIndex((v) => v >= cur);
+    const i = base < 0 ? 0 : base;
+    if (zoomIn) return TIME_DIV_STEPS[Math.max(0, i - 1)];
+    return TIME_DIV_STEPS[Math.min(TIME_DIV_STEPS.length - 1, i + 1)];
+}
+
 export function initScopePopup() {
     document.getElementById('scope-popup-close')?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -177,7 +179,34 @@ export function initScopePopup() {
         e.preventDefault();
     });
 
+    popupCanvas = document.getElementById('scope-popup-canvas');
+    popupCanvas?.addEventListener('wheel', (e) => {
+        if (!popupComp) return;
+        e.preventDefault();
+        const next = stepTimeDiv(popupComp.timeDivSec ?? 0.001, e.deltaY < 0);
+        popupComp.timeDivSec = next;
+        onViewChanged(popupComp);
+        renderScopePopup();
+    }, { passive: false });
+
+    popupCanvas?.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || !popupComp) return;
+        panning = true;
+        panStartX = e.clientX;
+        panStartPosDiv = popupComp.timePositionDiv ?? 0;
+        e.preventDefault();
+    });
+
     window.addEventListener('mousemove', (e) => {
+        if (panning && popupComp && popupCanvas) {
+            const plotW = popupCanvas.width - 64;
+            const timeDiv = popupComp.timeDivSec > 0 ? popupComp.timeDivSec : 1e-3;
+            const pxPerDiv = plotW / SCOPE_H_DIVS;
+            const deltaDiv = (e.clientX - panStartX) / pxPerDiv;
+            popupComp.timePositionDiv = Math.max(-4, Math.min(4, panStartPosDiv + deltaDiv));
+            renderScopePopup();
+            return;
+        }
         if (!dragging) return;
         floatX = e.clientX - dragOffX;
         floatY = e.clientY - dragOffY;
@@ -186,6 +215,11 @@ export function initScopePopup() {
     });
 
     window.addEventListener('mouseup', () => {
+        if (panning) {
+            panning = false;
+            onViewChanged(popupComp);
+            draw();
+        }
         dragging = false;
     });
 
