@@ -857,7 +857,7 @@ function interpretRegisterPhases(src) {
     if (!/\bdelay\s*\(/i.test(loopBody)) return null;
     // Réservé aux écritures registre PORTx dans loop() (compteurs, séquences).
     // Les clignotements digitalWrite restent gérés par la logique dédiée.
-    if (!/\bPORT[BCD]\s*(?:\|=|&=|\^=|\+=|-=|<<=|>>=|=)/.test(loopBody)) return null;
+    if (!/\bPORT[BCD]\s*(?:\|=|&=|\^=|\+=|-=|\*=|\/=|%=|<<=|>>=|=)/.test(loopBody)) return null;
 
     const init = collectInitialVars(src);
     const state = { vars: init.vars, floatVars: init.floatVars, regs: {}, pins: {} };
@@ -1138,8 +1138,9 @@ export function parseArduinoSketch(sketch) {
 
     // L'interpréteur résout les variables/expressions (PORTD = x, PORTD = x << 1…)
     // que l'analyse statique ne peut pas évaluer. On écrase les registres touchés.
+    // Ne pas écraser les registres si des phases temporelles existent (sinon bargraph figé).
     const execState = interpretRegisterState(src);
-    if (execState) {
+    if (execState && pinPhases.length < 2) {
         for (const reg of execState.assigned) {
             avrRegisters[reg] = (execState.regs[reg] || 0) & 0xff;
         }

@@ -121,11 +121,13 @@ async function invokeBuildNgspiceDeck(buildFn, state, opts) {
 
 /** Délai exec ngspice : circuits 74HC90 / CD4511 (.tran jusqu'à ~120 s simulées). */
 function ngspiceExecTimeoutMs(netlistText) {
-    const m = String(netlistText || "").match(/\.tran\s+\S+\s+(\S+)/i);
+    const text = String(netlistText || "");
+    if (!/\.tran\b/i.test(text)) return 30000;
+    const m = text.match(/\.tran\s+\S+\s+(\S+)/i);
     if (!m) return 90000;
     const tstop = parseFloat(m[1]);
     if (!Number.isFinite(tstop) || tstop <= 0) return 90000;
-    return Math.min(180000, Math.max(60000, Math.round(tstop * 8000 + 45000)));
+    return Math.min(180000, Math.max(15000, Math.round(tstop * 3000 + 10000)));
 }
 
 function runNgspice(netlistPath, outputPath, opts = {}) {

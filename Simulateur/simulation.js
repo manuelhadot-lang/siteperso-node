@@ -29,7 +29,12 @@ export function requestLiveSimulation() {
 }
 
 import { prepareArduinoForSimulation } from './arduino-editor.js';
-import { arduinoUnoMinPulsePeriodSec, applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
+import {
+    arduinoUnoMinPulsePeriodSec,
+    applyArduinoSketchToComponent,
+    arduinoGpioIsTimeVarying,
+    sketchHasLoop,
+} from './Engine/arduino-sketch-parse.mjs';
 import { arduinoUartScopePeriodSec } from './Engine/arduino-uart-wave.mjs';
 import { annotateUnoI2cBusEngine } from './Engine/i2c-bus-ideal.mjs';
 
@@ -354,6 +359,21 @@ function showSimulationWarnings(warnings, isSilentUpdate) {
     if (critical) alert(`Avertissement simulation :\n${text}`);
 }
 
+/** Démarre l'animation GPIO avant la fin du calcul SPICE (bargraph / LED Arduino). */
+function shouldStartArduinoLiveDisplayEarly() {
+    let hasUno = false;
+    for (const comp of circuit.components) {
+        if (comp.type !== 'arduino_uno') continue;
+        hasUno = true;
+        applyArduinoSketchToComponent(comp);
+        if (sketchHasLoop(comp.sketch || '') || arduinoGpioIsTimeVarying(comp)) return true;
+    }
+    if (!hasUno) return false;
+    return circuit.components.some((c) =>
+        c.type === 'bargraph_dc10h' || c.type === 'seg7' || c.type === 'grove_lcd16x2'
+    );
+}
+
 export async function triggerSimulation(isSilentUpdate = false) {
     if (simulationInFlight) {
         if (isSilentUpdate) simulationQueuedSilent = true;
@@ -378,6 +398,13 @@ export async function triggerSimulation(isSilentUpdate = false) {
     const btnSim = document.getElementById('btn-simulate');
     const btnStop = document.getElementById('btn-stop');
     if (btnSim && !isSilentUpdate) { btnSim.innerText = "⚡ Calculs SPICE..."; btnSim.style.background = "#ff9800"; }
+    if (!isSilentUpdate && shouldStartArduinoLiveDisplayEarly()) {
+        flags.isSimulating = true;
+        resetArduinoRuntimes();
+        ensureArduinoLedAnimation();
+        if (btnStop) btnStop.classList.remove('disabled');
+        draw();
+    }
     try {
         const response = await fetch(`${baseUrl}/api/simulate`, {
             method: 'POST',

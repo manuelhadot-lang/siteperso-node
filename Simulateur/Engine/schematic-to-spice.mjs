@@ -74,7 +74,11 @@ import {
     arduinoUnoTerminalKeys,
     isArduinoUnoType,
 } from "./arduino-uno.mjs";
-import { arduinoUnoMinPulsePeriodSec, applyArduinoSketchToComponent } from "./arduino-sketch-parse.mjs";
+import {
+    arduinoUnoMinPulsePeriodSec,
+    applyArduinoSketchToComponent,
+    arduinoGpioIsTimeVarying,
+} from "./arduino-sketch-parse.mjs";
 import { annotateUnoI2cBusEngine, i2cBusMinPeriodSec } from "./i2c-bus-ideal.mjs";
 import {
     detectHc90Mod60FromGraphicalState,
@@ -1100,6 +1104,41 @@ function pointOnWireSegment(p, a, b) {
 }
 
 /**
+ * UNO + bargraph / LED / 7 segments : l'animation GPIO est gérée côté client ;
+ * inutile de lancer un .tran ngspice (lent sur Render).
+ */
+function isArduinoIdealOnlyCircuit(components) {
+    const arduinos = components.filter((c) => isArduinoUnoType(c.type));
+    if (!arduinos.length) return false;
+    if (!arduinos.some((c) => arduinoGpioIsTimeVarying(c))) return false;
+    for (const c of components) {
+        if (isArduinoUnoType(c.type)) continue;
+        if (
+            c.type === "bargraph_dc10h" ||
+            c.type === "seg7" ||
+            c.type === "led" ||
+            c.type === "grove_lcd16x2" ||
+            c.type === "grove_dht22" ||
+            c.type === "ground" ||
+            c.type === "gnd" ||
+            c.type === "push_button" ||
+            c.type === "switch_spdt" ||
+            c.type === "voltmeter" ||
+            c.type === "ammeter" ||
+            c.type === "resistor" ||
+            c.type === "capacitor" ||
+            c.type === "inductor" ||
+            c.type === "diode" ||
+            c.type === "potentiometer"
+        ) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+/**
  * @param {{ components: any[]; wires: any[] }} state
  * @param {{ gridStep?: number }} [opts]
  */
@@ -1870,6 +1909,12 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 ammetersRms.length > 0 ||
                 hasLeds ||
                 hasSpeakers));
+    if (isArduinoIdealOnlyCircuit(components)) {
+        useTran = false;
+        warnings.push(
+            "Arduino (GPIO animés) : pas de transitoire SPICE — bargraph / LED / 7 segments animés en temps réel (plus rapide)."
+        );
+    }
     if (hasSpeakers && acSources.length === 0) {
         warnings.push(
             "Haut-parleur : ajoutez un générateur sinus ou carré pour activer la restitution sonore."

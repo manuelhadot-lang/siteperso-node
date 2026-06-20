@@ -67,4 +67,31 @@ assert.ok(p2.pinPhases?.length >= 2, "while simple: phases delay");
 assert.equal(p2.pinPhases[0].levels.D8, 1, "phase0 D8 (PORTB=1)");
 assert.equal(p2.pinPhases[1].levels.D8, 0, "phase1 D8 off (PORTB=0)");
 
+const bargraphSketch = `int x=0;
+void setup() {
+  DDRD=0b11111111;
+  DDRB=0b00000111;
+  PORTD=0xFF;
+  PORTB=7;
+}
+void loop() {
+ if(x==0) {
+  while(PORTB>0) { PORTB=PORTB/2; delay(100); }
+  if(PORTD>1) { PORTD=PORTD/2; delay(100); }
+  else x=1;
+ }
+ if(x==1) {
+  if(PORTD<0xFF) { PORTD=PORTD*2+1; delay(100); }
+  else {
+   while(PORTB<3) { PORTB=PORTB*2+1; delay(100); }
+   x=0;
+  }
+ }
+}`;
+const barParsed = parseArduinoSketch(bargraphSketch);
+assert.ok(barParsed.pinPhases?.length >= 10, "bargraph sketch: phases delay(100)");
+assert.equal(barParsed.pinPhases[0].levels.D8, 1, "setup PORTB=7 → D8");
+assert.equal(barParsed.pinPhases[2].levels.D8, 0, "after while PORTB/2 → D8 off");
+assert.equal(barParsed.avrRegisters?.PORTD, 255, "registres init PORTD=255 (phases actives)");
+
 console.log("arduino-while-portb.test.mjs OK");

@@ -48,6 +48,29 @@ function appendPinPhasePulse(c, pinName, nPin, pinPhases, lines, spiceBranchName
     );
     return true;
 }
+
+/** Séquence PWL pour motifs non périodiques (compteurs PORTD, bargraph…). */
+function appendPinPhasePwl(c, pinName, nPin, pinPhases, lines, spiceBranchName) {
+    const levels = pinVoltageFromPhases(pinPhases, pinName);
+    if (!levels.length) return false;
+    if (levels.every((v) => v === levels[0])) {
+        lines.push(`${spiceBranchName("V", `${c.id}_${pinName}`)} ${nPin} 0 DC ${levels[0]}`);
+        return true;
+    }
+    if (appendPinPhasePulse(c, pinName, nPin, pinPhases, lines, spiceBranchName)) return true;
+    let t = 0;
+    const parts = [];
+    for (let i = 0; i < pinPhases.length; i++) {
+        parts.push(formatSpiceTime(t), String(levels[i]));
+        t += (pinPhases[i].durationMs || 0) / 1000;
+    }
+    if (t <= 0) return false;
+    parts.push(formatSpiceTime(t), String(levels[levels.length - 1]));
+    lines.push(
+        `${spiceBranchName("V", `${c.id}_${pinName}`)} ${nPin} 0 PWL(${parts.join(" ")})`
+    );
+    return true;
+}
 export const UNO_PIN = {
     IOREF: 0,
     RESET: 1,
@@ -173,7 +196,7 @@ export function appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName, opts
                 const constant = levels.length > 0 && levels.every((v) => v === levels[0]);
                 if (constant) {
                     lines.push(`${spiceBranchName("V", `${id}_${pinName}`)} ${nPin} 0 DC ${levels[0]}`);
-                } else if (!appendPinPhasePulse(c, pinName, nPin, pinPhases, lines, spiceBranchName)) {
+                } else if (!appendPinPhasePwl(c, pinName, nPin, pinPhases, lines, spiceBranchName)) {
                     const high = pinLevels[pinName] === 1 || pinLevels[pinName] === "1" || pinLevels[pinName] === true;
                     lines.push(`${spiceBranchName("V", `${id}_${pinName}`)} ${nPin} 0 DC ${high ? 5 : 0}`);
                 }
