@@ -15,6 +15,9 @@ import { startSpeakerAudio, stopSpeakerAudio } from './speaker-audio.js';
 let liveSimTimer = null;
 let simulationInFlight = false;
 let simulationQueuedSilent = false;
+/** @type {AbortController | null} */
+let simulationAbortController = null;
+let simulationGeneration = 0;
 
 /** Relance ngspice pendant une simulation active (valeurs composants / sources). */
 export function requestLiveSimulation() {
@@ -357,6 +360,11 @@ export async function triggerSimulation(isSilentUpdate = false) {
         return;
     }
     simulationInFlight = true;
+    simulationGeneration += 1;
+    const myGeneration = simulationGeneration;
+    if (simulationAbortController) simulationAbortController.abort();
+    simulationAbortController = new AbortController();
+    const { signal } = simulationAbortController;
     prepareArduinoForSimulation();
     if (!isSilentUpdate) {
         autoTuneScopeForI2c();
@@ -376,7 +384,9 @@ export async function triggerSimulation(isSilentUpdate = false) {
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(payload),
+            signal,
         });
+        if (myGeneration !== simulationGeneration) return;
         if (!response.ok) {
             let backendError = "";
             try {
@@ -391,6 +401,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
             throw new Error(formatSimulationNetworkError({ message: backendError }, baseUrl));
         }
         const result = await response.json();
+        if (myGeneration !== simulationGeneration) return;
         if (result.ok) {
             showSimulationWarnings(result.warnings, isSilentUpdate);
             simulationResults.voltmeters = result.voltmeterValues || {};
@@ -478,10 +489,12 @@ export async function triggerSimulation(isSilentUpdate = false) {
             stopSimulation();
         }
     } catch (err) {
+        if (err?.name === 'AbortError' || myGeneration !== simulationGeneration) return;
         if (!isSilentUpdate) alert(`Erreur réseau :\n${formatSimulationNetworkError(err, baseUrl)}`);
         stopSimulation();
     } finally {
         simulationInFlight = false;
+        if (myGeneration !== simulationGeneration) return;
         if (simulationQueuedSilent) {
             simulationQueuedSilent = false;
             triggerSimulation(true);
@@ -490,6 +503,13 @@ export async function triggerSimulation(isSilentUpdate = false) {
 }
 
 export function stopSimulation() {
+    simulationGeneration += 1;
+    simulationQueuedSilent = false;
+    if (simulationAbortController) {
+        simulationAbortController.abort();
+        simulationAbortController = null;
+    }
+    simulationInFlight = false;
     clearTimeout(liveSimTimer);
     liveSimTimer = null;
     stopLedAnimation();

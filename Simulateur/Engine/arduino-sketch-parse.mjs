@@ -1183,8 +1183,10 @@ export function arduinoUnoMinPulsePeriodSec(components) {
     for (const c of components) {
         if (c.type !== "arduino_uno") continue;
         if (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2) {
-            const totalMs = c.pinPhases.reduce((s, p) => s + (p.durationMs || 0), 0);
-            if (totalMs > 0) min = Math.min(min, totalMs / 1000);
+            for (const ph of c.pinPhases) {
+                const d = (ph.durationMs || 0) / 1000;
+                if (d > 0) min = Math.min(min, d);
+            }
         }
         if (!c.pinPulses) continue;
         for (const pulse of Object.values(c.pinPulses)) {

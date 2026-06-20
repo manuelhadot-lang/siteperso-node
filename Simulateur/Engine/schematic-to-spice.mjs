@@ -1047,6 +1047,19 @@ function computeTranTiming(components, deckOpts = {}) {
             tstep = tstop / TRAN_MAX_POINTS;
         }
     }
+    const hasArduinoPulse = components.some(
+        (c) =>
+            isArduinoUnoType(c.type) &&
+            ((c.pinPulses && Object.keys(c.pinPulses).length > 0) ||
+                (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2))
+    );
+    if (deckOpts.quickTran && hasArduinoPulse && minPeriod > 0) {
+        const arduinoQuickPeriods = 12;
+        tstop = Math.min(tstop, minPeriod * arduinoQuickPeriods);
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
+        }
+    }
     return {
         tstep,
         tstop,

@@ -106,205 +106,17 @@ function isWin32Platform() {
     return process.platform === "win32";
 }
 
-// --- CHARGEMENT DES ELEVES ---
-
-
-/** @param {string} filePath chemin absolu du module .js à importer à chaud */
-async function importFresh(filePath) {
-    const url = `${pathToFileURL(path.resolve(filePath)).href}?t=${Date.now()}&r=${Math.random()}`;
-    return import(url);
-}
-
-const ngspiceDeckModulePath       = path.join(repoRoot, "Simulateur", "Engine", "spice-netlist-v2.mjs");
-const ngspiceResultParserModulePath = path.join(repoRoot, "Simulateur", "Engine", "v2", "result-parser.mjs");
-
-async function getBuildNgspiceDeck() {
-    const module = await importFresh(ngspiceDeckModulePath);
-    if (typeof module.buildNgspiceDeck !== "function")
-        throw new Error("Module buildNgspiceDeck introuvable.");
-    return module.buildNgspiceDeck;
-}
+// --- Moteur SPICE (modules ESM chargés une seule fois) ---
+const {
+    loadSimEngineModules,
+    preloadSimEngineModules,
+} = require(path.join(repoRoot, "tools", "simulate-engine-loader.cjs"));
 
 /** buildNgspiceDeck est async (ESM) ; tolère aussi une version synchrone ancienne. */
 async function invokeBuildNgspiceDeck(buildFn, state, opts) {
     const result = buildFn(state, opts);
     if (result != null && typeof result.then === "function") return await result;
     return result;
-}
-
-async function getMergeVoltmeterMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeVoltmeterMeasurements !== "function")
-        throw new Error("Module mergeVoltmeterMeasurements introuvable.");
-    return module.mergeVoltmeterMeasurements;
-}
-
-async function getMergeAmmeterMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeAmmeterMeasurements !== "function")
-        throw new Error("Module mergeAmmeterMeasurements introuvable.");
-    return module.mergeAmmeterMeasurements;
-}
-
-async function getMergeLedMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLedMeasurements !== "function")
-        throw new Error("Module mergeLedMeasurements introuvable.");
-    return module.mergeLedMeasurements;
-}
-
-async function getMergeSeg7Measurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeSeg7Measurements !== "function")
-        throw new Error("Module mergeSeg7Measurements introuvable.");
-    return module.mergeSeg7Measurements;
-}
-
-async function getMergeSeg7FromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeSeg7FromTranWrdata !== "function")
-        throw new Error("Module mergeSeg7FromTranWrdata introuvable.");
-    return module.mergeSeg7FromTranWrdata;
-}
-
-async function getMergeSeg7TranPlotsFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeSeg7TranPlotsFromWrdata !== "function")
-        throw new Error("Module mergeSeg7TranPlotsFromWrdata introuvable.");
-    return module.mergeSeg7TranPlotsFromWrdata;
-}
-
-async function getMergeBargraphMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeBargraphMeasurements !== "function")
-        throw new Error("Module mergeBargraphMeasurements introuvable.");
-    return module.mergeBargraphMeasurements;
-}
-
-async function getMergeBargraphFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeBargraphFromTranWrdata !== "function")
-        throw new Error("Module mergeBargraphFromTranWrdata introuvable.");
-    return module.mergeBargraphFromTranWrdata;
-}
-
-async function getMergeBargraphTranPlotsFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeBargraphTranPlotsFromWrdata !== "function")
-        throw new Error("Module mergeBargraphTranPlotsFromWrdata introuvable.");
-    return module.mergeBargraphTranPlotsFromWrdata;
-}
-
-async function getMergeLedTranPlotsFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLedTranPlotsFromWrdata !== "function")
-        throw new Error("Module mergeLedTranPlotsFromWrdata introuvable.");
-    return module.mergeLedTranPlotsFromWrdata;
-}
-
-async function getMergeLedValuesFromTranPlots() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLedValuesFromTranPlots !== "function")
-        throw new Error("Module mergeLedValuesFromTranPlots introuvable.");
-    return module.mergeLedValuesFromTranPlots;
-}
-
-async function getMergeLogicGateMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLogicGateMeasurements !== "function")
-        throw new Error("Module mergeLogicGateMeasurements introuvable.");
-    return module.mergeLogicGateMeasurements;
-}
-
-async function getMergeLogicGateTranFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLogicGateTranFromWrdata !== "function")
-        throw new Error("Module mergeLogicGateTranFromWrdata introuvable.");
-    return module.mergeLogicGateTranFromWrdata;
-}
-
-async function getMergeLogicGateTranPlotsFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeLogicGateTranPlotsFromWrdata !== "function")
-        throw new Error("Module mergeLogicGateTranPlotsFromWrdata introuvable.");
-    return module.mergeLogicGateTranPlotsFromWrdata;
-}
-
-async function getMergeOhmmeterMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeOhmmeterMeasurements !== "function")
-        throw new Error("Module mergeOhmmeterMeasurements introuvable.");
-    return module.mergeOhmmeterMeasurements;
-}
-
-async function getMergeOscilloscopeMeasurements() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeOscilloscopeMeasurements !== "function")
-        throw new Error("Module mergeOscilloscopeMeasurements introuvable.");
-    return module.mergeOscilloscopeMeasurements;
-}
-
-async function getMergeScopePlotsFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeScopePlotsFromTranWrdata !== "function")
-        throw new Error("Module mergeScopePlotsFromTranWrdata introuvable.");
-    return module.mergeScopePlotsFromTranWrdata;
-}
-
-async function getMergeBodePlotsFromAcWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeBodePlotsFromAcWrdata !== "function")
-        throw new Error("Module mergeBodePlotsFromAcWrdata introuvable.");
-    return module.mergeBodePlotsFromAcWrdata;
-}
-
-async function getDeriveOscilloscopeValuesFromScopePlots() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.deriveOscilloscopeValuesFromScopePlots !== "function")
-        throw new Error("Module deriveOscilloscopeValuesFromScopePlots introuvable.");
-    return module.deriveOscilloscopeValuesFromScopePlots;
-}
-
-async function getMergeVoltmeterRmsFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeVoltmeterRmsFromTranWrdata !== "function")
-        throw new Error("Module mergeVoltmeterRmsFromTranWrdata introuvable.");
-    return module.mergeVoltmeterRmsFromTranWrdata;
-}
-
-async function getMergeAmmeterRmsFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeAmmeterRmsFromTranWrdata !== "function")
-        throw new Error("Module mergeAmmeterRmsFromTranWrdata introuvable.");
-    return module.mergeAmmeterRmsFromTranWrdata;
-}
-
-async function getMergeVoltmeterFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeVoltmeterFromTranWrdata !== "function")
-        throw new Error("Module mergeVoltmeterFromTranWrdata introuvable.");
-    return module.mergeVoltmeterFromTranWrdata;
-}
-
-async function getMergeAmmeterFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeAmmeterFromTranWrdata !== "function")
-        throw new Error("Module mergeAmmeterFromTranWrdata introuvable.");
-    return module.mergeAmmeterFromTranWrdata;
-}
-
-async function getMergeOhmmeterFromTranWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeOhmmeterFromTranWrdata !== "function")
-        throw new Error("Module mergeOhmmeterFromTranWrdata introuvable.");
-    return module.mergeOhmmeterFromTranWrdata;
-}
-
-async function getMergeVoltmeterTranPlotsFromWrdata() {
-    const module = await importFresh(ngspiceResultParserModulePath);
-    if (typeof module.mergeVoltmeterTranPlotsFromWrdata !== "function")
-        throw new Error("Module mergeVoltmeterTranPlotsFromWrdata introuvable.");
-    return module.mergeVoltmeterTranPlotsFromWrdata;
 }
 
 /** Délai exec ngspice : circuits 74HC90 / CD4511 (.tran jusqu'à ~120 s simulées). */
@@ -385,59 +197,9 @@ app.post("/api/simulate", async (req, res) => {
             netlist: "",
         });
     }
-    let buildNgspiceDeck;
-    let mergeVoltmeterMeasurements;
-    let mergeAmmeterMeasurements;
-    let mergeLedMeasurements;
-    let mergeLedTranPlotsFromWrdata;
-    let mergeLedValuesFromTranPlots;
-    let mergeLogicGateMeasurements;
-    let mergeLogicGateTranFromWrdata;
-    let mergeLogicGateTranPlotsFromWrdata;
-    let mergeOhmmeterMeasurements;
-    let mergeOscilloscopeMeasurements;
-    let deriveOscilloscopeValuesFromScopePlots;
-    let mergeScopePlotsFromTranWrdata;
-    let mergeBodePlotsFromAcWrdata;
-    let mergeVoltmeterRmsFromTranWrdata;
-    let mergeAmmeterRmsFromTranWrdata;
-    let mergeVoltmeterFromTranWrdata;
-    let mergeAmmeterFromTranWrdata;
-    let mergeOhmmeterFromTranWrdata;
-    let mergeVoltmeterTranPlotsFromWrdata;
-    let mergeSeg7Measurements;
-    let mergeSeg7FromTranWrdata;
-    let mergeSeg7TranPlotsFromWrdata;
-    let mergeBargraphMeasurements;
-    let mergeBargraphFromTranWrdata;
-    let mergeBargraphTranPlotsFromWrdata;
+    let eng;
     try {
-        buildNgspiceDeck = await getBuildNgspiceDeck();
-        mergeVoltmeterMeasurements = await getMergeVoltmeterMeasurements();
-        mergeAmmeterMeasurements = await getMergeAmmeterMeasurements();
-        mergeLedMeasurements = await getMergeLedMeasurements();
-        mergeLedTranPlotsFromWrdata = await getMergeLedTranPlotsFromWrdata();
-        mergeLedValuesFromTranPlots = await getMergeLedValuesFromTranPlots();
-        mergeLogicGateMeasurements = await getMergeLogicGateMeasurements();
-        mergeLogicGateTranFromWrdata = await getMergeLogicGateTranFromWrdata();
-        mergeLogicGateTranPlotsFromWrdata = await getMergeLogicGateTranPlotsFromWrdata();
-        mergeOhmmeterMeasurements = await getMergeOhmmeterMeasurements();
-        mergeOscilloscopeMeasurements = await getMergeOscilloscopeMeasurements();
-        deriveOscilloscopeValuesFromScopePlots = await getDeriveOscilloscopeValuesFromScopePlots();
-        mergeScopePlotsFromTranWrdata = await getMergeScopePlotsFromTranWrdata();
-        mergeBodePlotsFromAcWrdata = await getMergeBodePlotsFromAcWrdata();
-        mergeVoltmeterRmsFromTranWrdata = await getMergeVoltmeterRmsFromTranWrdata();
-        mergeAmmeterRmsFromTranWrdata = await getMergeAmmeterRmsFromTranWrdata();
-        mergeVoltmeterFromTranWrdata = await getMergeVoltmeterFromTranWrdata();
-        mergeAmmeterFromTranWrdata = await getMergeAmmeterFromTranWrdata();
-        mergeOhmmeterFromTranWrdata = await getMergeOhmmeterFromTranWrdata();
-        mergeVoltmeterTranPlotsFromWrdata = await getMergeVoltmeterTranPlotsFromWrdata();
-        mergeSeg7Measurements = await getMergeSeg7Measurements();
-        mergeSeg7FromTranWrdata = await getMergeSeg7FromTranWrdata();
-        mergeSeg7TranPlotsFromWrdata = await getMergeSeg7TranPlotsFromWrdata();
-        mergeBargraphMeasurements = await getMergeBargraphMeasurements();
-        mergeBargraphFromTranWrdata = await getMergeBargraphFromTranWrdata();
-        mergeBargraphTranPlotsFromWrdata = await getMergeBargraphTranPlotsFromWrdata();
+        eng = await loadSimEngineModules(repoRoot);
     } catch (error) {
         res.status(500).json({
             ok: false,
@@ -447,6 +209,34 @@ app.post("/api/simulate", async (req, res) => {
         });
         return;
     }
+    const {
+        buildNgspiceDeck,
+        mergeVoltmeterMeasurements,
+        mergeAmmeterMeasurements,
+        mergeLedMeasurements,
+        mergeLedTranPlotsFromWrdata,
+        mergeLedValuesFromTranPlots,
+        mergeLogicGateMeasurements,
+        mergeLogicGateTranFromWrdata,
+        mergeLogicGateTranPlotsFromWrdata,
+        mergeOhmmeterMeasurements,
+        mergeOscilloscopeMeasurements,
+        deriveOscilloscopeValuesFromScopePlots,
+        mergeScopePlotsFromTranWrdata,
+        mergeBodePlotsFromAcWrdata,
+        mergeVoltmeterRmsFromTranWrdata,
+        mergeAmmeterRmsFromTranWrdata,
+        mergeVoltmeterFromTranWrdata,
+        mergeAmmeterFromTranWrdata,
+        mergeOhmmeterFromTranWrdata,
+        mergeVoltmeterTranPlotsFromWrdata,
+        mergeSeg7Measurements,
+        mergeSeg7FromTranWrdata,
+        mergeSeg7TranPlotsFromWrdata,
+        mergeBargraphMeasurements,
+        mergeBargraphFromTranWrdata,
+        mergeBargraphTranPlotsFromWrdata,
+    } = eng;
 
     const gs = Number(req.body?.gridStep);
     const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(repoRoot);
@@ -811,6 +601,7 @@ function startStandaloneSimulateServer(options = {}) {
     const port = options.port ?? 43721;
     const host = options.host ?? "127.0.0.1";
     const app = createSimulateStandaloneApp(repoRoot);
+    preloadSimEngineModules(repoRoot);
     const { resolveNgspiceForServer } = require(path.join(repoRoot, "tools", "ngspice-bundle.cjs"));
     return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
