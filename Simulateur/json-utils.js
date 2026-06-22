@@ -3,6 +3,7 @@
  */
 
 import { DC10H_COLOR_IDS } from './bargraph-dc10h-layout.js';
+import { normalizeBoardFqbn } from './esp32-c3-layout.js';
 
 export function parseJsonText(raw) {
     if (raw == null) {
@@ -61,10 +62,23 @@ export function migrateLoadedComponents(components) {
             if (comp.temperature == null || !Number.isFinite(comp.temperature)) comp.temperature = 24;
             if (comp.humidity == null || !Number.isFinite(comp.humidity)) comp.humidity = 55;
         }
+        if (comp.type === 'grove_tsl2591') {
+            comp.flipX = !!comp.flipX;
+            if (comp.i2cAddress == null) comp.i2cAddress = 0x29;
+            if (comp.lux == null || !Number.isFinite(comp.lux)) comp.lux = 100;
+        }
+        if (comp.type === 'joyit_tft18') {
+            comp.flipX = !!comp.flipX;
+            delete comp.tftDisplayCache;
+            delete comp.tftControlPins;
+        }
         if (comp.type === 'bargraph_dc10h') {
             if (!comp.barColor || !DC10H_COLOR_IDS.includes(comp.barColor)) comp.barColor = 'red';
             comp.flipX = !!comp.flipX;
             comp.rotation = 0;
+        }
+        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3') {
+            comp.fqbn = normalizeBoardFqbn(comp);
         }
     }
     return components;

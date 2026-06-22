@@ -1636,7 +1636,19 @@ app.post('/api/save-note', (req, res) => {
     }
 });
 
-server.listen(PORT, LISTEN_HOST, () => {
+server.listen(PORT, LISTEN_HOST, async () => {
+    try {
+        const { applyArduinoCliEnvironment } = require("./tools/arduino-cli-bundle.cjs");
+        const arduinoEnv = await applyArduinoCliEnvironment({
+            repoRoot: __dirname,
+            userDataDir: path.join(os.homedir(), ".simulateur-h"),
+        });
+        if (arduinoEnv.ok) {
+            console.log(`🛠️  arduino-cli embarqué : ${arduinoEnv.exe}`);
+        }
+    } catch (err) {
+        console.warn("arduino-cli bundle :", err?.message || err);
+    }
     preloadSimEngineModules(__dirname);
     const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
     const digitalCm = resolveDigitalCmSourcePath(__dirname);

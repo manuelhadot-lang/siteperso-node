@@ -1,30 +1,49 @@
 /**
- * Affichage idéal Grove LCD 2×16 I2C — câblage SDA/SCL/VCC/GND vers Arduino UNO.
+ * Affichage idéal Grove LCD 2×16 I2C — câblage SDA/SCL/VCC/GND vers UNO ou ESP32-C3.
  */
 
 import { applyArduinoSketchToComponent, evaluateLoopVarBindings, sketchUsesAnalogInput } from "./arduino-sketch-parse.mjs";
 import { parseGroveLcdFromSketch, pickLcdPhaseAt, resolveLcdDisplayAt, effectiveLcdLoopCycleMs, emptyLcdBuffer } from "./grove-lcd-sketch-parse.mjs";
 import { resolveDhtPrintArg, buildDhtVarBindings } from "./dht22-ideal.mjs";
+import { resolveTslPrintArg, buildTslVarBindings } from "./tsl2591-ideal.mjs";
 import { sketchLcdUsesDhtReads } from "./dht22-sketch-parse.mjs";
-import { readUnoAnalogInputs } from "./arduino-analog-ideal.mjs";
+import { sketchLcdUsesTslReads } from "./tsl2591-sketch-parse.mjs";
+import { readBoardAnalogInputs } from "./arduino-analog-ideal.mjs";
 import { reachableJonctions } from "./hc90-cascade.mjs";
+import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
 
 const GROVE_LCD_DEFAULT_I2C = 0x3e;
 
-const I2C_UNO_PINS = { SDA: "A4", SCL: "A5" };
-
-function isLcdI2cWiredToUno(lcdLabel, unoLabel, wires, autoJunctions) {
-    for (const [lcdPin, unoPin] of Object.entries(I2C_UNO_PINS)) {
+function isLcdI2cWiredToBoard(lcdLabel, board, wires, autoJunctions) {
+    const prof = boardProfile(board.type);
+    for (const [lcdPin, boardPin] of [
+        ["SDA", prof.i2c.sda.name],
+        ["SCL", prof.i2c.scl.name],
+    ]) {
         const lcdJ = `${lcdLabel}_${lcdPin}`;
-        const unoJ = `${unoLabel}_${unoPin}`;
+        const boardJ = `${board.label}_${boardPin}`;
         const net = reachableJonctions(lcdJ, wires, autoJunctions);
-        if (!net.has(unoJ)) return false;
+        if (!net.has(boardJ)) return false;
     }
     return true;
 }
 
 function padHint(s) {
     return String(s).slice(0, 16).padEnd(16, " ");
+}
+
+function isMicroBoardPowered(comp, net, rail) {
+    const prof = boardProfile(comp.type);
+    if (rail === "VCC") {
+        for (const pin of prof.vccPins) {
+            if (net.has(`${comp.label}_${pin}`)) return true;
+        }
+    } else {
+        for (const pin of prof.gndPins) {
+            if (net.has(`${comp.label}_${pin}`)) return true;
+        }
+    }
+    return false;
 }
 
 function isLcdPowered(lcdLabel, components, wires, autoJunctions) {
@@ -36,15 +55,11 @@ function isLcdPowered(lcdLabel, components, wires, autoJunctions) {
             if (lcdPin === "VCC") {
                 if (comp.type === "vcc" && net.has(`${comp.label}_out`)) ok = true;
                 if (comp.type === "battery" && net.has(`${comp.label}_out`)) ok = true;
-                if (comp.type === "arduino_uno" && (net.has(`${comp.label}_5V`) || net.has(`${comp.label}_3V3`))) {
-                    ok = true;
-                }
+                if (isMicroBoardType(comp.type) && isMicroBoardPowered(comp, net, "VCC")) ok = true;
             } else {
                 if (comp.type === "gnd" && net.has(`${comp.label}_out`)) ok = true;
                 if (comp.type === "battery" && net.has(`${comp.label}_in`)) ok = true;
-                if (comp.type === "arduino_uno" && (net.has(`${comp.label}_GND`) || net.has(`${comp.label}_GND2`))) {
-                    ok = true;
-                }
+                if (isMicroBoardType(comp.type) && isMicroBoardPowered(comp, net, "GND")) ok = true;
             }
         }
         if (!ok) return false;
@@ -53,39 +68,51 @@ function isLcdPowered(lcdLabel, components, wires, autoJunctions) {
 }
 
 /**
- * Trouve l'UNO câblé sur ce LCD Grove (I2C + alim).
- * @returns {{ uno: object, wired: boolean }}
+ * Trouve la carte microcontrôleur câblée sur ce LCD Grove (I2C + alim).
+ * @returns {{ board: object | null, wired: boolean }}
  */
-export function findUnoForGroveLcd(lcdLabel, components, wires, autoJunctions = []) {
+export function findBoardForGroveLcd(lcdLabel, components, wires, autoJunctions = []) {
     const lcd = components.find((c) => c.label === lcdLabel && c.type === "grove_lcd16x2");
-    if (!lcd) return { uno: null, wired: false };
+    if (!lcd) return { board: null, wired: false };
 
     if (!isLcdPowered(lcdLabel, components, wires, autoJunctions)) {
-        return { uno: null, wired: false };
+        return { board: null, wired: false };
     }
 
-    const candidates = components.filter((c) => c.type === "arduino_uno");
+    const candidates = components.filter((c) => isMicroBoardType(c.type));
     candidates.sort((a, b) => (b.lastCompileOk ? 1 : 0) - (a.lastCompileOk ? 1 : 0));
 
     for (const comp of candidates) {
-        if (isLcdI2cWiredToUno(lcdLabel, comp.label, wires, autoJunctions)) {
-            return { uno: comp, wired: true };
+        if (isLcdI2cWiredToBoard(lcdLabel, comp, wires, autoJunctions)) {
+            return { board: comp, wired: true };
         }
     }
-    return { uno: null, wired: false };
+    return { board: null, wired: false };
 }
 
+/** @deprecated alias */
+export function findUnoForGroveLcd(lcdLabel, components, wires, autoJunctions = []) {
+    const { board, wired } = findBoardForGroveLcd(lcdLabel, components, wires, autoJunctions);
+    return { uno: board, wired };
+}
+
+export function isGroveLcdWiredToBoard(lcdLabel, components, wires, autoJunctions = []) {
+    return findBoardForGroveLcd(lcdLabel, components, wires, autoJunctions).wired;
+}
+
+/** @deprecated alias UNO */
 export function isGroveLcdWiredToUno(lcdLabel, components, wires, autoJunctions = []) {
-    return findUnoForGroveLcd(lcdLabel, components, wires, autoJunctions).wired;
+    return isGroveLcdWiredToBoard(lcdLabel, components, wires, autoJunctions);
 }
 
-function buildLcdPrintCtx(uno, components, wires, autoJunctions, elapsedSec = 0, opts = {}) {
-    const sketch = uno?.sketch || "";
+function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 0, opts = {}) {
+    const sketch = board?.sketch || "";
     const hasDht = sketchLcdUsesDhtReads(sketch);
+    const hasTsl = sketchLcdUsesTslReads(sketch);
     const hasAnalog = sketchUsesAnalogInput(sketch);
-    if (!hasDht && !hasAnalog) return null;
+    if (!hasDht && !hasTsl && !hasAnalog) return null;
 
-    const analogInputs = () => readUnoAnalogInputs(uno, {
+    const analogInputs = () => readBoardAnalogInputs(board, {
         components,
         wires,
         autoJunctions,
@@ -96,14 +123,23 @@ function buildLcdPrintCtx(uno, components, wires, autoJunctions, elapsedSec = 0,
 
     return {
         resolveDht: hasDht
-            ? (arg) => resolveDhtPrintArg(arg, sketch, uno.label, components, wires, autoJunctions)
+            ? (arg) => resolveDhtPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
+            : undefined,
+        resolveTsl: hasTsl
+            ? (arg) => resolveTslPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
         collectVarBindings: (body) => {
             let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs()) : {};
             if (hasDht) {
                 bindings = {
                     ...bindings,
-                    ...buildDhtVarBindings(body, sketch, uno.label, components, wires, autoJunctions),
+                    ...buildDhtVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                };
+            }
+            if (hasTsl) {
+                bindings = {
+                    ...bindings,
+                    ...buildTslVarBindings(body, sketch, board.label, components, wires, autoJunctions),
                 };
             }
             return bindings;
@@ -111,22 +147,19 @@ function buildLcdPrintCtx(uno, components, wires, autoJunctions, elapsedSec = 0,
     };
 }
 
-function needsRuntimeLcdCtx(uno) {
-    const sketch = uno?.sketch || "";
-    return sketchLcdUsesDhtReads(sketch) || sketchUsesAnalogInput(sketch);
+function needsRuntimeLcdCtx(board) {
+    const sketch = board?.sketch || "";
+    return sketchLcdUsesDhtReads(sketch) || sketchLcdUsesTslReads(sketch) || sketchUsesAnalogInput(sketch);
 }
 
-/**
- * Met à jour le cache d'affichage LCD après compilation / édition sketch.
- */
 export function refreshGroveLcdDisplayCache(components, wires, autoJunctions = []) {
     for (const lcd of components) {
         if (lcd.type !== "grove_lcd16x2") continue;
         delete lcd.lcdDisplayCache;
-        const { uno, wired } = findUnoForGroveLcd(lcd.label, components, wires, autoJunctions);
-        if (!wired || !uno) continue;
-        applyArduinoSketchToComponent(uno);
-        const parsed = parseGroveLcdFromSketch(uno.sketch || "");
+        const { board, wired } = findBoardForGroveLcd(lcd.label, components, wires, autoJunctions);
+        if (!wired || !board) continue;
+        applyArduinoSketchToComponent(board);
+        const parsed = parseGroveLcdFromSketch(board.sketch || "");
         if (parsed) {
             lcd.lcdDisplayCache = {
                 lines: parsed.lines,
@@ -143,7 +176,7 @@ export function refreshGroveLcdDisplayCache(components, wires, autoJunctions = [
                 address: parsed.address,
                 blank: !parsed.lines.some((l) => l.trim()),
             };
-        } else if (uno.lastCompileOk) {
+        } else if (board.lastCompileOk) {
             lcd.lcdDisplayCache = {
                 lines: [padHint("LiquidCrystal"), padHint("_I2C requis")],
                 backlight: true,
@@ -161,21 +194,16 @@ export function refreshGroveLcdDisplayCache(components, wires, autoJunctions = [
     }
 }
 
-/**
- * Texte à afficher sur le LCD (sketch Arduino interprété).
- * @param {number} [elapsedSec] temps écoulé depuis le début de la simulation (pour delay()).
- * @returns {{ lines: string[], backlight: boolean, rgb: object | null, wired: boolean, address: number, blank: boolean }}
- */
 export function getIdealGroveLcdDisplay(lcdLabel, components, wires, autoJunctions = [], elapsedSec = 0, opts = {}) {
     const lcd = components.find((c) => c.label === lcdLabel && c.type === "grove_lcd16x2");
     if (!lcd) {
         return { lines: emptyLcdBuffer(), backlight: false, rgb: null, wired: false, address: GROVE_LCD_DEFAULT_I2C, blank: true };
     }
 
-    const { uno, wired } = findUnoForGroveLcd(lcdLabel, components, wires, autoJunctions);
-    if (!wired || !uno) {
+    const { board, wired } = findBoardForGroveLcd(lcdLabel, components, wires, autoJunctions);
+    if (!wired || !board) {
         return {
-            lines: [padHint("SDA->A4 SCL->"), padHint("A5  5V  GND")],
+            lines: [padHint("SDA / SCL /"), padHint("VCC / GND")],
             backlight: false,
             rgb: null,
             wired: false,
@@ -184,9 +212,9 @@ export function getIdealGroveLcdDisplay(lcdLabel, components, wires, autoJunctio
         };
     }
 
-    applyArduinoSketchToComponent(uno);
-    const printCtx = buildLcdPrintCtx(uno, components, wires, autoJunctions, elapsedSec, opts);
-    const needsRuntime = needsRuntimeLcdCtx(uno);
+    applyArduinoSketchToComponent(board);
+    const printCtx = buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec, opts);
+    const needsRuntime = needsRuntimeLcdCtx(board);
 
     const pickDisplay = (parsedOrCache) => {
         const elapsedMs = Math.max(0, elapsedSec * 1000);
@@ -217,9 +245,9 @@ export function getIdealGroveLcdDisplay(lcdLabel, components, wires, autoJunctio
         return { ...d, wired: true };
     }
 
-    const parsed = parseGroveLcdFromSketch(uno.sketch || "", printCtx);
+    const parsed = parseGroveLcdFromSketch(board.sketch || "", printCtx);
     if (!parsed) {
-        const hint = uno.lastCompileOk
+        const hint = board.lastCompileOk
             ? [padHint("LiquidCrystal"), padHint("_I2C requis")]
             : emptyLcdBuffer();
         return {

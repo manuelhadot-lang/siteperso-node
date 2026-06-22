@@ -49,7 +49,7 @@ assert(built.ok, built.errors?.join(" ") || "build");
 assert(built.analysisTran, "analyse .tran requise");
 const nl = built.netlist;
 assert(nl.includes("V_LOGA"), "borne LOGA dans la netlist");
-assert(nl.includes("d_genlut"), "décodeur XSPICE");
+assert(nl.includes("d_genlut") || /B_CD45111_seg/.test(nl), "décodeur CD4511 (XSPICE ou B-source)");
 assert(!/CD45111#7.*\n.*CD45111#7/s.test(nl) || nl.includes("SEG1"), "liaison sorties");
 
 console.log("cd4511-wires.test.mjs : OK");

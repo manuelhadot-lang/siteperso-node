@@ -18,7 +18,7 @@ const FONT = new Uint8Array([
     0x00, 0x07, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, // "
     0x14, 0x7f, 0x14, 0x7f, 0x14, 0x00, 0x00, 0x00, // #
     0x24, 0x2a, 0x7f, 0x2a, 0x12, 0x00, 0x00, 0x00, // $
-    0x00, 0x23, 0x13, 0x08, 0x12, 0x11, 0x00, 0x00, // % (0x25 — ROM A00, bas corrigé pour 5 bits)
+    0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03, 0x00, // % — Adafruit GFX glcdfont (colonnes→lignes)
     0x36, 0x49, 0x55, 0x22, 0x50, 0x00, 0x00, 0x00, // &
     0x00, 0x05, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, // '
     0x00, 0x1c, 0x22, 0x41, 0x00, 0x00, 0x00, 0x00, // (
@@ -113,6 +113,50 @@ const FONT = new Uint8Array([
 
 const SPACE_GLYPH = new Uint8Array(8);
 
+function glyphBytes(...rows) {
+    return new Uint8Array(rows);
+}
+
+function asciiGlyphRows(code) {
+    if (code < 0x20 || code > 0x7f) return null;
+    const off = (code - 0x20) * 8;
+    const rows = new Uint8Array(8);
+    for (let r = 0; r < 8; r++) rows[r] = FONT[off + r] & 0x1f;
+    return rows;
+}
+
+/** Accent(s) sur lignes 0–1, corps inchangé (lignes 2–7 = lettre ASCII). */
+function accentedGlyph(baseCode, row0, row1) {
+    const rows = asciiGlyphRows(baseCode);
+    if (!rows) return SPACE_GLYPH;
+    if (row0 !== undefined) rows[0] = row0 & 0x1f;
+    if (row1 !== undefined) rows[1] = row1 & 0x1f;
+    return rows;
+}
+
+/** Caractères spéciaux non dérivés d’une lettre ASCII. */
+const LATIN1_GLYPHS = new Map([
+    [0xb0, glyphBytes(0x00, 0x06, 0x09, 0x09, 0x06, 0x00, 0x00, 0x00)], // °
+    [0xc7, glyphBytes(0x0e, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0e, 0x02)], // Ç
+    [0xe7, glyphBytes(0x00, 0x00, 0x0e, 0x10, 0x10, 0x11, 0x0e, 0x02)], // ç
+]);
+
+/** @type {Map<number, { base: number, r0?: number, r1?: number }>} */
+const ACCENTED_LATIN = new Map([
+    [0xc0, { base: 0x41, r0: 0x02 }], // À
+    [0xc9, { base: 0x45, r0: 0x04 }], // É
+    [0xe0, { base: 0x61, r0: 0x02 }], // à
+    [0xe2, { base: 0x61, r0: 0x04, r1: 0x0a }], // â
+    [0xe8, { base: 0x65, r0: 0x02 }], // è
+    [0xe9, { base: 0x65, r0: 0x04 }], // é
+    [0xea, { base: 0x65, r0: 0x04, r1: 0x0a }], // ê
+    [0xeb, { base: 0x65, r0: 0x0a }], // ë
+    [0xee, { base: 0x69, r0: 0x04, r1: 0x0a }], // î
+    [0xf4, { base: 0x6f, r0: 0x04, r1: 0x0a }], // ô
+    [0xf9, { base: 0x75, r0: 0x02 }], // ù
+    [0xfb, { base: 0x75, r0: 0x04, r1: 0x0a }], // û
+]);
+
 /** @returns {Uint8Array} */
 export function getHd44780Glyph(ch) {
     const code = ch.charCodeAt(0);
@@ -120,5 +164,9 @@ export function getHd44780Glyph(ch) {
         const off = (code - 0x20) * 8;
         return FONT.subarray(off, off + 8);
     }
+    const latin = LATIN1_GLYPHS.get(code);
+    if (latin) return latin;
+    const acc = ACCENTED_LATIN.get(code);
+    if (acc) return accentedGlyph(acc.base, acc.r0 ?? 0, acc.r1 ?? 0);
     return SPACE_GLYPH;
 }

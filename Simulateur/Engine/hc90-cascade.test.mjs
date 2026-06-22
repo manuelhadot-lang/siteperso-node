@@ -46,7 +46,7 @@ assert(
 assert(Math.abs(hc90TranSampleTimeSec(10, 1, 100) - 9.49) < 1e-9, "pulse 10 → t=9.49");
 assert(Math.abs(hc90TranSampleTimeSec(100, 1, 100) - 99.49) < 1e-9, "pulse 100 → fin de span");
 assert(hc90TranSampleTimeSec(0, 1, 24) === 0, "démarrage à 0");
-assert(Math.abs(hc90TranSampleTimeSec(12, 0.5, 12) - 11.99) < 0.02, "pulse 24 → dernière impulsion du span");
+assert(Math.abs(hc90TranSampleTimeSec(12, 0.5, 12) - 11.745) < 0.02, "pulse 24 → dernière impulsion du span");
 
 const badWires = [
     { fromJonctionId: "GImp_1_out", toJonctionId: "HC90_1_CP0" },

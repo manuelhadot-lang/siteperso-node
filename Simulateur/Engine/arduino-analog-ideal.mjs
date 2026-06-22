@@ -1,16 +1,16 @@
 /**
- * Entrées analogiques Arduino (A0–A5) — tension du circuit → ADC 10 bits.
+ * Entrées analogiques Arduino (A0–A5) / ESP32-C3 (GPIO0–4) — tension → ADC 10 bits.
  */
 
 import { reachableJonctions } from "./hc90-cascade.mjs";
+import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
 
-const VREF = 5;
 const ADC_MAX = 1023;
 
-export function voltageToAdc(volts) {
+export function voltageToAdc(volts, vref = 5) {
     if (!Number.isFinite(volts)) return 0;
-    const v = Math.max(0, Math.min(VREF, volts));
-    return Math.round((v / VREF) * ADC_MAX);
+    const v = Math.max(0, Math.min(vref, volts));
+    return Math.round((v / vref) * ADC_MAX);
 }
 
 /** Tension fixe d'une jonction d'alimentation (broches UNO, GND, VCC…). */
@@ -164,14 +164,15 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
     }
 
     for (const comp of components) {
-        if (comp.type !== "arduino_uno" || !comp.label) continue;
+        if (!isMicroBoardType(comp.type) || !comp.label) continue;
+        const prof = boardProfile(comp.type);
         for (const j of net) {
             if (!j.startsWith(`${comp.label}_`)) continue;
             const suffix = j.slice(comp.label.length + 1);
-            if (!/^A\d+$|^D\d+$/.test(suffix)) continue;
+            if (!/^A\d+$|^D\d+$|^GPIO\d+$/.test(suffix)) continue;
             const modes = comp.pinModes || {};
             const levels = comp.liveLevels || comp.pinLevels || {};
-            if (modes[suffix] === "OUTPUT") return levels[suffix] ? 5 : 0;
+            if (modes[suffix] === "OUTPUT") return levels[suffix] ? prof.logicVolts : 0;
         }
     }
 
@@ -186,15 +187,21 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
     return null;
 }
 
-/** Valeurs ADC 0–1023 pour A0–A5 d'une carte UNO. */
-export function readUnoAnalogInputs(uno, ctx) {
+/** Valeurs ADC 0–1023 pour les entrées analogiques de la carte. */
+export function readBoardAnalogInputs(board, ctx) {
     const out = {};
-    if (!uno?.label) return out;
-    for (let i = 0; i <= 5; i++) {
-        const label = `A${i}`;
-        const jid = `${uno.label}_${label}`;
+    if (!board?.label) return out;
+    const type = isMicroBoardType(board.type) ? board.type : "arduino_uno";
+    const prof = boardProfile(type);
+    for (const label of prof.analogPinLabels()) {
+        const jid = `${board.label}_${label}`;
         const v = resolveNetVoltage(jid, ctx);
-        out[label] = voltageToAdc(Number.isFinite(v) ? v : 0);
+        out[label] = voltageToAdc(Number.isFinite(v) ? v : 0, prof.adcVref);
     }
     return out;
+}
+
+/** @deprecated alias UNO */
+export function readUnoAnalogInputs(uno, ctx) {
+    return readBoardAnalogInputs(uno, ctx);
 }

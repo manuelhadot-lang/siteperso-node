@@ -2,6 +2,8 @@
 const {
     getArduinoCliStatus,
     compileArduinoSketch,
+    listArduinoBoards,
+    uploadArduinoSketch,
     resolveUserLibraryRoots,
     resolveUserLibraryPaths,
     searchArduinoLibraries,
@@ -111,6 +113,42 @@ function mountArduinoRoutes(app) {
                 exe: result.exe,
                 hexPath: result.hexPath || null,
             });
+        } catch (err) {
+            res.status(500).json({
+                ok: false,
+                errors: [err?.message || String(err)],
+                log: "",
+            });
+        }
+    });
+
+    app.get("/api/arduino/boards", async (_req, res) => {
+        try {
+            const result = await listArduinoBoards();
+            if (!result.ok) {
+                return res.status(503).json(result);
+            }
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({
+                ok: false,
+                boards: [],
+                errors: [err?.message || String(err)],
+            });
+        }
+    });
+
+    app.post("/api/arduino/upload", async (req, res) => {
+        const sketch = req.body?.sketch;
+        const sketchName = req.body?.sketchName || req.body?.label || "sketch";
+        const fqbn = req.body?.fqbn || DEFAULT_FQBN;
+        const port = req.body?.port;
+        try {
+            const result = await uploadArduinoSketch({ sketch, sketchName, fqbn, port });
+            if (!result.ok) {
+                return res.status(400).json(result);
+            }
+            res.json(result);
         } catch (err) {
             res.status(500).json({
                 ok: false,

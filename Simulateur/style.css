@@ -300,7 +300,8 @@ body.theme-light .circuit-name {
 }
 
 .right-panel {
-    width: min(420px, 42vw);
+    position: relative;
+    width: var(--arduino-panel-width, min(420px, 42vw));
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -308,6 +309,32 @@ body.theme-light .circuit-name {
     border-left: 2px solid var(--border-color);
     z-index: 20;
     min-height: 0;
+}
+
+.arduino-panel-resize-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    margin-left: -4px;
+    cursor: col-resize;
+    z-index: 30;
+    touch-action: none;
+}
+
+.arduino-panel-resize-handle:hover,
+.arduino-panel-resize-handle.is-dragging {
+    background: rgba(0, 151, 157, 0.35);
+}
+
+body.arduino-panel-resizing {
+    cursor: col-resize !important;
+    user-select: none;
+}
+
+body.arduino-panel-resizing * {
+    cursor: col-resize !important;
 }
 
 .right-panel.hidden {
@@ -363,6 +390,7 @@ body.theme-light .circuit-name {
 .arduino-sketch-grid {
     display: grid;
     min-height: 100%;
+    --arduino-editor-font-size: 13px;
 }
 
 .arduino-sketch-highlight,
@@ -376,7 +404,7 @@ body.theme-light .circuit-name {
     border: none;
     border-radius: 0;
     font-family: Consolas, "Courier New", monospace;
-    font-size: 13px;
+    font-size: var(--arduino-editor-font-size, 13px);
     font-weight: normal;
     font-style: normal;
     line-height: 1.45;
@@ -528,6 +556,55 @@ body.theme-light .circuit-name {
     margin-bottom: 8px;
     flex-shrink: 0;
     flex-wrap: wrap;
+}
+
+.arduino-upload-section {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.arduino-upload-hint {
+    font-size: 11px;
+    color: var(--text-muted, #8899aa);
+    margin: 0 0 8px;
+    line-height: 1.35;
+}
+
+.arduino-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.arduino-upload-row:last-child {
+    margin-bottom: 0;
+}
+
+.arduino-upload-label {
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 58px;
+    flex-shrink: 0;
+}
+
+.arduino-upload-select {
+    flex: 1;
+    min-width: 120px;
+    font-size: 12px;
+    padding: 4px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--canvas-bg);
+    color: inherit;
+}
+
+.arduino-compile-status--upload-ok {
+    color: #29b6f6;
 }
 
 .arduino-compile-status {

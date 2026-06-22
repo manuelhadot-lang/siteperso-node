@@ -3,7 +3,10 @@ import { saveState, circuit, flags } from './state.js';
 import { draw, resizeCanvas } from './renderer.js';
 import { onArduinoSketchUpdated } from './led-animation.js';
 import { refreshGroveLcdDisplayCache } from './Engine/grove-lcd-ideal.mjs';
+import { refreshJoyitTft18DisplayCache } from './Engine/tft18-ideal.mjs';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
+import { DEFAULT_ESP32_SKETCH, ESP32_FQBN, uploadProfilesForBoardType, normalizeBoardFqbn } from './esp32-c3-layout.js';
+import { isMicroBoard } from './micro-board.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { registerArduinoSketchSync, syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
 import { openArduinoLibPopup } from './arduino-lib-popup.js';
@@ -12,17 +15,155 @@ import { showModal } from './modal-ui.js';
 
 let activeBoard = null;
 
+const PANEL_WIDTH_KEY = 'simulator.arduinoPanelWidth';
+const PANEL_WIDTH_DEFAULT = 420;
+const PANEL_WIDTH_MIN = 280;
+
+const EDITOR_FONT_KEY = 'simulator.arduinoEditorFontSize';
+const EDITOR_FONT_DEFAULT = 13;
+const EDITOR_FONT_MIN = 10;
+const EDITOR_FONT_MAX = 28;
+
+const UPLOAD_PORT_KEY = 'simulator.arduinoUploadPort';
+
+function panelWidthMax() {
+    return Math.min(800, Math.floor(window.innerWidth * 0.75));
+}
+
+function clampPanelWidth(widthPx) {
+    return Math.max(PANEL_WIDTH_MIN, Math.min(panelWidthMax(), Math.round(widthPx)));
+}
+
+function applyPanelWidth(widthPx) {
+    const p = panel();
+    if (!p) return clampPanelWidth(widthPx);
+    const w = clampPanelWidth(widthPx);
+    p.style.setProperty('--arduino-panel-width', `${w}px`);
+    p.style.width = `${w}px`;
+    try {
+        localStorage.setItem(PANEL_WIDTH_KEY, String(w));
+    } catch {
+        /* ignore */
+    }
+    return w;
+}
+
+function loadPanelWidth() {
+    try {
+        const saved = parseInt(localStorage.getItem(PANEL_WIDTH_KEY), 10);
+        if (Number.isFinite(saved)) return clampPanelWidth(saved);
+    } catch {
+        /* ignore */
+    }
+    return clampPanelWidth(PANEL_WIDTH_DEFAULT);
+}
+
+function initPanelResize() {
+    const handle = document.getElementById('arduino-panel-resize');
+    const p = panel();
+    if (!handle || !p) return;
+
+    applyPanelWidth(loadPanelWidth());
+
+    handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || p.classList.contains('hidden')) return;
+        e.preventDefault();
+        handle.setPointerCapture(e.pointerId);
+        handle.classList.add('is-dragging');
+        document.body.classList.add('arduino-panel-resizing');
+        const startX = e.clientX;
+        const startW = p.offsetWidth;
+
+        const onMove = (ev) => {
+            applyPanelWidth(startW + (startX - ev.clientX));
+            resizeCanvas();
+        };
+        const onUp = (ev) => {
+            handle.releasePointerCapture(ev.pointerId);
+            handle.classList.remove('is-dragging');
+            document.body.classList.remove('arduino-panel-resizing');
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onUp);
+            handle.removeEventListener('pointercancel', onUp);
+            resizeCanvas();
+        };
+
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
+    });
+
+    window.addEventListener('resize', () => {
+        if (p.classList.contains('hidden')) return;
+        applyPanelWidth(p.offsetWidth);
+        resizeCanvas();
+    });
+}
+
+function clampEditorFontSize(sizePx) {
+    return Math.max(EDITOR_FONT_MIN, Math.min(EDITOR_FONT_MAX, Math.round(sizePx)));
+}
+
+function getEditorFontSize() {
+    const grid = document.querySelector('.arduino-sketch-grid');
+    if (!grid) return EDITOR_FONT_DEFAULT;
+    const raw = getComputedStyle(grid).getPropertyValue('--arduino-editor-font-size').trim();
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? clampEditorFontSize(n) : EDITOR_FONT_DEFAULT;
+}
+
+function applyEditorFontSize(sizePx) {
+    const grid = document.querySelector('.arduino-sketch-grid');
+    if (!grid) return clampEditorFontSize(sizePx);
+    const size = clampEditorFontSize(sizePx);
+    grid.style.setProperty('--arduino-editor-font-size', `${size}px`);
+    try {
+        localStorage.setItem(EDITOR_FONT_KEY, String(size));
+    } catch {
+        /* ignore */
+    }
+    refreshArduinoSyntaxHighlight();
+    return size;
+}
+
+function loadEditorFontSize() {
+    try {
+        const saved = parseInt(localStorage.getItem(EDITOR_FONT_KEY), 10);
+        if (Number.isFinite(saved)) return clampEditorFontSize(saved);
+    } catch {
+        /* ignore */
+    }
+    return clampEditorFontSize(EDITOR_FONT_DEFAULT);
+}
+
+function initEditorZoom() {
+    const wrap = document.querySelector('.arduino-sketch-wrap');
+    if (!wrap) return;
+
+    applyEditorFontSize(loadEditorFontSize());
+    wrap.title = 'Ctrl + molette : zoom du texte';
+
+    wrap.addEventListener('wheel', (e) => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        const step = e.deltaY < 0 ? 1 : -1;
+        applyEditorFontSize(getEditorFontSize() + step);
+    }, { passive: false });
+}
+
 const panel = () => document.getElementById('arduino-panel');
 const sketchEl = () => document.getElementById('arduino-sketch-input');
 const logEl = () => document.getElementById('arduino-compile-log');
 const compileStatusEl = () => document.getElementById('arduino-compile-status');
 const showErrorsBtn = () => document.getElementById('arduino-btn-show-errors');
 const titleEl = () => document.getElementById('arduino-panel-title');
-const statusEl = () => document.getElementById('arduino-cli-status');
 const libSearchEl = () => document.getElementById('arduino-lib-search');
 const libSearchResultsEl = () => document.getElementById('arduino-lib-search-results');
 const libInstalledEl = () => document.getElementById('arduino-lib-installed');
 const libMsgEl = () => document.getElementById('arduino-lib-msg');
+const uploadProfileEl = () => document.getElementById('arduino-upload-profile');
+const uploadPortEl = () => document.getElementById('arduino-upload-port');
+const uploadHintEl = () => document.getElementById('arduino-upload-hint');
 
 function resolveApiBaseUrl() {
     const { protocol, pathname, origin } = window.location;
@@ -45,6 +186,95 @@ function setCompileLogVisible(visible) {
     if (btn) btn.textContent = visible ? 'Masquer les erreurs' : 'Voir les erreurs';
 }
 
+function resolveBoardFqbn(board) {
+    if (!board) return 'arduino:avr:uno';
+    board.fqbn = normalizeBoardFqbn(board);
+    return board.fqbn;
+}
+
+function populateUploadProfileSelect(board) {
+    const sel = uploadProfileEl();
+    if (!sel || !board) return;
+    const profiles = uploadProfilesForBoardType(board.type);
+    sel.replaceChildren();
+    for (const p of profiles) {
+        const opt = document.createElement('option');
+        opt.value = p.fqbn;
+        opt.textContent = p.label;
+        sel.appendChild(opt);
+    }
+    sel.value = resolveBoardFqbn(board);
+    sel.disabled = profiles.length <= 1;
+}
+
+function loadSavedUploadPort() {
+    try {
+        return localStorage.getItem(UPLOAD_PORT_KEY) || '';
+    } catch {
+        return '';
+    }
+}
+
+function saveUploadPort(port) {
+    try {
+        if (port) localStorage.setItem(UPLOAD_PORT_KEY, port);
+    } catch {
+        /* ignore */
+    }
+}
+
+function setUploadHint(text, kind = '') {
+    const el = uploadHintEl();
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'arduino-upload-hint' + (kind ? ` arduino-lib-msg--${kind}` : '');
+}
+
+export async function refreshUploadPorts() {
+    const sel = uploadPortEl();
+    if (!sel) return;
+    const saved = loadSavedUploadPort();
+    setUploadHint('Recherche des ports USB…');
+    try {
+        const base = resolveApiBaseUrl();
+        const r = await fetch(`${base}/api/arduino/boards`);
+        const data = await r.json();
+        const boards = Array.isArray(data.boards) ? data.boards : [];
+        sel.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = boards.length ? '— Choisir un port —' : 'Aucun port détecté';
+        sel.appendChild(placeholder);
+        for (const b of boards) {
+            const opt = document.createElement('option');
+            opt.value = b.port;
+            const hint = b.label && b.label !== b.port ? ` — ${b.label}` : '';
+            opt.textContent = `${b.port}${hint}`;
+            sel.appendChild(opt);
+        }
+        if (saved && boards.some((b) => b.port === saved)) {
+            sel.value = saved;
+        } else if (boards.length === 1) {
+            sel.value = boards[0].port;
+        }
+        if (!data.ok) {
+            setUploadHint((data.errors || []).join(' ') || 'Ports indisponibles (serveur distant ?).', 'err');
+            return;
+        }
+        setUploadHint(
+            boards.length
+                ? `${boards.length} port(s) détecté(s). Fermez le Moniteur série avant le téléversement.`
+                : 'Aucune carte USB détectée. Branchez l’UNO ou le XIAO puis ↻ Ports.',
+            boards.length ? 'ok' : ''
+        );
+    } catch (err) {
+        setUploadHint(
+            `${err?.message || err} — Le téléversement requiert le serveur Node sur le PC local (npm start).`,
+            'err'
+        );
+    }
+}
+
 function updateCompileStatusUi(board) {
     const status = compileStatusEl();
     const btn = showErrorsBtn();
@@ -59,6 +289,14 @@ function updateCompileStatusUi(board) {
             log.textContent = '';
             log.classList.add('hidden');
         }
+        return;
+    }
+
+    if (board.lastUploadOk) {
+        status.textContent = 'Téléversé';
+        status.className = 'arduino-compile-status arduino-compile-status--upload-ok';
+        btn.classList.add('hidden');
+        setCompileLogVisible(false);
         return;
     }
 
@@ -151,7 +389,6 @@ export async function refreshInstalledLibraries() {
             const mode = lib.source === 'local' ? 'local' : 'uninstall';
             list.appendChild(renderLibraryItem(lib, mode));
         }
-        await refreshArduinoCliStatus();
     } catch (err) {
         setLibMsg(err?.message || 'Impossible de charger les bibliothèques.', 'err');
     }
@@ -241,33 +478,53 @@ export function getActiveArduinoBoard() {
     return activeBoard;
 }
 
+function boardPanelTitle(comp) {
+    if (comp.type === 'esp32_c3') return `${comp.label} — ESP32-C3`;
+    return `${comp.label} — Arduino UNO`;
+}
+
+function defaultSketchForBoard(comp) {
+    if (comp.type === 'esp32_c3') return DEFAULT_ESP32_SKETCH;
+    return DEFAULT_ARDUINO_SKETCH;
+}
+
 export function openArduinoEditor(comp) {
-    if (!comp || comp.type !== 'arduino_uno') return;
+    if (!isMicroBoard(comp)) return;
     activeBoard = comp;
-    if (titleEl()) titleEl().textContent = `${comp.label} — Arduino UNO`;
-    if (sketchEl()) sketchEl().value = comp.sketch || DEFAULT_ARDUINO_SKETCH;
+    resolveBoardFqbn(activeBoard);
+    activeBoard.lastUploadOk = false;
+    if (titleEl()) titleEl().textContent = boardPanelTitle(comp);
+    if (sketchEl()) sketchEl().value = comp.sketch || defaultSketchForBoard(comp);
     refreshArduinoSyntaxHighlight();
     applyArduinoSketchToComponent(comp);
+    populateUploadProfileSelect(comp);
     updateCompileStatusUi(comp);
     panel()?.classList.remove('hidden');
-    refreshArduinoCliStatus();
     refreshInstalledLibraries();
+    refreshUploadPorts();
     resizeCanvas();
     requestAnimationFrame(() => sketchEl()?.focus({ preventScroll: true }));
 }
 
-/** Ouvre l’éditeur sur la première carte UNO du schéma (ou la carte déjà active). */
-export function openArduinoEditorForCircuit() {
+/** Ouvre l’éditeur sur la première carte du schéma (ou la carte déjà active). */
+export function openArduinoEditorForCircuit(preferredType) {
     if (activeBoard && circuit.components.includes(activeBoard)) {
         openArduinoEditor(activeBoard);
         return true;
     }
-    const uno = circuit.components.find((c) => c.type === 'arduino_uno');
-    if (!uno) {
-        alert('Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).');
+    const board = preferredType
+        ? circuit.components.find((c) => c.type === preferredType)
+        : circuit.components.find((c) => isMicroBoard(c));
+    if (!board) {
+        const hint = preferredType === 'esp32_c3'
+            ? 'Ajoutez d’abord une carte ESP32-C3 au schéma (menu ESP32).'
+            : preferredType === 'arduino_uno'
+                ? 'Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).'
+                : 'Ajoutez d’abord une carte Arduino UNO ou ESP32-C3 au schéma.';
+        alert(hint);
         return false;
     }
-    openArduinoEditor(uno);
+    openArduinoEditor(board);
     return true;
 }
 
@@ -297,36 +554,20 @@ export function flushArduinoSketchesBeforeSave() {
     applySketchToBoard();
 }
 
-export async function refreshArduinoCliStatus() {
-    const el = statusEl();
-    if (!el) return;
-    el.textContent = 'Vérification arduino-cli…';
-    try {
-        const base = resolveApiBaseUrl();
-        const r = await fetch(`${base}/api/arduino/status`);
-        const data = await r.json();
-        if (data.ok && data.version) {
-            el.textContent = `arduino-cli OK — ${String(data.version).split('\n')[0]}`;
-            el.className = 'arduino-cli-status arduino-cli-status--ok';
-        } else {
-            el.textContent = data.hint || 'arduino-cli introuvable sur ce serveur.';
-            el.className = 'arduino-cli-status arduino-cli-status--warn';
-        }
-    } catch {
-        el.textContent = 'Serveur Arduino injoignable (lancez npm start ou Simulateur H).';
-        el.className = 'arduino-cli-status arduino-cli-status--warn';
-    }
-}
-
 export async function compileActiveSketch() {
     if (!activeBoard) return;
     applySketchToBoard();
     saveState();
+    activeBoard.lastUploadOk = false;
     const log = logEl();
     const status = compileStatusEl();
     const btn = showErrorsBtn();
+    const fqbn = resolveBoardFqbn(activeBoard);
     if (status) {
-        status.textContent = 'Compilation…';
+        const isEsp32 = String(fqbn).includes('esp32');
+        status.textContent = isEsp32
+            ? 'Compilation ESP32… (1ère fois : installation du core, plusieurs minutes)'
+            : 'Compilation…';
         status.className = 'arduino-compile-status arduino-compile-status--busy';
     }
     if (btn) btn.classList.add('hidden');
@@ -342,7 +583,7 @@ export async function compileActiveSketch() {
             body: JSON.stringify({
                 sketch: activeBoard.sketch,
                 sketchName: activeBoard.label,
-                fqbn: activeBoard.fqbn || 'arduino:avr:uno',
+                fqbn,
             }),
         });
         const data = await r.json();
@@ -367,12 +608,78 @@ export async function compileActiveSketch() {
     }
 }
 
+export async function uploadActiveSketch() {
+    if (!activeBoard) return;
+    applySketchToBoard();
+    saveState();
+    const port = uploadPortEl()?.value || '';
+    if (!port) {
+        setUploadHint('Sélectionnez un port USB (↻ Ports) ou branchez la carte.', 'err');
+        return;
+    }
+    saveUploadPort(port);
+
+    const log = logEl();
+    const status = compileStatusEl();
+    const btn = showErrorsBtn();
+    const fqbn = resolveBoardFqbn(activeBoard);
+    activeBoard.lastUploadOk = false;
+
+    if (status) {
+        status.textContent = String(fqbn).includes('esp32') ? 'Téléversement ESP32…' : 'Téléversement…';
+        status.className = 'arduino-compile-status arduino-compile-status--busy';
+    }
+    if (btn) btn.classList.add('hidden');
+    if (log) {
+        log.textContent = 'Compilation et téléversement en cours…';
+        log.classList.remove('hidden');
+    }
+    setUploadHint(`Envoi sur ${port}…`);
+
+    const base = resolveApiBaseUrl();
+    try {
+        const r = await fetch(`${base}/api/arduino/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sketch: activeBoard.sketch,
+                sketchName: activeBoard.label,
+                fqbn,
+                port,
+            }),
+        });
+        const data = await r.json();
+        activeBoard.lastCompileOk = !!data.ok;
+        activeBoard.lastUploadOk = !!data.ok;
+        activeBoard.lastCompileLog = data.log || (data.errors || []).join('\n');
+        if (data.ok) {
+            applyArduinoSketchToComponent(activeBoard);
+            onArduinoSketchUpdated();
+            setUploadHint(`Programme téléversé sur ${port}.`, 'ok');
+        } else {
+            setUploadHint((data.errors || []).join(' ') || 'Téléversement échoué.', 'err');
+        }
+        if (log) log.textContent = activeBoard.lastCompileLog;
+        updateCompileStatusUi(activeBoard);
+        draw();
+    } catch (err) {
+        activeBoard.lastCompileOk = false;
+        activeBoard.lastUploadOk = false;
+        activeBoard.lastCompileLog = err?.message || String(err);
+        if (log) log.textContent = activeBoard.lastCompileLog;
+        setUploadHint(activeBoard.lastCompileLog, 'err');
+        updateCompileStatusUi(activeBoard);
+        draw();
+    }
+}
+
 export function prepareArduinoForSimulation() {
     syncArduinoSketchesFromEditor();
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
     }
     refreshGroveLcdDisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
+    refreshJoyitTft18DisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
 }
 
 export function initArduinoEditor() {
@@ -391,6 +698,26 @@ export function initArduinoEditor() {
     });
     document.getElementById('arduino-btn-compile')?.addEventListener('click', () => {
         compileActiveSketch();
+    });
+    document.getElementById('arduino-btn-upload')?.addEventListener('click', () => {
+        uploadActiveSketch();
+    });
+    document.getElementById('arduino-btn-refresh-ports')?.addEventListener('click', () => {
+        refreshUploadPorts();
+    });
+    uploadProfileEl()?.addEventListener('change', () => {
+        if (!activeBoard) return;
+        const fqbn = uploadProfileEl()?.value;
+        if (fqbn) {
+            activeBoard.fqbn = fqbn;
+            activeBoard.lastUploadOk = false;
+            saveState();
+            updateCompileStatusUi(activeBoard);
+        }
+    });
+    uploadPortEl()?.addEventListener('change', () => {
+        const port = uploadPortEl()?.value;
+        if (port) saveUploadPort(port);
     });
     document.getElementById('arduino-btn-show-errors')?.addEventListener('click', () => {
         const log = logEl();
@@ -455,6 +782,8 @@ export function initArduinoEditor() {
         saveState();
     });
     initArduinoSyntaxHighlight();
+    initPanelResize();
+    initEditorZoom();
 }
 
 export function onArduinoBoardRemoved(comp) {

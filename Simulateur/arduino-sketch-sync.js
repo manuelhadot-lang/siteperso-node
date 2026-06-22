@@ -1,6 +1,7 @@
-/** Synchronise le sketch éditeur → composants UNO (sans dépendre de renderer.js). */
+/** Synchronise le sketch éditeur → composants microcontrôleur (sans dépendre de renderer.js). */
 import { circuit } from './state.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
+import { isMicroBoard } from './micro-board.js';
 
 let getActiveBoard = () => null;
 
@@ -20,6 +21,6 @@ export function syncArduinoSketchesFromEditor() {
         board.sketch = el.value;
     }
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
     }
 }

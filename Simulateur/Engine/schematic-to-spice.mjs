@@ -75,15 +75,26 @@ import {
     isArduinoUnoType,
 } from "./arduino-uno.mjs";
 import {
+    appendEsp32C3Netlist,
+    esp32C3DigitalPinIndices,
+    esp32C3GpioPinName,
+    esp32C3TerminalKeys,
+    isEsp32C3Type,
+} from "./esp32-c3.mjs";
+import {
     arduinoUnoMinPulsePeriodSec,
     applyArduinoSketchToComponent,
     arduinoGpioIsTimeVarying,
 } from "./arduino-sketch-parse.mjs";
-import { annotateUnoI2cBusEngine, i2cBusMinPeriodSec } from "./i2c-bus-ideal.mjs";
+import { annotateMicroBoardI2cBusEngine, i2cBusMinPeriodSec } from "./i2c-bus-ideal.mjs";
 import {
     detectHc90Mod60FromGraphicalState,
     detectHc90MrAndQ1Q3OnSameChip,
 } from "./hc90-cascade.mjs";
+
+function isMicroBoardType(t) {
+    return isArduinoUnoType(t) || isEsp32C3Type(t);
+}
 
 function isLedType(t) {
     return t === "led" || t === "diode_led";
@@ -207,6 +218,14 @@ function isGroveDht22Type(t) {
     return t === "grove_dht22";
 }
 
+function isGroveTsl2591Type(t) {
+    return t === "grove_tsl2591";
+}
+
+function isJoyitTft18Type(t) {
+    return t === "joyit_tft18";
+}
+
 function seg7TerminalKeys(c) {
     const keys = [];
     for (let i = 0; i < 8; i++) keys.push(`${c.id}#${i}`);
@@ -226,6 +245,12 @@ function terminalKeysForComponent(c) {
     if (isBargraphDc10hType(c.type)) return bargraphTerminalKeys(c);
     if (isGroveLcdType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isGroveDht22Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
+    if (isGroveTsl2591Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
+    if (isJoyitTft18Type(c.type)) {
+        const keys = [];
+        for (let i = 0; i < 7; i++) keys.push(`${c.id}#${i}`);
+        return keys;
+    }
     if (isOscilloscopeType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
     if (isThreeTerminalType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
     if (isLogicGateComponentType(c.type)) {
@@ -251,6 +276,7 @@ function terminalKeysForComponent(c) {
         return keys;
     }
     if (isArduinoUnoType(c.type)) return arduinoUnoTerminalKeys(c);
+    if (isEsp32C3Type(c.type)) return esp32C3TerminalKeys(c);
     if (isSingleTerminalRefType(c.type)) return [`${c.id}#0`];
     if (isTwoTerminalType(c.type) || isSignalGeneratorType(c.type)) {
         return [`${c.id}#0`, `${c.id}#1`];
@@ -280,10 +306,44 @@ function circuitHasAutonomousLcOscillator(components) {
     );
 }
 
-/** Comparateur / Schmitt (boucle + ou boucle ouverte) : bascule dure. Amplificateur (boucle −) : tanh raide. */
-function opampUsesComparatorModel(c, parent, components) {
-    const topo = new Map(parent);
+const OPAMP_FEEDBACK_PROBE_TYPES = new Set([
+    "oscilloscope",
+    "voltmeter",
+    "ammeter",
+    "voltmeter_rms",
+    "ammeter_rms",
+    "bode_analyzer",
+]);
+
+/** Union-find pour la rétroaction AOP : ignore les sondes (haute-Z), qui ne forment pas une boucle réelle. */
+function buildOpampFeedbackParent(components, wires) {
+    const probeIds = new Set(
+        components.filter((comp) => OPAMP_FEEDBACK_PROBE_TYPES.has(comp.type)).map((comp) => comp.id)
+    );
+    const isProbeKey = (key) => probeIds.has(String(key).split("#")[0]);
+    const topo = new Map();
+    const touch = (key) => {
+        if (!topo.has(key)) topo.set(key, key);
+    };
+    for (const comp of components) {
+        for (const key of terminalKeysForComponent(comp)) {
+            if (!isProbeKey(key)) touch(key);
+        }
+    }
+    for (const wire of wires) {
+        if (!wire?.solid || !wire.fromKey || !wire.toKey) continue;
+        if (isProbeKey(wire.fromKey) || isProbeKey(wire.toKey)) continue;
+        touch(wire.fromKey);
+        touch(wire.toKey);
+        ufUnion(topo, wire.fromKey, wire.toKey);
+    }
     ufUnionPassiveInternals(topo, components);
+    return topo;
+}
+
+/** Comparateur / Schmitt (boucle + ou boucle ouverte) : bascule dure. Amplificateur (boucle −) : tanh raide. */
+function opampUsesComparatorModel(c, components, wires) {
+    const topo = buildOpampFeedbackParent(components, wires);
     const outKey = `${c.id}#2`;
     const posKey = `${c.id}#0`;
     const negKey = `${c.id}#1`;
@@ -1053,7 +1113,7 @@ function computeTranTiming(components, deckOpts = {}) {
     }
     const hasArduinoPulse = components.some(
         (c) =>
-            isArduinoUnoType(c.type) &&
+            isMicroBoardType(c.type) &&
             ((c.pinPulses && Object.keys(c.pinPulses).length > 0) ||
                 (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2))
     );
@@ -1108,17 +1168,19 @@ function pointOnWireSegment(p, a, b) {
  * inutile de lancer un .tran ngspice (lent sur Render).
  */
 function isArduinoIdealOnlyCircuit(components) {
-    const arduinos = components.filter((c) => isArduinoUnoType(c.type));
-    if (!arduinos.length) return false;
-    if (!arduinos.some((c) => arduinoGpioIsTimeVarying(c))) return false;
+    const boards = components.filter((c) => isMicroBoardType(c.type));
+    if (!boards.length) return false;
+    if (!boards.some((c) => arduinoGpioIsTimeVarying(c))) return false;
     for (const c of components) {
-        if (isArduinoUnoType(c.type)) continue;
+        if (isMicroBoardType(c.type)) continue;
         if (
             c.type === "bargraph_dc10h" ||
             c.type === "seg7" ||
             c.type === "led" ||
             c.type === "grove_lcd16x2" ||
             c.type === "grove_dht22" ||
+            c.type === "grove_tsl2591" ||
+            c.type === "joyit_tft18" ||
             c.type === "ground" ||
             c.type === "gnd" ||
             c.type === "push_button" ||
@@ -1149,9 +1211,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const wires = Array.isArray(state.wires) ? state.wires : [];
 
     for (const c of components) {
-        if (isArduinoUnoType(c.type)) {
+        if (isMicroBoardType(c.type)) {
             applyArduinoSketchToComponent(c);
-            annotateUnoI2cBusEngine(c, components, wires);
+            annotateMicroBoardI2cBusEngine(c, components, wires);
         }
     }
 
@@ -1213,8 +1275,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     );
 
     const hasAutonomousLcOscillator = circuitHasAutonomousLcOscillator(components);
-    const hasArduinoUno = components.some((c) => isArduinoUnoType(c.type));
-    if (needsDcSupply && !powerSrc && !hasVtermPower && !hasAutonomousLcOscillator && !hasArduinoUno) {
+    const hasMicroBoard = components.some((c) => isMicroBoardType(c.type));
+    if (needsDcSupply && !powerSrc && !hasVtermPower && !hasAutonomousLcOscillator && !hasMicroBoard) {
         return {
             ok: false,
             errors: [
@@ -1231,7 +1293,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             analysisTran: false,
         };
     }
-    if (!powerSrc && !hasVtermPower && !hasArduinoUno && ohmeterComponents.length === 0 && groundComponents.length === 0) {
+    if (!powerSrc && !hasVtermPower && !hasMicroBoard && ohmeterComponents.length === 0 && groundComponents.length === 0) {
         return {
             ok: false,
             errors: [
@@ -1271,7 +1333,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     if (
         powerSrc &&
         (powerSrc.type === "vsin" || powerSrc.type === "vsquare") &&
-        groundComponents.length > 0
+        groundComponents.length > 0 &&
+        (terminalWireCount.get(`${powerSrc.id}#0`) || 0) === 0
     ) {
         ufUnion(parent, `${powerSrc.id}#0`, gndKey);
     }
@@ -1558,9 +1621,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const nPlus = nodeFor(`${c.id}#0`);
             const nMinus = nodeFor(`${c.id}#1`);
             const nOut = nodeFor(`${c.id}#2`);
-            const comparatorMode = opampUsesComparatorModel(c, parent, components);
-            const topo = new Map(parent);
-            ufUnionPassiveInternals(topo, components);
+            const comparatorMode = opampUsesComparatorModel(c, components, wires);
+            const topo = buildOpampFeedbackParent(components, wires);
             const outEqualsPlus = ufFind(topo, `${c.id}#2`) === ufFind(topo, `${c.id}#0`);
             let bOut = nOut;
             if (outEqualsPlus) {
@@ -1622,6 +1684,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             appendIc74hc90Netlist(c, nodeFor, vhi, lines, spiceBranchName, deckOpts);
         } else if (isArduinoUnoType(c.type)) {
             appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
+        } else if (isEsp32C3Type(c.type)) {
+            appendEsp32C3Netlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isLogicCd4511Type(c.type)) {
             const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
@@ -1892,11 +1956,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     );
     const hasArduinoPulse = components.some(
         (c) =>
-            isArduinoUnoType(c.type) &&
+            isMicroBoardType(c.type) &&
             ((c.pinPulses && Object.keys(c.pinPulses).length > 0) ||
                 (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2))
     );
-    const hasI2cBus = components.some((c) => isArduinoUnoType(c.type) && c.i2cBus?.active);
+    const hasI2cBus = components.some((c) => isMicroBoardType(c.type) && c.i2cBus?.active);
     let useTran =
         hasPulseSource ||
         hasArduinoPulse ||
@@ -2227,7 +2291,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             });
         }
         for (const c of components) {
-            if (!isLogicGateComponentType(c.type) && !isLogicDigitalSimType(c.type) && !isArduinoUnoType(c.type)) continue;
+            if (!isLogicGateComponentType(c.type) && !isLogicDigitalSimType(c.type) && !isMicroBoardType(c.type)) continue;
             let outKeys = [];
             if (isLogicGateComponentType(c.type)) outKeys = [logicGateOutputNodeKey(c)];
             else if (c.type === "logic_dff") {
@@ -2245,6 +2309,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 outKeys = cd4511OutputNodeKeys(c);
             } else if (isArduinoUnoType(c.type)) {
                 outKeys = arduinoUnoDigitalPinIndices().map((i) => `${c.id}#${i}`);
+            } else if (isEsp32C3Type(c.type)) {
+                outKeys = esp32C3DigitalPinIndices().map((i) => `${c.id}#${i}`);
             }
             let vhiTran = 5;
             if (isLogicGateComponentType(c.type)) {
@@ -2275,6 +2341,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 vhiTran = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             } else if (isArduinoUnoType(c.type)) {
                 vhiTran = 5;
+            } else if (isEsp32C3Type(c.type)) {
+                vhiTran = 3.3;
             }
             for (const outKey of outKeys) {
                 const nOut = nodeFor(outKey);
@@ -2301,6 +2369,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 } else if (isArduinoUnoType(c.type)) {
                     const pinIdx = Number(String(outKey).split("#")[1]);
                     if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${arduinoUnoDigitalPinName(pinIdx)}`;
+                } else if (isEsp32C3Type(c.type)) {
+                    const pinIdx = Number(String(outKey).split("#")[1]);
+                    if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${esp32C3GpioPinName(pinIdx)}`;
                 }
                 logicGatesTranMeta.push({
                     id: icOutId,
@@ -2696,6 +2767,16 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 `${c.id} (Grove DHT22) : lecture T°/humidité simulée via bibliothèque DHT.h sur broche DATA (câbler DATA→Dx, VCC→5V, GND).`
             );
         }
+        if (c.type === "grove_tsl2591") {
+            warnings.push(
+                `${c.id} (Grove TSL2591) : luminosité simulée via Adafruit_TSL2591 sur I²C (SDA/SCL, adresse 0x29, VCC/GND). Double-clic pour régler les lux.`
+            );
+        }
+        if (c.type === "joyit_tft18") {
+            warnings.push(
+                `${c.id} (Joy-it TFT 1.8″ ST7735) : affichage simulé via Adafruit_ST7735 (SPI : SCL→D13, SDA→D11, CS→D10, DC→D8, RES→D9, VCC/GND).`
+            );
+        }
         if (c.type === "seg7") {
             const comKey = `${c.id}#7`;
             if ((terminalWireCount.get(comKey) || 0) === 0) {
@@ -2816,6 +2897,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                     inputs: [],
                     vhi,
                     vth: 2.5,
+                });
+            }
+        } else if (isEsp32C3Type(c.type)) {
+            const vhi = 3.3;
+            for (const pinIdx of esp32C3DigitalPinIndices()) {
+                const pinName = esp32C3GpioPinName(pinIdx);
+                logicGates.push({
+                    id: `${c.id}_${pinName}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${pinIdx}`),
+                    inputs: [],
+                    vhi,
+                    vth: 1.65,
                 });
             }
         } else if (isIc74ls74Type(c.type)) {

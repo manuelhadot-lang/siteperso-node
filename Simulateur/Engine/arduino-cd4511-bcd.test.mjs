@@ -71,7 +71,7 @@ if (!built.ok) {
     console.error("BUILD FAILED:", built.errors);
     process.exit(1);
 }
-assert.match(built.netlist, /VUNO1_D13.*DC 5/i, "D13 doit être à 5 V");
+assert.match(built.netlist, /V_UNO1_D13.*DC 5/i, "D13 doit être à 5 V");
 console.log("netlist OK, analysisTran:", built.analysisTran);
 
 if (!existsSync(ngspice)) {

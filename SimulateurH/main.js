@@ -91,6 +91,21 @@ if (!gotLock) {
 
     app.whenReady().then(async () => {
         try {
+            const repoRoot = resolveRepoRoot();
+            const bundlePath = isDevMode()
+                ? path.join(__dirname, "..", "tools", "arduino-cli-bundle.cjs")
+                : path.join(process.resourcesPath, "simulator-app", "tools", "arduino-cli-bundle.cjs");
+            const { applyArduinoCliEnvironment } = require(bundlePath);
+            const arduinoEnv = await applyArduinoCliEnvironment({
+                repoRoot,
+                userDataDir: app.getPath("userData"),
+            });
+            if (arduinoEnv.ok) {
+                console.log("[Simulateur H] arduino-cli : " + arduinoEnv.exe);
+                console.log("[Simulateur H] arduino-data : " + arduinoEnv.dataDir);
+            } else if (arduinoEnv.bundled) {
+                console.warn("[Simulateur H] Bundle Arduino incomplet : " + (arduinoEnv.reason || ""));
+            }
             const startUrl = await startBackend();
             createWindow(startUrl);
         } catch (err) {

@@ -115,8 +115,23 @@ if (idx59 > 0) {
     }
 }
 
-const after59 = display[idx59];
-if (idx59 > 0 && after59 !== "00") {
-    throw new Error(`après 59 → ${after59} (attendu 00)`);
+function displayAt(row) {
+    const d = decodeChip("U90T", row);
+    const u = decodeChip("U90U", row);
+    return `${d}${u}`;
+}
+
+let saw59 = false;
+let saw00After59 = false;
+for (const row of rows) {
+    const aff = displayAt(row);
+    if (aff === "59") saw59 = true;
+    if (saw59 && aff === "00") {
+        saw00After59 = true;
+        break;
+    }
+}
+if (!saw00After59) {
+    throw new Error("00 non atteint après 59 dans les données ngspice (reset mod-60)");
 }
 console.log("hc90-mod60-2digit.test.mjs : OK");

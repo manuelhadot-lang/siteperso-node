@@ -1,5 +1,5 @@
 /**
- * Valeurs idéales GPIO Arduino (5 V / 0 V) pour voltmètre / BCD / 7 segments.
+ * Valeurs idéales GPIO microcontrôleur (5 V / 3,3 V) pour voltmètre / BCD / 7 segments / bargraph.
  */
 
 import { bcdDigitToSeg7Segments } from "./bcd-seg7.mjs";
@@ -10,6 +10,11 @@ import {
 } from "./arduino-sketch-parse.mjs";
 import { isPinOutput } from "./arduino-avr-registers.mjs";
 import { reachableJonctions } from "./hc90-cascade.mjs";
+import {
+    boardProfile,
+    bcdInputJonctionRegex,
+    isMicroBoardType,
+} from "./micro-board-config.mjs";
 
 const CD4511_BCD_INPUTS = { A: 0, B: 1, C: 2, D: 3 };
 const SEG7_OFF = { a: false, b: false, c: false, d: false, e: false, f: false, g: false };
@@ -21,41 +26,53 @@ function isGndJunction(jid) {
     return /^GND\d+$/.test(prefix);
 }
 
-function parseArduinoPinAtJunction(jid, components, pinLevelsByUno) {
+function isGpioOutputPin(comp, suffix) {
+    if (comp.type === "arduino_uno") {
+        return (
+            (comp.avrRegisters && isPinOutput(comp.avrRegisters, suffix)) ||
+            comp.pinModes?.[suffix] === "OUTPUT"
+        );
+    }
+    if (comp.type === "esp32_c3") {
+        return comp.pinModes?.[suffix] === "OUTPUT";
+    }
+    return false;
+}
+
+function parseBoardPinAtJunction(jid, components, pinLevelsByBoard) {
     if (!jid) return null;
     for (const comp of components) {
-        if (comp.type !== "arduino_uno" || !jid.startsWith(`${comp.label}_`)) continue;
+        if (!isMicroBoardType(comp.type) || !jid.startsWith(`${comp.label}_`)) continue;
         const suffix = jid.slice(comp.label.length + 1);
-        if (!/^D\d+$|^A\d+$/.test(suffix)) continue;
-        const out =
-            (comp.avrRegisters && isPinOutput(comp.avrRegisters, suffix)) ||
-            comp.pinModes?.[suffix] === "OUTPUT";
-        if (!out) continue;
-        const levels = pinLevelsByUno?.get(comp.label) || comp.pinLevels || {};
+        const isUnoPin = /^D\d+$|^A\d+$/.test(suffix);
+        const isEspPin = /^GPIO\d+$/.test(suffix);
+        if (!isUnoPin && !isEspPin) continue;
+        if (!isGpioOutputPin(comp, suffix)) continue;
+        const prof = boardProfile(comp.type);
+        const levels = pinLevelsByBoard?.get(comp.label) || comp.pinLevels || {};
         const high = levels[suffix] === 1 || levels[suffix] === "1" || levels[suffix] === true;
-        return { pinLabel: suffix, high, volts: high ? 5 : 0 };
+        return { pinLabel: suffix, high, volts: high ? prof.logicVolts : 0 };
     }
     return null;
 }
 
-function buildPinLevelsByUno(components, tSec = 0) {
+function buildPinLevelsByBoard(components, tSec = 0) {
     const map = new Map();
     for (const comp of components) {
-        if (comp.type !== "arduino_uno") continue;
+        if (!isMicroBoardType(comp.type)) continue;
         applyArduinoSketchToComponent(comp);
         map.set(comp.label, resolvePinLevelsAt(comp, tSec));
     }
     return map;
 }
 
-/** Classifie une jonction : Arduino OUTPUT, masse, ou flottant (inclut jonctions T). */
 function classifyJonction(jid, components, wires, autoJunctions = [], tSec = 0) {
     if (!jid) return { kind: "unknown" };
-    const pinLevelsByUno = buildPinLevelsByUno(components, tSec);
+    const pinLevelsByBoard = buildPinLevelsByBoard(components, tSec);
     const net = reachableJonctions(jid, wires, autoJunctions);
     for (const cur of net) {
         if (isGndJunction(cur)) return { kind: "gnd", volts: 0 };
-        const ar = parseArduinoPinAtJunction(cur, components, pinLevelsByUno);
+        const ar = parseBoardPinAtJunction(cur, components, pinLevelsByBoard);
         if (ar) return { kind: "arduino", volts: ar.volts, high: ar.high };
     }
     return { kind: "unknown" };
@@ -68,7 +85,6 @@ export function traceJonctionToIdealVolts(jid, components, wires, tSec = 0, auto
     return null;
 }
 
-/** Voltmètre : détecte Arduino vs GND sur _in ou _out (câblage +/− libre). */
 export function getIdealVoltmeterVoltage(vmLabel, components, wires, tSec = 0, autoJunctions = []) {
     const out = classifyJonction(`${vmLabel}_out`, components, wires, autoJunctions, tSec);
     const inn = classifyJonction(`${vmLabel}_in`, components, wires, autoJunctions, tSec);
@@ -107,39 +123,43 @@ function resolveCd4511ForSeg7(segLabel, components, wires, autoJunctions = []) {
 }
 
 /**
- * Détecte le câblage CD4511 A…D → UNO D0…D3 (permutation).
- * @returns {Record<'A'|'B'|'C'|'D', number>|null} bit PORTD (0–3) par entrée BCD
+ * Détecte le câblage CD4511 A…D → D0…D3 (UNO) ou GPIO0…GPIO3 (ESP32).
  */
-export function detectPortDMappingForCd4511(cd4511Label, unoLabel, wires, autoJunctions = []) {
+export function detectPortDMappingForCd4511(cd4511Label, boardLabel, boardType, wires, autoJunctions = []) {
     const map = {};
+    const re = bcdInputJonctionRegex(boardLabel, boardType);
     for (const name of Object.keys(CD4511_BCD_INPUTS)) {
         const jid = `${cd4511Label}_${name}`;
         const net = reachableJonctions(jid, wires, autoJunctions);
-        let dPin = null;
+        let pinNum = null;
         for (const j of net) {
-            const m = new RegExp(`^${unoLabel}_D([0-3])$`).exec(j);
+            const m = re.exec(j);
             if (m) {
-                dPin = parseInt(m[1], 10);
+                pinNum = parseInt(m[1], 10);
                 break;
             }
         }
-        if (dPin == null) return null;
-        map[name] = dPin;
+        if (pinNum == null) return null;
+        map[name] = pinNum;
     }
     return map;
 }
 
-function findUnoPortDMappingForCd4511(cd4511Label, components, wires, autoJunctions) {
+function findBoardPortDMappingForCd4511(cd4511Label, components, wires, autoJunctions) {
     for (const comp of components) {
-        if (comp.type !== "arduino_uno" || !comp.label) continue;
+        if (!isMicroBoardType(comp.type) || !comp.label) continue;
         applyArduinoSketchToComponent(comp);
-        const map = detectPortDMappingForCd4511(cd4511Label, comp.label, wires, autoJunctions);
-        if (map) return { uno: comp, map };
+        const map = detectPortDMappingForCd4511(cd4511Label, comp.label, comp.type, wires, autoJunctions);
+        if (map) return { board: comp, map };
     }
     return null;
 }
 
-/** BCD à partir de PORTD et du câblage (A→Dx, B→Dy…). */
+function pinLabelForBcdBit(boardType, bitNum) {
+    if (boardType === "esp32_c3") return `GPIO${bitNum}`;
+    return `D${bitNum}`;
+}
+
 export function bcdFromPortDRegister(portD, inputToBit) {
     const port = (Number(portD) || 0) & 0xff;
     let bcd = 0;
@@ -151,20 +171,35 @@ export function bcdFromPortDRegister(portD, inputToBit) {
     return bcd;
 }
 
-function bcdFromMappedPortDAtTime(uno, map, tSec) {
-    if (uno?.liveLevels || arduinoGpioIsTimeVarying(uno)) {
-        const levels = resolvePinLevelsAt(uno, tSec);
+function bcdFromMappedPortDAtTime(board, map, tSec) {
+    if (board?.liveLevels || arduinoGpioIsTimeVarying(board)) {
+        const levels = resolvePinLevelsAt(board, tSec);
         let bcd = 0;
         for (const [name, bcdBit] of Object.entries(CD4511_BCD_INPUTS)) {
             const dPin = map[name];
-            const label = `D${dPin}`;
+            const label = pinLabelForBcdBit(board.type, dPin);
             if (levels[label] === 1 || levels[label] === "1" || levels[label] === true) {
                 bcd |= 1 << bcdBit;
             }
         }
         return bcd;
     }
-    return bcdFromPortDRegister(uno.avrRegisters?.PORTD ?? 0, map);
+    if (board.type === "esp32_c3") {
+        return bcdFromMappedGpioLevels(board.pinLevels || {}, map);
+    }
+    return bcdFromPortDRegister(board.avrRegisters?.PORTD ?? 0, map);
+}
+
+function bcdFromMappedGpioLevels(levels, map) {
+    let bcd = 0;
+    for (const [name, bcdBit] of Object.entries(CD4511_BCD_INPUTS)) {
+        const dPin = map[name];
+        const label = `GPIO${dPin}`;
+        if (levels[label] === 1 || levels[label] === "1" || levels[label] === true) {
+            bcd |= 1 << bcdBit;
+        }
+    }
+    return bcd;
 }
 
 function bcdFromTrace(cd4511Label, components, wires, tSec, autoJunctions) {
@@ -175,15 +210,15 @@ function bcdFromTrace(cd4511Label, components, wires, tSec, autoJunctions) {
         const v = traceJonctionToIdealVolts(jid, components, wires, tSec, autoJunctions);
         if (v == null) continue;
         any = true;
-        if (v >= 2.5) bcd |= 1 << idx;
+        if (v >= 1.0) bcd |= 1 << idx;
     }
     return any ? bcd : null;
 }
 
 export function getIdealArduinoBcdForCd4511(cd4511Label, components, wires, tSec = 0, autoJunctions = []) {
-    const linked = findUnoPortDMappingForCd4511(cd4511Label, components, wires, autoJunctions);
+    const linked = findBoardPortDMappingForCd4511(cd4511Label, components, wires, autoJunctions);
     if (linked) {
-        return bcdFromMappedPortDAtTime(linked.uno, linked.map, tSec);
+        return bcdFromMappedPortDAtTime(linked.board, linked.map, tSec);
     }
     return bcdFromTrace(cd4511Label, components, wires, tSec, autoJunctions);
 }
@@ -199,7 +234,6 @@ export function getIdealSeg7FromArduino(segLabel, components, wires, tSec = 0, a
 
 const BARGRAPH_LIT_DELTA_V = 0.35;
 
-/** Bargraph DC10H câblé directement sur des sorties GPIO Arduino (s1…s10, COM→GND). */
 export function getIdealBargraphFromArduino(barLabel, components, wires, tSec = 0, autoJunctions = []) {
     if (!barLabel) return null;
     const vCom = traceJonctionToIdealVolts(`${barLabel}_COM`, components, wires, tSec, autoJunctions);

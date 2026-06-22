@@ -62,6 +62,6 @@ assert.ok(parsed, "LCD sketch parsed");
 assert.equal(parsed.loopVarBindings.t, "26.3");
 
 const display = resolveLcdDisplayAt(parsed, 100, { ctx });
-assert.ok(display?.lines[0].trim().startsWith("26.3"), `LCD shows temp, got: "${display?.lines[0]}"`);
+assert.ok(/^26[.,]3/.test(display?.lines[0].trim()), `LCD shows temp, got: "${display?.lines[0]}"`);
 
 console.log("dht22-lcd-sketch.test.mjs OK");

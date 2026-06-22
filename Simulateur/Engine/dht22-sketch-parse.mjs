@@ -8,16 +8,32 @@ function stripComments(src) {
         .replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-const PIN_MAP = {
+const PIN_MAP_UNO = {
     0: "D0", 1: "D1", 2: "D2", 3: "D3", 4: "D4", 5: "D5", 6: "D6", 7: "D7",
     8: "D8", 9: "D9", 10: "D10", 11: "D11", 12: "D12", 13: "D13",
 };
 
-function resolvePinToken(tok) {
+const PIN_MAP_ESP32 = {
+    0: "GPIO0", 1: "GPIO1", 2: "GPIO2", 3: "GPIO3", 4: "GPIO4", 5: "GPIO5",
+    6: "GPIO6", 7: "GPIO7", 8: "GPIO8", 9: "GPIO9", 10: "GPIO10",
+    20: "GPIO20", 21: "GPIO21",
+};
+
+function resolvePinToken(tok, boardType = "arduino_uno") {
     const t = String(tok || "").trim();
+    if (/^GPIO\s*(\d+)$/i.test(t)) {
+        const m = t.match(/^GPIO\s*(\d+)$/i);
+        return `GPIO${m[1]}`;
+    }
     if (/^D\d+$/i.test(t)) return t.toUpperCase();
     const n = parseInt(t, 10);
-    if (Number.isFinite(n) && PIN_MAP[n]) return PIN_MAP[n];
+    if (Number.isFinite(n)) {
+        if (boardType === "esp32_c3") {
+            if (PIN_MAP_ESP32[n]) return PIN_MAP_ESP32[n];
+        } else if (PIN_MAP_UNO[n]) {
+            return PIN_MAP_UNO[n];
+        }
+    }
     if (/^A(\d+)$/i.test(t)) return t.toUpperCase();
     return null;
 }
@@ -49,14 +65,14 @@ export function sketchLcdUsesDhtReads(sketch) {
  * @param {string} sketch
  * @returns {{ varName: string, pinLabel: string | null, sensorType: string, baseTemp: number, baseHum: number } | null}
  */
-export function parseDht22FromSketch(sketch) {
+export function parseDht22FromSketch(sketch, boardType = "arduino_uno") {
     const src = stripComments(sketch);
     if (!sketchUsesDht(src)) return null;
 
     const ctor = src.match(/\bDHT\s+(\w+)\s*\(\s*([^,)]+)\s*,\s*([^)]+)\s*\)/i);
     const varName = ctor?.[1] ?? "dht";
     const pinRaw = ctor ? resolveSketchToken(src, ctor[2]) : null;
-    const pinLabel = pinRaw ? resolvePinToken(pinRaw) : null;
+    const pinLabel = pinRaw ? resolvePinToken(pinRaw, boardType) : null;
     const typeRaw = resolveSketchToken(src, String(ctor?.[3] ?? "DHT22").trim());
     const sensorType = /22/.test(typeRaw) ? "DHT22" : "DHT11";
 

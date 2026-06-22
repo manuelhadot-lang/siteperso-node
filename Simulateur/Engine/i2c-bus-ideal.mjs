@@ -11,8 +11,9 @@ import {
     pwlToSpiceString,
 } from "./i2c-protocol.mjs";
 import { buildLcdI2cWaveformFromSketch } from "./lcd-pcf8574-i2c.mjs";
+import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
 
-/** Indices broches UNO (alignés sur arduino-uno.mjs). */
+/** Indices broches UNO (rétrocompatibilité tests). */
 const UNO_A4 = 11;
 const UNO_A5 = 12;
 const UNO_5V = 3;
@@ -43,9 +44,14 @@ function isLcdPoweredEngine(lcdId, components, wires) {
                 vccOk = true;
             }
         }
-        if (comp.type === "arduino_uno") {
-            if (vccNet.has(`${id}#${UNO_5V}`) || vccNet.has(`${id}#2`)) vccOk = true;
-            if (gndNet.has(`${id}#${UNO_GND}`) || gndNet.has(`${id}#${UNO_GND2}`)) gndOk = true;
+        if (isMicroBoardType(comp.type)) {
+            if (comp.type === "arduino_uno") {
+                if (vccNet.has(`${id}#3`) || vccNet.has(`${id}#2`)) vccOk = true;
+                if (gndNet.has(`${id}#4`) || gndNet.has(`${id}#5`)) gndOk = true;
+            } else if (comp.type === "esp32_c3") {
+                if (vccNet.has(`${id}#0`) || vccNet.has(`${id}#17`)) vccOk = true;
+                if (gndNet.has(`${id}#1`) || gndNet.has(`${id}#2`)) gndOk = true;
+            }
         }
         if (gndNet.has(`${id}#0`) || gndNet.has(`${id}#1`)) {
             if (comp.type === "ground" || comp.type === "gnd" || comp.type === "battery") gndOk = true;
@@ -54,41 +60,58 @@ function isLcdPoweredEngine(lcdId, components, wires) {
     return vccOk && gndOk;
 }
 
-function isLcdI2cWiredToUnoEngine(unoId, lcdId, wires) {
+function isLcdI2cWiredToBoardEngine(boardId, boardType, lcdId, wires) {
+    const prof = boardProfile(boardType);
     const sdaNet = reachableTerminalKeys(`${lcdId}#${LCD_SDA}`, wires);
     const sclNet = reachableTerminalKeys(`${lcdId}#${LCD_SCL}`, wires);
-    return sdaNet.has(`${unoId}#${UNO_A4}`) && sclNet.has(`${unoId}#${UNO_A5}`);
+    return (
+        sdaNet.has(`${boardId}#${prof.i2c.sda.idx}`) &&
+        sclNet.has(`${boardId}#${prof.i2c.scl.idx}`)
+    );
+}
+
+/** @deprecated alias UNO */
+function isLcdI2cWiredToUnoEngine(unoId, lcdId, wires) {
+    return isLcdI2cWiredToBoardEngine(unoId, "arduino_uno", lcdId, wires);
 }
 
 /**
- * Marque l'UNO comme émetteur I²C si sketch LiquidCrystal_I2C + LCD Grove câblé.
+ * Marque la carte comme émetteur I²C si sketch LiquidCrystal_I2C + LCD Grove câblé.
  */
-export function annotateUnoI2cBusEngine(uno, components, wires) {
-    if (!uno || uno.type !== "arduino_uno") return;
-    const unoId = uno.id || uno.label;
-    if (!unoId || !sketchUsesI2cLcd(uno.sketch)) {
-        delete uno.i2cBus;
+export function annotateMicroBoardI2cBusEngine(board, components, wires) {
+    if (!board || !isMicroBoardType(board.type)) return;
+    const boardId = board.id || board.label;
+    if (!boardId || !sketchUsesI2cLcd(board.sketch)) {
+        delete board.i2cBus;
         return;
     }
     for (const lcd of components) {
         if (lcd.type !== "grove_lcd16x2") continue;
         const lcdId = lcd.id || lcd.label;
         if (!lcdId) continue;
-        if (!isLcdI2cWiredToUnoEngine(unoId, lcdId, wires)) continue;
+        if (!isLcdI2cWiredToBoardEngine(boardId, board.type, lcdId, wires)) continue;
         if (!isLcdPoweredEngine(lcdId, components, wires)) continue;
-        uno.i2cBus = {
+        const prof = boardProfile(board.type);
+        board.i2cBus = {
             active: true,
             address: lcd.i2cAddress ?? 0x3e,
             lcdId,
+            sdaIdx: prof.i2c.sda.idx,
+            sclIdx: prof.i2c.scl.idx,
         };
         return;
     }
-    delete uno.i2cBus;
+    delete board.i2cBus;
+}
+
+/** @deprecated — préférer annotateMicroBoardI2cBusEngine */
+export function annotateUnoI2cBusEngine(uno, components, wires) {
+    return annotateMicroBoardI2cBusEngine(uno, components, wires);
 }
 
 export function i2cBusMinPeriodSec(components) {
     for (const c of components) {
-        if (c.type === "arduino_uno" && c.i2cBus?.active) return I2C_SCL_PERIOD_SEC;
+        if (isMicroBoardType(c.type) && c.i2cBus?.active) return I2C_SCL_PERIOD_SEC;
     }
     return 0;
 }
@@ -102,10 +125,14 @@ export function appendI2cBusNetlist(c, nodeFor, lines, spiceBranchName, repeatUn
     if (!wf?.sda?.length || !wf?.scl?.length) return;
 
     const id = c.id;
-    const nSda = nodeFor(`${id}#${UNO_A4}`);
-    const nScl = nodeFor(`${id}#${UNO_A5}`);
+    const sdaIdx = c.i2cBus.sdaIdx ?? UNO_A4;
+    const sclIdx = c.i2cBus.sclIdx ?? UNO_A5;
+    const nSda = nodeFor(`${id}#${sdaIdx}`);
+    const nScl = nodeFor(`${id}#${sclIdx}`);
 
     lines.push(`* ${id} I²C PCF8574 — ${I2C_SCL_HZ / 1000} kHz, START/STOP/ACK, PWL ${formatSpiceTime(wf.durationSec)} s`);
     lines.push(`${spiceBranchName("V", `${id}_SDA_DRV`)} ${nSda} 0 ${pwlToSpiceString(wf.sda)}`);
     lines.push(`${spiceBranchName("V", `${id}_SCL_DRV`)} ${nScl} 0 ${pwlToSpiceString(wf.scl)}`);
 }
+
+export { isLcdI2cWiredToUnoEngine };

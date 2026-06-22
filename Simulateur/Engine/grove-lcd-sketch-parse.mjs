@@ -40,6 +40,8 @@ function cloneLines(st) {
     return visibleLcdLines(st);
 }
 
+import { expandUserFunctionCalls } from "./sketch-functions.mjs";
+
 function stripComments(src) {
     return String(src || "")
         .replace(/\/\/[^\n]*/g, "")
@@ -87,6 +89,10 @@ function parsePrintArg(arg, ctx) {
     if (ctx?.resolveDht) {
         const dhtVal = ctx.resolveDht(t);
         if (dhtVal != null) return formatLcdDecimalText(dhtVal);
+    }
+    if (ctx?.resolveTsl) {
+        const tslVal = ctx.resolveTsl(t);
+        if (tslVal != null) return formatLcdDecimalText(tslVal);
     }
     if (ctx?.varBindings && Object.prototype.hasOwnProperty.call(ctx.varBindings, t)) {
         return formatLcdDecimalText(ctx.varBindings[t]);
@@ -472,8 +478,8 @@ export function parseGroveLcdFromSketch(sketch, ctx = null) {
     const phases = [];
     const timeRef = { ms: 0 };
 
-    const setupBody = extractFunctionBody(src, "setup");
-    const loopBody = extractFunctionBody(src, "loop");
+    const setupBody = expandUserFunctionCalls(extractFunctionBody(src, "setup"), src);
+    const loopBody = expandUserFunctionCalls(extractFunctionBody(src, "loop"), src);
     const setupDurationMs = runTimedBody(setupBody, varName, phases, st, timeRef, src, ctx);
     const setupEndState = cloneLcdState(st);
     const loopEvents = parseTimedEvents(loopBody, varName);

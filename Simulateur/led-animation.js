@@ -30,19 +30,23 @@ import {
     injectRuntimeSerialRx,
     getRuntimeSerialMeta,
 } from './Engine/arduino-sketch-parse.mjs';
-import { readUnoAnalogInputs } from './Engine/arduino-analog-ideal.mjs';
+import { readBoardAnalogInputs } from './Engine/arduino-analog-ideal.mjs';
 import { sketchUsesSerial } from './Engine/arduino-uart-wave.mjs';
 import { getVoltageAtJonction } from './geometry.js';
 import { reachableJonctions } from './Engine/hc90-cascade.mjs';
-import { UNO_JONCTION_SUFFIX } from './arduino-uno-layout.js';
+import { isMicroBoard, microBoardPinLabelFromJonction } from './micro-board.js';
 import { syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
 import {
     getIdealSeg7FromArduino,
     getIdealBargraphFromArduino,
     getIdealVoltmeterVoltage,
 } from './Engine/arduino-gpio-ideal.mjs';
-import { isGroveLcdWiredToUno, refreshGroveLcdDisplayCache, getIdealGroveLcdDisplay } from './Engine/grove-lcd-ideal.mjs';
-import { isGroveDht22WiredToUno, getIdealDht22Reading } from './Engine/dht22-ideal.mjs';
+import { isGroveLcdWiredToBoard, refreshGroveLcdDisplayCache, getIdealGroveLcdDisplay } from './Engine/grove-lcd-ideal.mjs';
+import { isJoyitTft18WiredToBoard, refreshJoyitTft18DisplayCache, getIdealJoyitTft18Display } from './Engine/tft18-ideal.mjs';
+import { isGroveDht22WiredToBoard, getIdealDht22Reading, resolveDhtReadingsForBoard } from './Engine/dht22-ideal.mjs';
+import { sketchUsesDht } from './Engine/dht22-sketch-parse.mjs';
+import { isGroveTsl2591WiredToBoard, resolveTslReadingsForBoard } from './Engine/tsl2591-ideal.mjs';
+import { sketchUsesTsl2591 } from './Engine/tsl2591-sketch-parse.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -162,7 +166,7 @@ function updateArduinoRuntimes() {
     lastRuntimeStepMs = now;
     const seen = new Set();
     for (const comp of circuit.components) {
-        if (comp.type !== 'arduino_uno') continue;
+        if (!isMicroBoard(comp)) continue;
         applyArduinoSketchToComponent(comp);
         if (!sketchHasLoop(comp.sketch || '')) {
             comp.liveLevels = null;
@@ -174,7 +178,7 @@ function updateArduinoRuntimes() {
             entry = { rt: createArduinoRuntime(comp), sketch: comp.sketch || '', lastAnalogKey: '' };
             arduinoRuntimes.set(comp.label, entry);
         }
-        const analogInputs = readUnoAnalogInputs(comp, {
+        const analogInputs = readBoardAnalogInputs(comp, {
             components: circuit.components,
             wires: circuit.wires,
             autoJunctions: circuit.autoJunctions,
@@ -191,6 +195,22 @@ function updateArduinoRuntimes() {
             }
             entry.lastAnalogKey = analogKey;
         }
+        entry.rt.state.dhtReadings = sketchUsesDht(comp.sketch || '')
+            ? resolveDhtReadingsForBoard(
+                comp,
+                circuit.components,
+                circuit.wires,
+                circuit.autoJunctions
+            )
+            : null;
+        entry.rt.state.tslReadings = sketchUsesTsl2591(comp.sketch || '')
+            ? resolveTslReadingsForBoard(
+                comp,
+                circuit.components,
+                circuit.wires,
+                circuit.autoJunctions
+            )
+            : null;
         stepArduinoRuntime(entry.rt, deltaMs, readUnoInputs(comp), analogInputs);
         comp.liveLevels = arduinoRuntimeLevels(entry.rt);
         comp.serialLog = getRuntimeSerialTx(entry.rt);
@@ -211,7 +231,7 @@ function resetArduinoRuntimes() {
     arduinoRuntimes.clear();
     lastRuntimeStepMs = 0;
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') {
+        if (isMicroBoard(comp)) {
             comp.liveLevels = null;
             comp.serialLog = '';
             comp.serialBegun = false;
@@ -225,14 +245,14 @@ export { resetArduinoRuntimes };
 /** Cartes UNO présentes sur le schéma. */
 export function listUnoBoardLabels() {
     return circuit.components
-        .filter((c) => c.type === 'arduino_uno' && c.label)
+        .filter((c) => isMicroBoard(c) && c.label)
         .map((c) => c.label);
 }
 
 export function getUnoSerialOutput(label) {
     const entry = arduinoRuntimes.get(label);
     if (entry) return getRuntimeSerialTx(entry.rt);
-    const comp = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === label);
+    const comp = circuit.components.find((c) => isMicroBoard(c) && c.label === label);
     return comp?.serialLog ?? '';
 }
 
@@ -244,16 +264,17 @@ export function sendUnoSerialInput(label, text) {
 export function clearUnoSerialOutput(label) {
     const entry = arduinoRuntimes.get(label);
     if (entry?.rt?.state?.serial) entry.rt.state.serial.tx = '';
-    const comp = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === label);
+    const comp = circuit.components.find((c) => isMicroBoard(c) && c.label === label);
     if (comp) comp.serialLog = '';
 }
 
 /** Après ouverture / chargement d'un schéma JSON (sketch depuis JSON, pas l'éditeur). */
 export function onCircuitLoaded() {
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
     }
     refreshGroveLcdDisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
+    refreshJoyitTft18DisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
     resetArduinoRuntimes();
     indexArduinoLedDrives();
 }
@@ -262,9 +283,10 @@ export function onCircuitLoaded() {
 export function onArduinoSketchUpdated() {
     syncArduinoSketchesFromEditor();
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
     }
     refreshGroveLcdDisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
+    refreshJoyitTft18DisplayCache(circuit.components, circuit.wires, circuit.autoJunctions);
     resetArduinoRuntimes();
     indexArduinoLedDrives();
     if (!flags.isSimulating) return;
@@ -418,29 +440,26 @@ function plotTimeOrigin(elapsed, period) {
 }
 
 
-function arduinoPinLabelFromJonction(unoLabel, jonctionId) {
-    if (!jonctionId?.startsWith(`${unoLabel}_`)) return null;
-    const suffix = jonctionId.slice(unoLabel.length + 1);
-    if (suffix in UNO_JONCTION_SUFFIX && /^D\d+$/.test(suffix)) return suffix;
-    return null;
+function arduinoPinLabelFromJonction(board, jonctionId) {
+    return microBoardPinLabelFromJonction(board, jonctionId);
 }
 
 function indexArduinoLedDrives() {
     anim.arduinoLedDrive = {};
     for (const led of circuit.components.filter((c) => c.type === 'led')) {
         const start = `${led.label}_in`;
-        for (const uno of circuit.components.filter((c) => c.type === 'arduino_uno')) {
-            applyArduinoSketchToComponent(uno);
+        for (const board of circuit.components.filter((c) => isMicroBoard(c))) {
+            applyArduinoSketchToComponent(board);
             const net = reachableJonctions(start, circuit.wires, circuit.autoJunctions);
             let found = null;
             for (const jid of net) {
-                const pinLabel = arduinoPinLabelFromJonction(uno.label, jid);
-                if (pinLabel && uno.pinModes?.[pinLabel] === 'OUTPUT') {
+                const pinLabel = arduinoPinLabelFromJonction(board, jid);
+                if (pinLabel && board.pinModes?.[pinLabel] === 'OUTPUT') {
                     found = {
-                        unoLabel: uno.label,
+                        unoLabel: board.label,
                         pinLabel,
-                        pulse: uno.pinPulses?.[pinLabel],
-                        level: uno.pinLevels?.[pinLabel],
+                        pulse: board.pinPulses?.[pinLabel],
+                        level: board.pinLevels?.[pinLabel],
                     };
                     break;
                 }
@@ -458,6 +477,10 @@ function hasLcdTimeVaryingDisplay() {
         if (comp.type !== 'grove_lcd16x2') continue;
         if (comp.lcdDisplayCache?.hasTiming) return true;
     }
+    for (const comp of circuit.components) {
+        if (comp.type !== 'joyit_tft18') continue;
+        if (comp.tftDisplayCache?.hasTiming) return true;
+    }
     return false;
 }
 
@@ -465,6 +488,22 @@ function hasLcdTimeVaryingDisplay() {
 export function getAnimatedGroveLcdDisplay(label) {
     const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
     return getIdealGroveLcdDisplay(
+        label,
+        circuit.components,
+        circuit.wires,
+        circuit.autoJunctions,
+        elapsed,
+        {
+            getVoltageAtJonction,
+            voltmeters: simulationResults.voltmeters,
+        }
+    );
+}
+
+/** TFT Joy-it avec delay() ou variables dynamiques — affichage selon le temps de simulation. */
+export function getAnimatedJoyitTft18Display(label) {
+    const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    return getIdealJoyitTft18Display(
         label,
         circuit.components,
         circuit.wires,
@@ -531,7 +570,13 @@ function hasArduinoStaticIdealDisplay() {
     }
     for (const comp of circuit.components) {
         if (comp.type !== 'grove_lcd16x2') continue;
-        if (isGroveLcdWiredToUno(comp.label, circuit.components, circuit.wires, circuit.autoJunctions)) {
+        if (isGroveLcdWiredToBoard(comp.label, circuit.components, circuit.wires, circuit.autoJunctions)) {
+            return true;
+        }
+    }
+    for (const comp of circuit.components) {
+        if (comp.type !== 'joyit_tft18') continue;
+        if (isJoyitTft18WiredToBoard(comp.label, circuit.components, circuit.wires, circuit.autoJunctions)) {
             return true;
         }
     }
@@ -570,11 +615,11 @@ export { hasArduinoStaticIdealDisplay };
 function getIdealArduinoLedCurrent(label) {
     const drive = anim.arduinoLedDrive[label];
     if (!drive?.pinLabel || !drive?.unoLabel) return null;
-    const uno = circuit.components.find((c) => c.type === 'arduino_uno' && c.label === drive.unoLabel);
-    if (!uno) return null;
-    applyArduinoSketchToComponent(uno);
+    const board = circuit.components.find((c) => isMicroBoard(c) && c.label === drive.unoLabel);
+    if (!board) return null;
+    applyArduinoSketchToComponent(board);
     const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
-    const levels = resolvePinLevelsAt(uno, elapsed);
+    const levels = resolvePinLevelsAt(board, elapsed);
     const lv = levels[drive.pinLabel];
     if (lv === 1) return ARDUINO_IDEAL_LED_ON_A;
     if (lv === 0) return 0;
@@ -583,13 +628,13 @@ function getIdealArduinoLedCurrent(label) {
 
 function hasArduinoTimeVaryingGpio() {
     syncArduinoSketchesFromEditor();
-    return circuit.components.some((c) => c.type === 'arduino_uno' && arduinoGpioIsTimeVarying(c));
+    return circuit.components.some((c) => isMicroBoard(c) && arduinoGpioIsTimeVarying(c));
 }
 
 function hasArduinoInteractiveSketch() {
     syncArduinoSketchesFromEditor();
     return circuit.components.some((c) => {
-        if (c.type !== 'arduino_uno') return false;
+        if (!isMicroBoard(c)) return false;
         const sk = c.sketch || '';
         return sketchHasLoop(sk) || sketchUsesAnalogInput(sk) || sketchUsesSerial(sk);
     });
@@ -602,7 +647,14 @@ function hasArduinoLoopSimulation() {
 function hasDht22Simulation() {
     syncArduinoSketchesFromEditor();
     return circuit.components.some(
-        (c) => c.type === 'grove_dht22' && isGroveDht22WiredToUno(c.label, circuit.components, circuit.wires, circuit.autoJunctions)
+        (c) => c.type === 'grove_dht22' && isGroveDht22WiredToBoard(c.label, circuit.components, circuit.wires, circuit.autoJunctions)
+    );
+}
+
+function hasTsl2591Simulation() {
+    syncArduinoSketchesFromEditor();
+    return circuit.components.some(
+        (c) => c.type === 'grove_tsl2591' && isGroveTsl2591WiredToBoard(c.label, circuit.components, circuit.wires, circuit.autoJunctions)
     );
 }
 
@@ -613,6 +665,7 @@ export function ensureArduinoLedAnimation() {
         !hasArduinoTimeVaryingGpio() &&
         !hasArduinoLoopSimulation() &&
         !hasDht22Simulation() &&
+        !hasTsl2591Simulation() &&
         !Object.keys(anim.arduinoLedDrive).length &&
         !hasArduinoStaticIdealDisplay() &&
         !hasLcdTimeVaryingDisplay()

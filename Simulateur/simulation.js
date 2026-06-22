@@ -3,6 +3,8 @@ import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
 import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
 import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
+import { esp32C3JonctionToTerminalKey, ESP32_FQBN } from './esp32-c3-layout.js';
+import { isMicroBoard } from './micro-board.js';
 import { draw } from './renderer.js';
 import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation, SCOPE_H_DIVS } from './scope-animation.js';
@@ -36,7 +38,7 @@ import {
     sketchHasLoop,
 } from './Engine/arduino-sketch-parse.mjs';
 import { arduinoUartScopePeriodSec } from './Engine/arduino-uart-wave.mjs';
-import { annotateUnoI2cBusEngine } from './Engine/i2c-bus-ideal.mjs';
+import { annotateMicroBoardI2cBusEngine } from './Engine/i2c-bus-ideal.mjs';
 
 /** Base de temps adaptée à l'I²C (100 kHz) si le scope est encore en ms/div. */
 function autoTuneScopeForI2c() {
@@ -51,8 +53,8 @@ function autoTuneScopeForI2c() {
         .filter((w) => w.fromKey && w.toKey);
     let hasI2c = false;
     for (const comp of circuit.components) {
-        if (comp.type !== 'arduino_uno') continue;
-        annotateUnoI2cBusEngine(comp, circuit.components, simWires);
+        if (!isMicroBoard(comp)) continue;
+        annotateMicroBoardI2cBusEngine(comp, circuit.components, simWires);
         if (comp.i2cBus?.active) hasI2c = true;
     }
     if (!hasI2c) return;
@@ -65,7 +67,7 @@ function autoTuneScopeForI2c() {
 /** Base de temps adaptée au clignotement Arduino (delay) sur l'oscilloscope. */
 function autoTuneScopeForArduino() {
     for (const comp of circuit.components) {
-        if (comp.type === 'arduino_uno') applyArduinoSketchToComponent(comp);
+        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
     }
     const uartPeriod = arduinoUartScopePeriodSec(circuit.components);
     const gpioPeriod = arduinoUnoMinPulsePeriodSec(circuit.components);
@@ -83,7 +85,7 @@ const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
-    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591', joyit_tft18: 'joyit_tft18',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -190,11 +192,24 @@ function jonctionIdToTerminalKey(jonctionId) {
             for (let i = 0; i < pins.length; i++) {
                 if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
             }
+        } else if (comp.type === 'grove_tsl2591') {
+            const pins = ['SDA', 'SCL', 'VCC', 'GND'];
+            for (let i = 0; i < pins.length; i++) {
+                if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
+            }
+        } else if (comp.type === 'joyit_tft18') {
+            const pins = ['VCC', 'GND', 'SCL', 'SDA', 'RES', 'DC', 'CS'];
+            for (let i = 0; i < pins.length; i++) {
+                if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
+            }
         } else if (comp.type === 'cd4511') {
             const key = cd4511JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
         } else if (comp.type === 'ic_74hc90') {
             const key = ic74hc90JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'esp32_c3') {
+            const key = esp32C3JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
         } else if (comp.type === 'arduino_uno') {
             const key = arduinoUnoJonctionToTerminalKey(id, jonctionId);
@@ -259,10 +274,10 @@ function buildSimulationState() {
             out.ch2PositionDiv = comp.ch2PositionDiv ?? 0;
             out.timePositionDiv = comp.timePositionDiv ?? 0;
         }
-        if (comp.type === 'arduino_uno') {
+        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3') {
             applyArduinoSketchToComponent(comp);
             out.sketch = comp.sketch || '';
-            out.fqbn = comp.fqbn || 'arduino:avr:uno';
+            out.fqbn = comp.fqbn || (comp.type === 'esp32_c3' ? ESP32_FQBN : 'arduino:avr:uno');
             out.pinModes = comp.pinModes || {};
             out.pinLevels = comp.pinLevels || {};
             out.pinPulses = comp.pinPulses || {};
@@ -361,16 +376,16 @@ function showSimulationWarnings(warnings, isSilentUpdate) {
 
 /** Démarre l'animation GPIO avant la fin du calcul SPICE (bargraph / LED Arduino). */
 function shouldStartArduinoLiveDisplayEarly() {
-    let hasUno = false;
+    let hasBoard = false;
     for (const comp of circuit.components) {
-        if (comp.type !== 'arduino_uno') continue;
-        hasUno = true;
+        if (!isMicroBoard(comp)) continue;
+        hasBoard = true;
         applyArduinoSketchToComponent(comp);
         if (sketchHasLoop(comp.sketch || '') || arduinoGpioIsTimeVarying(comp)) return true;
     }
-    if (!hasUno) return false;
+    if (!hasBoard) return false;
     return circuit.components.some((c) =>
-        c.type === 'bargraph_dc10h' || c.type === 'seg7' || c.type === 'grove_lcd16x2'
+        c.type === 'bargraph_dc10h' || c.type === 'seg7' || c.type === 'grove_lcd16x2' || c.type === 'joyit_tft18'
     );
 }
 

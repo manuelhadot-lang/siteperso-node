@@ -95,6 +95,14 @@
         </div>
 
         <div class="menu-item">
+            <span class="menu-icon">📡</span> ESP32
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="esp32_c3">ESP32-C3 DevKit</div>
+                <div class="dropdown-item dropdown-item--action" id="menu-esp32-editor">Éditeur de programme</div>
+            </div>
+        </div>
+
+        <div class="menu-item">
             <span class="menu-icon">🤖</span> Arduino
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="arduino_uno">Arduino UNO R3</div>
@@ -103,12 +111,14 @@
                     <span class="dropdown-item submenu-title">Capteurs Grove</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="grove_dht22">Grove DHT22 (T° / humidité)</div>
+                        <div class="dropdown-item" draggable="true" data-component="grove_tsl2591">Grove TSL2591 (luminosité I²C)</div>
                     </div>
                 </div>
                 <div class="dropdown-submenu">
                     <span class="dropdown-item submenu-title">Affichage</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="grove_lcd16x2">Grove LCD 2×16 I2C</div>
+                        <div class="dropdown-item" draggable="true" data-component="joyit_tft18">Joy-it TFT 1.8″ (ST7735)</div>
                     </div>
                 </div>
             </div>
@@ -148,6 +158,7 @@
             <canvas id="circuitCanvas"></canvas>
         </main>
         <aside id="arduino-panel" class="right-panel hidden" aria-label="Éditeur Arduino">
+            <div id="arduino-panel-resize" class="arduino-panel-resize-handle" role="separator" aria-orientation="vertical" aria-label="Redimensionner l'éditeur" title="Glisser pour agrandir ou réduire"></div>
             <div class="panel-header panel-header--arduino">
                 <span id="arduino-panel-title">Arduino UNO</span>
                 <div class="arduino-panel-header-actions">
@@ -165,8 +176,25 @@
                         </div>
                     </div>
                 </section>
+                <section class="arduino-upload-section" aria-label="Téléversement USB">
+                    <p class="arduino-upload-hint" id="arduino-upload-hint">
+                        Branchez la carte en USB. Simulateur H embarque arduino-cli (aucune installation séparée). Au premier lancement, la copie des cores peut prendre quelques minutes.
+                    </p>
+                    <div class="arduino-upload-row">
+                        <label class="arduino-upload-label" for="arduino-upload-profile">Carte USB</label>
+                        <select id="arduino-upload-profile" class="arduino-upload-select" title="FQBN pour arduino-cli"></select>
+                    </div>
+                    <div class="arduino-upload-row">
+                        <label class="arduino-upload-label" for="arduino-upload-port">Port</label>
+                        <select id="arduino-upload-port" class="arduino-upload-select" title="Port série USB">
+                            <option value="">— Actualiser les ports —</option>
+                        </select>
+                        <button type="button" id="arduino-btn-refresh-ports" class="arduino-btn arduino-btn--small" title="Détecter les cartes USB">↻ Ports</button>
+                    </div>
+                </section>
                 <div class="arduino-panel-actions">
                     <button type="button" id="arduino-btn-compile" class="arduino-btn arduino-btn--primary">Compiler (arduino-cli)</button>
+                    <button type="button" id="arduino-btn-upload" class="arduino-btn arduino-btn--primary" title="Compiler et envoyer sur la carte USB">Téléverser USB</button>
                     <button type="button" id="arduino-btn-serial-monitor" class="arduino-btn arduino-btn--small" title="Ouvrir le moniteur série (TX D1 / RX D0)">Moniteur série</button>
                     <span id="arduino-compile-status" class="arduino-compile-status" aria-live="polite"></span>
                     <button type="button" id="arduino-btn-show-errors" class="arduino-btn arduino-btn--small arduino-btn--errors hidden">Voir les erreurs</button>
@@ -190,7 +218,6 @@
                         <p id="arduino-lib-msg" class="arduino-lib-msg" aria-live="polite"></p>
                     </section>
                 </details>
-                <p id="arduino-cli-status" class="arduino-cli-status">…</p>
             </div>
         </aside>
     </div>
@@ -661,6 +688,43 @@ void loop() {
                     <li>Carte cible : <code>arduino:avr:uno</code>.</li>
                     <li>À la simulation, le moteur interprète <code>pinMode(…, OUTPUT|INPUT|INPUT_PULLUP)</code>, <code>digitalWrite</code>, <code>delay(ms)</code> et les écritures <code>DDRx</code> / <code>PORTx</code> pour piloter D0–D13 et A0–A5.</li>
                     <li>Reliez <strong>GND</strong> de l’UNO à la masse du circuit si vous utilisez les rails 5 V / 3,3 V.</li>
+                </ul>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="esp32-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-esp32-doc">&times;</span>
+            <h2 id="esp32-doc-title">ESP32-C3 DevKit</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Carte <strong>ESP32-C3 DevKitM-1</strong> (RISC-V, Wi-Fi/BLE) : logique <strong>3,3 V</strong>,
+                    alimentation USB <strong>5 V</strong> sur la broche dédiée, <strong>13 GPIO</strong> simulées.
+                    L’éditeur de sketch est dans le <strong>panneau à droite</strong> (ouvert à la pose du composant).
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>3V3</td><td>Alimentation 3,3 V (sortie régulateur)</td></tr>
+                        <tr><td>5V</td><td>Alimentation USB 5 V (entrée/sortie)</td></tr>
+                        <tr><td>GND, GND2</td><td>Masse</td></tr>
+                        <tr><td>EN</td><td>Enable (pull-up interne modélisé)</td></tr>
+                        <tr><td>GPIO8, GPIO9</td><td>I²C SDA / SCL (Grove LCD)</td></tr>
+                        <tr><td>GPIO0 … GPIO10</td><td>GPIO digitales — bargraph, CD4511, DHT22</td></tr>
+                        <tr><td>GPIO20, GPIO21</td><td>UART RX / TX (USB série)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Programmation</h3>
+                <ul class="doc-list">
+                    <li>Éditeur à droite : sketch <code>.ino</code> + bouton <strong>Compiler (arduino-cli)</strong>.</li>
+                    <li>Carte cible : <code>esp32:esp32:esp32c3</code>.</li>
+                    <li>À la simulation, le moteur interprète <code>pinMode</code>, <code>digitalWrite</code>, <code>delay(ms)</code> et les registres AVR <code>DDRD</code> / <code>PORTD</code> (GPIO0–GPIO7), <code>DDRB</code> / <code>PORTB</code> (GPIO8–GPIO10).</li>
+                    <li>Reliez <strong>GND</strong> à la masse du circuit si vous utilisez les rails 3V3 / 5V.</li>
                 </ul>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
             </div>

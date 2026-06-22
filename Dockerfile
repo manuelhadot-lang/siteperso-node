@@ -21,7 +21,8 @@ ENV ARDUINO_DIRECTORIES_DATA=/opt/arduino-data
 RUN mkdir -p "$ARDUINO_DIRECTORIES_DATA" \
     && /usr/local/bin/arduino-cli config init --dest-dir "$ARDUINO_DIRECTORIES_DATA" \
     && /usr/local/bin/arduino-cli core update-index \
-    && /usr/local/bin/arduino-cli core install arduino:avr
+    && /usr/local/bin/arduino-cli core install arduino:avr \
+    && /usr/local/bin/arduino-cli core install esp32:esp32
 ENV ARDUINO_CLI=/usr/local/bin/arduino-cli
 # Bibliothèque LCD I2C courante (Grove) — l'utilisateur peut aussi ajouter des libs dans arduino-libraries/
 RUN /usr/local/bin/arduino-cli lib install "LiquidCrystal I2C" || true

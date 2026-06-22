@@ -1,13 +1,15 @@
 {
   "name": "simulateur-h",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "description": "Simulateur H — application Windows (circuits électroniques + ngspice)",
   "main": "main.js",
   "author": "STI2D",
   "scripts": {
     "start": "electron .",
+    "predist": "node ../scripts/check-simulateur-h-prereqs.cjs",
     "dist": "electron-builder --win",
+    "dist:setup": "electron-builder --win nsis",
     "dist:portable": "electron-builder --win portable"
   },
   "dependencies": {
@@ -20,8 +22,10 @@
   "build": {
     "appId": "fr.sti2d.simulateur-h",
     "productName": "Simulateur H",
+    "copyright": "Copyright © STI2D",
     "directories": {
-      "output": "dist-out"
+      "output": "dist-out",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
@@ -32,11 +36,15 @@
       {
         "from": "../Simulateur",
         "to": "simulator-app/Simulateur",
-        "filter": ["**/*"]
+        "filter": ["**/*", "!**/.vs/**"]
       },
       {
         "from": "../tools/ngspice-bundle.cjs",
         "to": "simulator-app/tools/ngspice-bundle.cjs"
+      },
+      {
+        "from": "../tools/simulate-engine-loader.cjs",
+        "to": "simulator-app/tools/simulate-engine-loader.cjs"
       },
       {
         "from": "../tools/arduino-api.cjs",
@@ -45,8 +53,14 @@
       {
         "from": "../tools/arduino-routes.cjs",
         "to": "simulator-app/tools/arduino-routes.cjs"
+      },
+      {
+        "from": "../tools/arduino-cli-bundle.cjs",
+        "to": "simulator-app/tools/arduino-cli-bundle.cjs"
       }
     ],
+    "compression": "maximum",
+    "asar": true,
     "win": {
       "signAndEditExecutable": false,
       "target": [
@@ -58,12 +72,30 @@
           "target": "portable",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Simulateur H"
+      "allowElevation": true,
+      "installerLanguages": ["fr_FR"],
+      "language": "1036",
+      "license": "build/license-fr.txt",
+      "include": "build/installer.nsh",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Simulateur H",
+      "menuCategory": "STI2D",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "uninstallDisplayName": "Simulateur H",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "guid": "a7f3c2e1-9b4d-4f8a-b6e2-1d0c5a8e3f72"
     }
   }
 }

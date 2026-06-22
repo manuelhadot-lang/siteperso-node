@@ -21,11 +21,23 @@ import {
     UNO_HIT_DY,
 } from './arduino-uno-layout.js';
 import {
+    ESP32_JUNC_L,
+    ESP32_JUNC_R,
+    ESP32_LEFT_PINS,
+    ESP32_RIGHT_PINS,
+    ESP32_LEFT_PIN_Y,
+    ESP32_RIGHT_PIN_Y,
+    ESP32_HIT_DX,
+    ESP32_HIT_DY,
+} from './esp32-c3-layout.js';
+import {
     GROVE_LCD_PINS,
     GROVE_LCD_PIN_Y,
     GROVE_LCD_JUNC_X,
-    GROVE_LCD_HIT_DX,
-    GROVE_LCD_HIT_DY,
+    GROVE_LCD_SEL_L,
+    GROVE_LCD_SEL_T,
+    GROVE_LCD_SEL_W,
+    GROVE_LCD_SEL_H,
 } from './grove-lcd-layout.js';
 import {
     GROVE_DHT22_PINS,
@@ -34,6 +46,26 @@ import {
     GROVE_DHT22_HIT_DX,
     GROVE_DHT22_HIT_DY,
 } from './dht22-layout.js';
+import {
+    GROVE_TSL2591_PINS,
+    GROVE_TSL2591_PIN_Y,
+    GROVE_TSL2591_JUNC_X,
+    GROVE_TSL2591_SEL_L,
+    GROVE_TSL2591_SEL_T,
+    GROVE_TSL2591_SEL_W,
+    GROVE_TSL2591_SEL_H,
+    GROVE_TSL2591_HIT_DX,
+    GROVE_TSL2591_HIT_DY,
+} from './tsl2591-layout.js';
+import {
+    TFT18_PINS,
+    TFT18_PIN_Y,
+    TFT18_JUNC_X,
+    TFT18_SEL_L,
+    TFT18_SEL_T,
+    TFT18_SEL_W,
+    TFT18_SEL_H,
+} from './tft18-layout.js';
 import {
     DC10H_PIN_Y,
     DC10H_SEG_NAMES,
@@ -121,15 +153,9 @@ export function getComponentJonctions(comp) {
         localPts = DC10H_SEG_NAMES.map((n, i) => ({ id: `${comp.label}_${n}`, x: jx, y: DC10H_PIN_Y[i] }));
         localPts.push({ id: `${comp.label}_COM`, x: comX, y: DC10H_COM_Y });
     } else if (comp.type === 'grove_lcd16x2') {
-        const jx = comp.flipX ? -GROVE_LCD_JUNC_X : GROVE_LCD_JUNC_X;
         GROVE_LCD_PINS.forEach((n, i) => {
-            list.push({
-                id: `${comp.label}_${n}`,
-                x: snapToGrid(comp.x + jx),
-                y: snapToGrid(comp.y + GROVE_LCD_PIN_Y[i]),
-            });
+            localPts.push({ id: `${comp.label}_${n}`, x: GROVE_LCD_JUNC_X, y: GROVE_LCD_PIN_Y[i] });
         });
-        return list;
     } else if (comp.type === 'grove_dht22') {
         const jx = comp.flipX ? -GROVE_DHT22_JUNC_X : GROVE_DHT22_JUNC_X;
         GROVE_DHT22_PINS.forEach((n, i) => {
@@ -140,6 +166,14 @@ export function getComponentJonctions(comp) {
             });
         });
         return list;
+    } else if (comp.type === 'grove_tsl2591') {
+        GROVE_TSL2591_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: GROVE_TSL2591_JUNC_X, y: GROVE_TSL2591_PIN_Y[i] });
+        });
+    } else if (comp.type === 'joyit_tft18') {
+        TFT18_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: TFT18_JUNC_X, y: TFT18_PIN_Y[i] });
+        });
     } else if (['capacitor', 'inductor', 'diode'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'gsqr') {
@@ -198,6 +232,13 @@ export function getComponentJonctions(comp) {
         right.forEach((n, i) => {
             if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_R, y: IC90_RIGHT_PIN_Y[i] });
         });
+    } else if (comp.type === 'esp32_c3') {
+        ESP32_LEFT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_JUNC_L, y: ESP32_LEFT_PIN_Y[i] });
+        });
+        ESP32_RIGHT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_JUNC_R, y: ESP32_RIGHT_PIN_Y[i] });
+        });
     } else if (comp.type === 'arduino_uno') {
         UNO_LEFT_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: UNO_JUNC_L, y: UNO_LEFT_PIN_Y[i] });
@@ -212,13 +253,13 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'grove_lcd16x2' && comp.type !== 'grove_dht22') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'esp32_c3' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'grove_dht22') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
             ly = ry;
         }
-        if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp')) lx = -lx;
+        if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_tsl2591' || comp.type === 'joyit_tft18')) lx = -lx;
         if (comp.flipY && comp.type === 'opamp') ly = -ly;
         list.push({ id: pt.id, x: snapToGrid(comp.x + lx), y: snapToGrid(comp.y + ly) });
     });
@@ -233,6 +274,7 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
     if (comp.type === 'cd4511') return dx < CD4511_HIT_DX && dy < CD4511_HIT_DY;
     if (comp.type === 'ic_74hc90') return dx < IC90_HIT_DX && dy < IC90_HIT_DY;
+    if (comp.type === 'esp32_c3') return dx < ESP32_HIT_DX && dy < ESP32_HIT_DY;
     if (comp.type === 'arduino_uno') return dx < UNO_HIT_DX && dy < UNO_HIT_DY;
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
@@ -243,8 +285,31 @@ export function componentHitTest(comp, mx, my) {
         return x >= DC10H_SEL_L && x <= DC10H_SEL_L + DC10H_SEL_W
             && y >= DC10H_SEL_T && y <= DC10H_SEL_T + DC10H_SEL_H;
     }
-    if (comp.type === 'grove_lcd16x2') return dx < GROVE_LCD_HIT_DX && dy < GROVE_LCD_HIT_DY;
+    if (comp.type === 'grove_lcd16x2') {
+        const { x, y } = compLocalCoords(comp, mx, my);
+        const flip = comp.flipX ? -1 : 1;
+        const fx = (v) => flip * v;
+        const selL = Math.min(fx(GROVE_LCD_SEL_L), fx(GROVE_LCD_SEL_L + GROVE_LCD_SEL_W));
+        return x >= selL && x <= selL + GROVE_LCD_SEL_W
+            && y >= GROVE_LCD_SEL_T && y <= GROVE_LCD_SEL_T + GROVE_LCD_SEL_H;
+    }
     if (comp.type === 'grove_dht22') return dx < GROVE_DHT22_HIT_DX && dy < GROVE_DHT22_HIT_DY;
+    if (comp.type === 'grove_tsl2591') {
+        const { x, y } = compLocalCoords(comp, mx, my);
+        const flip = comp.flipX ? -1 : 1;
+        const fx = (v) => flip * v;
+        const selL = Math.min(fx(GROVE_TSL2591_SEL_L), fx(GROVE_TSL2591_SEL_L + GROVE_TSL2591_SEL_W));
+        return x >= selL && x <= selL + GROVE_TSL2591_SEL_W
+            && y >= GROVE_TSL2591_SEL_T && y <= GROVE_TSL2591_SEL_T + GROVE_TSL2591_SEL_H;
+    }
+    if (comp.type === 'joyit_tft18') {
+        const { x, y } = compLocalCoords(comp, mx, my);
+        const flip = comp.flipX ? -1 : 1;
+        const fx = (v) => flip * v;
+        const selL = Math.min(fx(TFT18_SEL_L), fx(TFT18_SEL_L + TFT18_SEL_W));
+        return x >= selL && x <= selL + TFT18_SEL_W
+            && y >= TFT18_SEL_T && y <= TFT18_SEL_T + TFT18_SEL_H;
+    }
     if (comp.type === 'opamp') return dx < 44 && dy < 42;
     if (comp.type === 'npn') return dx < 44 && dy < 44;
     if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;

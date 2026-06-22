@@ -13,10 +13,23 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# IDE / éditeur (config locale)
+.vs/
+.vscode/
+
+# Données runtime (pas le code source)
+visits.json
+
 dist/
 dist-out/
 build/
 coverage/
 
-.vscode/
-.idea/
+Simulateur/arduino-data/packages/
+Simulateur/arduino-data/staging/
+Simulateur/arduino-data/tmp/
+Simulateur/arduino-data/library/
+Simulateur/arduino-data/.cache/
+Simulateur/arduino-data/.bundle-version
+Simulateur/bin/arduino-cli/arduino-cli.exe
+Simulateur/bin/arduino-cli/*.zip

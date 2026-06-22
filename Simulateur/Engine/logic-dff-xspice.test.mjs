@@ -54,12 +54,12 @@ const toggleState = {
         { id: "G1", type: "ground", x: 200, y: 50, orient: 0 },
     ],
     wires: [
-        { id: "w0", solid: true, fromKey: "G0#0", toKey: "Carre1#1", points: [] },
-        { id: "w1", solid: true, fromKey: "Carre1#0", toKey: "Dbas1#1", points: [] },
+        { id: "w0", solid: true, fromKey: "G0#0", toKey: "Carre1#0", points: [] },
+        { id: "w1", solid: true, fromKey: "Carre1#1", toKey: "Dbas1#1", points: [] },
         { id: "w2", solid: true, fromKey: "Dbas1#0", toKey: "Dbas1#3", points: [] },
         { id: "w3", solid: true, fromKey: "Dbas1#2", toKey: "Osc1#1", points: [] },
-        { id: "w4", solid: true, fromKey: "Carre1#0", toKey: "Osc1#2", points: [] },
-        { id: "w5", solid: true, fromKey: "G1#0", toKey: "Osc1#0", points: [] },
+        { id: "w4", solid: true, fromKey: "Carre1#1", toKey: "Osc1#0", points: [] },
+        { id: "w5", solid: true, fromKey: "G1#0", toKey: "Osc1#2", points: [] },
     ],
 };
 

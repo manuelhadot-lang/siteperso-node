@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Simulateur de Circuits — Documentation des programmes</title>
+<style>
+  @page { size: A4; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #1a1a1a;
+    max-width: 180mm;
+    margin: 0 auto;
+    padding: 12mm 0;
+  }
+  h1 { font-size: 22pt; color: #0d47a1; margin: 0 0 8pt; border-bottom: 3px solid #0d47a1; padding-bottom: 6pt; }
+  h2 { font-size: 14pt; color: #1565c0; margin: 20pt 0 8pt; page-break-after: avoid; border-left: 4px solid #1565c0; padding-left: 8pt; }
+  h3 { font-size: 11pt; color: #333; margin: 12pt 0 4pt; page-break-after: avoid; }
+  .cover { text-align: center; padding: 40pt 0 30pt; page-break-after: always; }
+  .cover .subtitle { font-size: 13pt; color: #555; margin-top: 12pt; }
+  .cover .meta { font-size: 10pt; color: #777; margin-top: 24pt; }
+  .toc { page-break-after: always; }
+  .toc h2 { border: none; padding: 0; }
+  .toc ol { padding-left: 18pt; }
+  .toc li { margin: 3pt 0; }
+  .toc a { color: #1565c0; text-decoration: none; }
+  .toc .sub { list-style: none; padding-left: 14pt; font-size: 9.5pt; }
+  .toc .sub li { margin: 2pt 0; }
+  section { page-break-inside: avoid; }
+  .file-block { margin-bottom: 10pt; padding-bottom: 8pt; border-bottom: 1px solid #e0e0e0; }
+  .file-block:last-child { border: none; }
+  .filename { font-family: Consolas, "Courier New", monospace; font-weight: bold; color: #c62828; font-size: 10pt; }
+  .cat { display: inline-block; font-size: 8pt; background: #e3f2fd; color: #1565c0; padding: 1pt 6pt; border-radius: 3pt; margin-left: 6pt; vertical-align: middle; }
+  .role { margin: 4pt 0 0; text-align: justify; }
+  .exports { font-size: 9pt; color: #444; margin-top: 3pt; font-family: Consolas, monospace; }
+  .flow { background: #f5f5f5; padding: 10pt; border-radius: 4pt; margin: 12pt 0; font-size: 9.5pt; page-break-inside: avoid; }
+  .section-intro { font-style: italic; color: #555; margin-bottom: 10pt; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Simulateur de Circuits Électroniques</h1>
+  <p class="subtitle">Documentation des programmes — Phase 1 terminée</p>
+  <p class="meta">STI2D · ngspice · Arduino UNO · Interface graphique Canvas<br>Document unique — sommaire et rôle de chaque module</p>
+  <p class="meta">Généré le 18 juin 2026</p>
+</div>
+
+<div class="toc">
+  <h2>Sommaire</h2>
+  <ol>
+    <li><a href="#intro">1. Vue d'ensemble et flux de données</a></li>
+    <li><a href="#interface">2. Interface utilisateur (Simulateur/*.js)</a>
+      <ul class="sub">
+        <li><a href="#f-app">app.js</a> · <a href="#f-state">state.js</a> · <a href="#f-renderer">renderer.js</a> · <a href="#f-geometry">geometry.js</a></li>
+        <li><a href="#f-theme">theme.js</a> · <a href="#f-modal">modal-ui.js</a> · <a href="#f-value">value-prompt.js</a> · <a href="#f-json">json-utils.js</a></li>
+        <li><a href="#f-layout">Layouts composants (CD4511, HC90, UNO, Grove, bargraph…)</a></li>
+        <li><a href="#f-panels">Panneaux et popups (scope, Bode, série, sources, Arduino)</a></li>
+        <li><a href="#f-html">index.html · style.css</a></li>
+      </ul>
+    </li>
+    <li><a href="#animation">3. Simulation et animation</a>
+      <ul class="sub">
+        <li><a href="#f-simulation">simulation.js</a> · <a href="#f-led">led-animation.js</a> · <a href="#f-scope-anim">scope-animation.js</a> · <a href="#f-speaker">speaker-audio.js</a></li>
+      </ul>
+    </li>
+    <li><a href="#spice">4. Moteur SPICE (Simulateur/Engine/)</a>
+      <ul class="sub">
+        <li><a href="#f-schematic">schematic-to-spice.mjs</a> · <a href="#f-netlist">spice-netlist-v2.mjs</a> · <a href="#f-parser">v2/result-parser.mjs</a></li>
+        <li><a href="#f-logic">Logique numérique (portes, CD4511, 74HC90, XSPICE…)</a></li>
+        <li><a href="#f-instruments">Instruments, BCD, voltmètre, I²C</a></li>
+      </ul>
+    </li>
+    <li><a href="#arduino">5. Co-simulation Arduino</a></li>
+    <li><a href="#serveur">6. Serveur et déploiement</a></li>
+    <li><a href="#outils">7. Outils Node.js (tools/)</a></li>
+  </ol>
+</div>
+
+<h2 id="intro">1. Vue d'ensemble et flux de données</h2>
+<div class="flow">
+  <strong>Chaîne principale :</strong><br>
+  L'utilisateur édite le schéma dans le navigateur (<code>app.js</code>, <code>renderer.js</code>) →
+  clic « Lancer Simulation » (<code>simulation.js</code>) → requête POST <code>/api/simulate</code> →
+  le serveur convertit le JSON en netlist ngspice (<code>schematic-to-spice.mjs</code>, <code>spice-netlist-v2.mjs</code>) →
+  exécution ngspice → parsing des résultats (<code>result-parser.mjs</code>) →
+  retour JSON → animations LED, oscilloscope, bargraph, 7 segments, audio (<code>led-animation.js</code>, <code>scope-animation.js</code>, <code>speaker-audio.js</code>).
+  <br><br>
+  <strong>Arduino :</strong> les sketches sont interprétés localement (<code>arduino-sketch-parse.mjs</code>) pour piloter GPIO, LCD Grove, DHT22 et moniteur série sans attendre SPICE lorsque c'est possible.
+</div>
+
+<h2 id="interface" class="page-break">2. Interface utilisateur</h2>
+<p class="section-intro">Modules JavaScript du dossier <code>Simulateur/</code> — éditeur graphique, menus, panneaux et rendu Canvas.</p>
+
+<div class="file-block" id="f-app">
+  <span class="filename">app.js</span><span class="cat">Interface · Point d'entrée</span>
+  <p class="role">Fichier principal du front-end. Initialise l'éditeur : glisser-déposer de composants, câblage, menus Fichier/Éditeur/Sources/Composants/Logique/Mesures, raccourcis clavier, undo/redo, sauvegarde et ouverture de circuits JSON, double-clic sur composants (valeurs, éditeur Arduino, documentation), lancement et arrêt de la simulation.</p>
+</div>
+
+<div class="file-block" id="f-state">
+  <span class="filename">state.js</span><span class="cat">Interface · État global</span>
+  <p class="role">État partagé : référence canvas/contexte, zoom et pan, grille (<code>GRID_SIZE</code>), drapeaux (<code>flags.isSimulating</code>), circuit (<code>components</code>, <code>wires</code>, <code>autoJunctions</code>), sélection, résultats SPICE (<code>simulationResults</code>), compteurs de labels auto, piles undo/redo.</p>
+  <p class="exports">Exports : canvas, ctx, GRID_SIZE, scale, pan, flags, circuit, simulationResults, saveState, snapToGrid, toGridCoords…</p>
+</div>
+
+<div class="file-block" id="f-renderer">
+  <span class="filename">renderer.js</span><span class="cat">Interface · Rendu</span>
+  <p class="role">Dessin Canvas 2D de tous les composants (passifs, logique, UNO, LCD Grove, DHT22, afficheurs 7 segments, bargraph DC10H, voltmètres, ampèremètres, oscilloscope…). Affiche les valeurs simulées, états animés (LED, segments, bargraph) et surbrillance de sélection.</p>
+  <p class="exports">Exports : resizeCanvas, draw</p>
+</div>
+
+<div class="file-block" id="f-geometry">
+  <span class="filename">geometry.js</span><span class="cat">Interface · Géométrie</span>
+  <p class="role">Calculs géométriques et interactions : collision souris/composant, détection de fils et intersections, jonctions par type de boîtier, contrôles potentiometre/interrupteur/bouton, tension idéale à une jonction pour affichage.</p>
+  <p class="exports">Exports : componentHitTest, getComponentJonctions, getVoltageAtJonction, potentiometerControlHit…</p>
+</div>
+
+<div class="file-block" id="f-theme">
+  <span class="filename">theme.js</span><span class="cat">Interface · Thème</span>
+  <p class="role">Gestion du thème sombre/clair de l'éditeur avec palettes de couleurs (canvas, fils, composants) persistées dans <code>localStorage</code>.</p>
+  <p class="exports">Exports : COLORS, setEditorTheme, initEditorTheme</p>
+</div>
+
+<div class="file-block" id="f-modal">
+  <span class="filename">modal-ui.js</span><span class="cat">Interface · Modales</span>
+  <p class="role">Affichage/masquage des fenêtres modales CSS sans bloquer la barre de menus (compatible Electron Simulateur H).</p>
+  <p class="exports">Exports : showModal, hideModal, initModalUi</p>
+</div>
+
+<div class="file-block" id="f-value">
+  <span class="filename">value-prompt.js</span><span class="cat">Interface · Saisie</span>
+  <p class="role">Boîte de dialogue modale de saisie (remplace <code>window.prompt</code>, compatible Electron).</p>
+  <p class="exports">Exports : showValuePrompt, initValuePrompt</p>
+</div>
+
+<div class="file-block" id="f-json">
+  <span class="filename">json-utils.js</span><span class="cat">Interface · Fichiers</span>
+  <p class="role">Parse et normalise les fichiers circuit JSON (UTF-8, validation structure, migration des composants à l'ouverture).</p>
+  <p class="exports">Exports : parseJsonText, normalizeCircuitPayload, migrateLoadedComponents</p>
+</div>
+
+<h3 id="f-layout">Layouts des composants (géométrie UI et brochage)</h3>
+
+<div class="file-block">
+  <span class="filename">cd4511-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Boîtier DIP CD4511 : positions des broches BCD (A–D), segments a–g, LT/BI, mapping jonction → clé terminal SPICE.</p>
+</div>
+<div class="file-block">
+  <span class="filename">ic74hc90-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Boîtier DIP 74HC90/74LS90 : brochage 14 broches, sorties Q0–Q3, mapping jonction → terminal.</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-uno-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Carte Arduino UNO R3 : headers analogique/numérique, indices de broches, sketch par défaut, mapping jonctions.</p>
+  <p class="exports">Exports : DEFAULT_ARDUINO_SKETCH, arduinoUnoJonctionToTerminalKey</p>
+</div>
+<div class="file-block">
+  <span class="filename">grove-lcd-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Module Grove LCD 16×2 I²C : broches SDA/SCL/VCC/GND, zone d'écran, dimensions pour le hit-test.</p>
+</div>
+<div class="file-block">
+  <span class="filename">dht22-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Capteur Grove DHT22 : broches DATA/VCC/NC/GND et zone de rendu du capteur.</p>
+</div>
+<div class="file-block">
+  <span class="filename">bargraph-dc10h-layout.js</span><span class="cat">Layout</span>
+  <p class="role">Bargraph DC10H : 10 segments LED, broche COM, palette de couleurs, hit-test par segment.</p>
+</div>
+<div class="file-block">
+  <span class="filename">hd44780-font.js</span><span class="cat">Layout · Police</span>
+  <p class="role">Police bitmap HD44780 5×8 pour afficher les caractères sur l'écran LCD Grove simulé.</p>
+  <p class="exports">Exports : getHd44780Glyph</p>
+</div>
+
+<h3 id="f-panels">Panneaux, popups et éditeur Arduino</h3>
+
+<div class="file-block">
+  <span class="filename">source-panel.js</span><span class="cat">Panneau</span>
+  <p class="role">Panneau bas de réglage des générateurs (GImp, GSin, GSqr) avec relance de simulation live à chaque modification.</p>
+</div>
+<div class="file-block">
+  <span class="filename">gimp-panel.js</span><span class="cat">Panneau</span>
+  <p class="role">Réexporte l'API de <code>source-panel.js</code> sous les noms historiques « GImp ».</p>
+</div>
+<div class="file-block">
+  <span class="filename">scope-panel.js</span><span class="cat">Panneau</span>
+  <p class="role">Panneau bas de l'oscilloscope : réglages time/div, volts/div, position CH1/CH2, ouverture du popup flottant.</p>
+</div>
+<div class="file-block">
+  <span class="filename">scope-popup.js</span><span class="cat">Popup</span>
+  <p class="role">Fenêtre oscilloscope flottante déplaçable : courbes CH1/CH2, zoom temporel et décalage.</p>
+</div>
+<div class="file-block">
+  <span class="filename">bode-popup.js</span><span class="cat">Popup</span>
+  <p class="role">Analyseur de Bode : courbes gain (dB) et phase en fonction de la fréquence.</p>
+</div>
+<div class="file-block">
+  <span class="filename">serial-monitor-popup.js</span><span class="cat">Popup</span>
+  <p class="role">Moniteur série virtuel pour la sortie UART (<code>Serial.print</code>) des cartes Arduino UNO simulées.</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-editor.js</span><span class="cat">Arduino · UI</span>
+  <p class="role">Panneau latéral d'édition de sketch Arduino : compilation via <code>arduino-cli</code> (API REST), gestion des bibliothèques, synchronisation avant simulation.</p>
+  <p class="exports">Exports : openArduinoEditor, compileActiveSketch, prepareArduinoForSimulation, initArduinoEditor</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-lib-popup.js</span><span class="cat">Arduino · UI</span>
+  <p class="role">Popup d'aperçu et documentation des bibliothèques Arduino installées.</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-syntax-highlight.js</span><span class="cat">Arduino · UI</span>
+  <p class="role">Coloration syntaxique du code Arduino dans l'éditeur (mots-clés, types, commentaires).</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-sketch-sync.js</span><span class="cat">Arduino · UI</span>
+  <p class="role">Synchronise le texte de l'éditeur vers les objets <code>arduino_uno</code> du circuit avant simulation ou sauvegarde.</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-lib-commands.mjs</span><span class="cat">Arduino · Référence</span>
+  <p class="role">Catalogue des commandes par bibliothèque Arduino (LiquidCrystal I²C, DHT, Wire…) avec indication du support simulateur (<code>simSupported</code>).</p>
+  <p class="exports">Exports : ARDUINO_LIB_DOCS</p>
+</div>
+
+<h3 id="f-html">Structure HTML et styles</h3>
+<div class="file-block">
+  <span class="filename">index.html</span><span class="cat">Interface · Structure</span>
+  <p class="role">Page principale : barre de menus (Fichier, Éditeur, Sources, Composants, Logique, Mesures, Arduino), canvas, barre de simulation, modales, chargement ES modules.</p>
+</div>
+<div class="file-block">
+  <span class="filename">style.css</span><span class="cat">Interface · Styles</span>
+  <p class="role">Feuille de styles complète : thème sombre/clair, menus déroulants, composants sur canvas, panneaux bas, popups scope/Bode/série, éditeur Arduino.</p>
+</div>
+
+<h2 id="animation" class="page-break">3. Simulation et animation</h2>
+
+<div class="file-block" id="f-simulation">
+  <span class="filename">simulation.js</span><span class="cat">Animation · Orchestrateur</span>
+  <p class="role">Orchestre la simulation : construction de l'état JSON, POST vers <code>/api/simulate</code>, gestion des erreurs réseau, relance live lors de changements de composants, démarrage anticipé de l'animation Arduino, auto-réglage oscilloscope (I²C, délais Arduino), intégration scope/Bode/série/audio.</p>
+  <p class="exports">Exports : triggerSimulation, stopSimulation, requestLiveSimulation</p>
+</div>
+<div class="file-block" id="f-led">
+  <span class="filename">led-animation.js</span><span class="cat">Animation</span>
+  <p class="role">Boucle d'animation principale (requestAnimationFrame) : LED depuis courbes .tran, runtime Arduino pas-à-pas, afficheurs 7 segments et bargraph idéaux, LCD Grove, DHT22, compteurs 74HC90 et ripple mod-10, fumée LED sur intensité, moniteur série.</p>
+  <p class="exports">Exports : startLedAnimation, ensureArduinoLedAnimation, getAnimatedSeg7Segments, getIdealBargraphDisplay, sendUnoSerialInput…</p>
+</div>
+<div class="file-block" id="f-scope-anim">
+  <span class="filename">scope-animation.js</span><span class="cat">Animation</span>
+  <p class="role">Animation des traces CH1/CH2 de l'oscilloscope depuis plots ngspice ou traces GPIO/UART Arduino idéales ; dessin sur le canvas de l'oscillo.</p>
+  <p class="exports">Exports : startScopeAnimation, drawScopeTrace, SCOPE_H_DIVS</p>
+</div>
+<div class="file-block" id="f-speaker">
+  <span class="filename">speaker-audio.js</span><span class="cat">Animation · Audio</span>
+  <p class="role">Restitution audio Web Audio API du haut-parleur simulé à partir des courbes .tran ou source AC interne.</p>
+  <p class="exports">Exports : startSpeakerAudio, stopSpeakerAudio</p>
+</div>
+<div class="file-block">
+  <span class="filename">Engine/hc90-cascade.mjs</span><span class="cat">Animation · Logique</span>
+  <p class="role">Détection de chaînes 74HC90 (unités/dizaines, mod-60, reset MR) et comptage idéal pour animation ; graphe de connexions (<code>reachableJonctions</code>).</p>
+</div>
+<div class="file-block">
+  <span class="filename">Engine/ripple-mod10.mjs</span><span class="cat">Animation · Logique</span>
+  <p class="role">Détection compteur ripple mod-10 (4× DFF + reset Q2/Q4) et animation BCD idéale pour afficheur 7 segments.</p>
+</div>
+
+<h2 id="spice" class="page-break">4. Moteur SPICE</h2>
+<p class="section-intro">Modules ESM du dossier <code>Simulateur/Engine/</code> — conversion schéma → netlist ngspice et parsing des résultats.</p>
+
+<div class="file-block" id="f-schematic">
+  <span class="filename">schematic-to-spice.mjs</span><span class="cat">Moteur · Cœur</span>
+  <p class="role">Conversion complète schéma graphique → netlist ngspice : tous composants (passifs, semi-conducteurs, logique, UNO, instruments), analyses <code>.op</code>, <code>.tran</code>, <code>.ac</code>, métadonnées wrdata, mode rapide Arduino sans .tran.</p>
+  <p class="exports">Exports : buildNetlistFromGraphicalState</p>
+</div>
+<div class="file-block" id="f-netlist">
+  <span class="filename">spice-netlist-v2.mjs</span><span class="cat">Moteur</span>
+  <p class="role">Façade asynchrone de génération de deck ngspice pour le serveur Node (mode batch <code>-b</code>).</p>
+  <p class="exports">Exports : buildNgspiceDeck</p>
+</div>
+<div class="file-block" id="f-parser">
+  <span class="filename">v2/result-parser.mjs</span><span class="cat">Moteur · Parsing</span>
+  <p class="role">Parse les sorties ngspice (logs .op, fichiers wrdata tran/ac) et fusionne mesures : voltmètres, ampèremètres, LED, oscilloscope, Bode, 7 segments, bargraph, portes logiques, HC90.</p>
+  <p class="exports">Exports : mergeVoltmeterMeasurements, mergeScopePlotsFromTranWrdata, mergeBargraphFromTranWrdata… (~30 fonctions)</p>
+</div>
+
+<h3 id="f-logic">Logique numérique</h3>
+<div class="file-block"><span class="filename">logic-rails.mjs</span><span class="cat">Logique</span><p class="role">Niveaux logiques en tension (rails 3,3 V / 5 V, seuils, conversion tension → binaire).</p></div>
+<div class="file-block"><span class="filename">logic-sequential.mjs</span><span class="cat">Logique</span><p class="role">Modèles SPICE DFF, JK, 74LS00, 74LS74, CD4511, 74HC90 ; choix XSPICE ou sources B.</p></div>
+<div class="file-block"><span class="filename">logic-xspice.mjs</span><span class="cat">Logique</span><p class="role">Intégration XSPICE (d_dff, d_jkff, adc/dac, digital.cm).</p></div>
+<div class="file-block"><span class="filename">logic-cd4511-bsource.mjs</span><span class="cat">Logique</span><p class="role">CD4511 par sources comportementales (sans XSPICE, compatible Linux).</p></div>
+<div class="file-block"><span class="filename">logic-cd4511-xspice.mjs</span><span class="cat">Logique</span><p class="role">CD4511 via XSPICE (d_dlatch, d_genlut, tables BCD→7 segments).</p></div>
+<div class="file-block"><span class="filename">logic-74hc90.mjs</span><span class="cat">Logique</span><p class="role">Compteur décade 74HC90/74LS90 (ripple, broches CP/MR/MS/Q).</p></div>
+<div class="file-block"><span class="filename">ngspice-xspice-probe.mjs</span><span class="cat">Logique</span><p class="role">Détecte si le binaire ngspice supporte XSPICE (<code>devhelp d_dff</code>).</p></div>
+
+<h3 id="f-instruments">Instruments, affichage et bus I²C</h3>
+<div class="file-block"><span class="filename">arduino-uno.mjs</span><span class="cat">SPICE · UNO</span><p class="role">Modèle SPICE Arduino UNO : rails 5 V/3,3 V/GND, GPIO DC/PULSE/PWL selon sketch, bus I²C.</p></div>
+<div class="file-block"><span class="filename">bcd-seg7.mjs</span><span class="cat">Affichage</span><p class="role">Tables BCD 0–9 → segments 7 segments ; conversion tensions Q → chiffre.</p></div>
+<div class="file-block"><span class="filename">voltmeter-display.mjs</span><span class="cat">Instruments</span><p class="role">Quantification affichage voltmètre (signaux logiques vs analogiques).</p></div>
+<div class="file-block"><span class="filename">i2c-protocol.mjs</span><span class="cat">I²C</span><p class="role">Générateur formes d'onde I²C (100 kHz, timings UM10204) → chaîne SPICE PWL.</p></div>
+<div class="file-block"><span class="filename">i2c-bus-ideal.mjs</span><span class="cat">I²C</span><p class="role">Ajoute SDA/SCL à la netlist quand LCD Grove est câblé sur UNO.</p></div>
+<div class="file-block"><span class="filename">lcd-pcf8574-i2c.mjs</span><span class="cat">I²C</span><p class="role">Encode commandes LiquidCrystal_I2C (PCF8574 + HD44780 4 bits) en transactions I²C.</p></div>
+<div class="file-block"><span class="filename">build-bridge-json.mjs</span><span class="cat">Utilitaire CLI</span><p class="role">Script CLI : génère un circuit JSON exemple (pont de diodes) et valide la netlist.</p></div>
+<div class="file-block"><span class="filename">simulate-smoke.mjs</span><span class="cat">Utilitaire CLI</span><p class="role">Test de fumée CLI : pile + R + voltmètre → ngspice → parseur.</p></div>
+
+<h2 id="arduino" class="page-break">5. Co-simulation Arduino</h2>
+
+<div class="file-block">
+  <span class="filename">arduino-sketch-parse.mjs</span><span class="cat">Arduino · Cœur</span>
+  <p class="role">Interpréteur de sketch : <code>pinMode</code>, <code>digitalWrite</code>, <code>delay</code>, registres AVR (PORTD/B/C), boucles <code>if</code>/<code>while</code>, expressions (<code>PORTD=PORTD/2</code>, <code>&lt;&lt;</code>), runtime pas-à-pas, UART série, phases GPIO temporelles pour SPICE et animation.</p>
+  <p class="exports">Exports : parseArduinoSketch, createArduinoRuntime, stepArduinoRuntime, resolvePinLevelsAt</p>
+</div>
+<div class="file-block"><span class="filename">arduino-avr-registers.mjs</span><span class="cat">Arduino</span><p class="role">Modèle registres AVR DDR/PORT pour broches D0–D13 et A0–A5.</p></div>
+<div class="file-block"><span class="filename">arduino-gpio-ideal.mjs</span><span class="cat">Arduino</span><p class="role">GPIO idéal 0/5 V pour voltmètres, CD4511, 7 segments et bargraph sans relancer ngspice.</p></div>
+<div class="file-block"><span class="filename">arduino-analog-ideal.mjs</span><span class="cat">Arduino</span><p class="role">Lecture analogique A0–A5 : tension réseau → ADC 10 bits (0–1023).</p></div>
+<div class="file-block"><span class="filename">arduino-uart-wave.mjs</span><span class="cat">Arduino</span><p class="role">Modèle UART 8N1 (TX=D1) pour oscilloscope et moniteur série.</p></div>
+<div class="file-block"><span class="filename">scope-arduino-ideal.mjs</span><span class="cat">Arduino</span><p class="role">Synthèse traces oscilloscope idéales depuis GPIO ou UART TX.</p></div>
+<div class="file-block"><span class="filename">dht22-sketch-parse.mjs</span><span class="cat">Arduino · Capteur</span><p class="role">Parse sketches DHT.h : broche DATA, lectures température/humidité simulées.</p></div>
+<div class="file-block"><span class="filename">dht22-ideal.mjs</span><span class="cat">Arduino · Capteur</span><p class="role">Câblage Grove DHT22 → UNO et injection valeurs dans Serial.print.</p></div>
+<div class="file-block"><span class="filename">grove-lcd-sketch-parse.mjs</span><span class="cat">Arduino · LCD</span><p class="role">Interpréteur LiquidCrystal_I2C : init, setCursor, print, clear, scroll, phases temporelles.</p></div>
+<div class="file-block"><span class="filename">grove-lcd-ideal.mjs</span><span class="cat">Arduino · LCD</span><p class="role">Affichage idéal Grove LCD 16×2 câblé sur UNO (variables analogiques/DHT).</p></div>
+
+<h2 id="serveur" class="page-break">6. Serveur et déploiement</h2>
+
+<div class="file-block">
+  <span class="filename">SimulateurH/main.js</span><span class="cat">Serveur · Electron</span>
+  <p class="role">Processus principal Electron « Simulateur H » : démarre le serveur HTTP local, ouvre BrowserWindow sur l'UI (<code>?app=h</code>), instance unique, arrêt propre du backend.</p>
+</div>
+<div class="file-block">
+  <span class="filename">SimulateurH/simulate-server.cjs</span><span class="cat">Serveur · Express</span>
+  <p class="role">Serveur Express autonome embarqué : fichiers statiques, POST <code>/api/simulate</code> (netlist → ngspice → parsing), routes Arduino, détection XSPICE, gestion <code>digital.cm</code>, préchargement moteur SPICE.</p>
+  <p class="exports">Exports : startStandaloneSimulateServer, createSimulateStandaloneApp</p>
+</div>
+<div class="file-block">
+  <span class="filename">server.js</span><span class="cat">Serveur · Site web</span>
+  <p class="role">Serveur Node.js principal du site (Express) : pages publiques, authentification, chat, et route <code>/api/simulate</code> identique pour déploiement Render/Docker.</p>
+</div>
+<div class="file-block">
+  <span class="filename">tools/simulate-standalone-server.cjs</span><span class="cat">Serveur · Généré</span>
+  <p class="role">Variante serveur minimal générée depuis <code>server.js</code> pour usage standalone (référence de build).</p>
+</div>
+
+<h2 id="outils" class="page-break">7. Outils Node.js (tools/)</h2>
+
+<div class="file-block">
+  <span class="filename">simulate-engine-loader.cjs</span><span class="cat">Outil</span>
+  <p class="role">Cache de chargement ESM des modules moteur SPICE — évite ~25 import() par requête (performance Render et Simulateur H).</p>
+  <p class="exports">Exports : loadSimEngineModules, preloadSimEngineModules</p>
+</div>
+<div class="file-block">
+  <span class="filename">ngspice-bundle.cjs</span><span class="cat">Outil</span>
+  <p class="role">Résolution binaire ngspice (NGSPICE, Simulateur/bin/, compatibilité Windows/Linux, chemin digital.cm).</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-api.cjs</span><span class="cat">Outil · Arduino CLI</span>
+  <p class="role">Wrapper <code>arduino-cli</code> : statut, compilation sketch UNO, recherche/installation bibliothèques.</p>
+</div>
+<div class="file-block">
+  <span class="filename">arduino-routes.cjs</span><span class="cat">Outil · API REST</span>
+  <p class="role">Routes Express <code>/api/arduino/*</code> (status, compile, libraries).</p>
+</div>
+<div class="file-block">
+  <span class="filename">build-standalone-server.cjs</span><span class="cat">Outil · Build</span>
+  <p class="role">Régénère <code>simulate-standalone-server.cjs</code> à partir de <code>server.js</code>.</p>
+</div>
+<div class="file-block">
+  <span class="filename">check-ngspice.cjs</span><span class="cat">Outil · Diagnostic</span>
+  <p class="role">Vérifie la présence et la compatibilité du binaire ngspice sur la machine.</p>
+</div>
+
+<p style="margin-top:24pt;font-size:9pt;color:#666;text-align:center;">
+  — Fin du document · Simulateur de Circuits Électroniques · Phase 1 —
+</p>
+
+</body>
+</html>

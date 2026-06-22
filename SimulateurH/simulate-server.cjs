@@ -603,7 +603,12 @@ function startStandaloneSimulateServer(options = {}) {
     const port = options.port ?? 43721;
     const host = options.host ?? "127.0.0.1";
     const app = createSimulateStandaloneApp(repoRoot);
-    preloadSimEngineModules(repoRoot);
+    const { preloadSimEngineModules: preloadEngine } = require(path.join(
+        repoRoot,
+        "tools",
+        "simulate-engine-loader.cjs"
+    ));
+    preloadEngine(repoRoot);
     const { resolveNgspiceForServer } = require(path.join(repoRoot, "tools", "ngspice-bundle.cjs"));
     return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
