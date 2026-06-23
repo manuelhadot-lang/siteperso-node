@@ -94,6 +94,10 @@ function parsePrintArg(arg, ctx) {
         const tslVal = ctx.resolveTsl(t);
         if (tslVal != null) return formatLcdDecimalText(tslVal);
     }
+    if (ctx?.resolveBmp) {
+        const bmpVal = ctx.resolveBmp(t);
+        if (bmpVal != null) return formatLcdDecimalText(bmpVal);
+    }
     if (ctx?.varBindings && Object.prototype.hasOwnProperty.call(ctx.varBindings, t)) {
         return formatLcdDecimalText(ctx.varBindings[t]);
     }

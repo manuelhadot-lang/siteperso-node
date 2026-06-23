@@ -404,12 +404,37 @@ function substituteCalls(expr, state) {
     s = s.replace(/\b(\w+)\.readTemperature\s*\(\s*\)/gi, (_, varName) => {
         const dht = state.dhtReadings;
         if (dht && dht.varName === varName) return String(dht.temperature);
+        const bmp = state.bmpReadings;
+        if (bmp && bmp.varName === varName) return String(bmp.temperature);
         return "nan";
     });
     s = s.replace(/\b(\w+)\.readHumidity\s*\(\s*\)/gi, (_, varName) => {
         const dht = state.dhtReadings;
         if (dht && dht.varName === varName) return String(dht.humidity);
         return "nan";
+    });
+    s = s.replace(/\b(\w+)\.readPressure\s*\(\s*\)\s*\/\s*100(?:\.0+)?/gi, (_, varName) => {
+        const bmp = state.bmpReadings;
+        if (bmp && bmp.varName === varName) {
+            return String(Math.round(bmp.pressureHpa * 10) / 10);
+        }
+        return "nan";
+    });
+    s = s.replace(/\b(\w+)\.readPressure\s*\(\s*\)/gi, (_, varName) => {
+        const bmp = state.bmpReadings;
+        if (bmp && bmp.varName === varName) {
+            return String(Math.round(bmp.pressureHpa * 10) / 10);
+        }
+        return "nan";
+    });
+    s = s.replace(/\b(\w+)\.readAltitude\s*\(\s*([^)]*)\s*\)/gi, (_, varName, seaArg) => {
+        const bmp = state.bmpReadings;
+        if (!bmp || bmp.varName !== varName) return "nan";
+        let seaHpa = 1013.25;
+        const n = parseFloat(String(seaArg || "").trim());
+        if (Number.isFinite(n)) seaHpa = n;
+        const alt = 44330.0 * (1.0 - (bmp.pressurePa / (seaHpa * 100.0)) ** 0.1903);
+        return String(Math.round(alt * 10) / 10);
     });
     s = s.replace(/\b(\w+)\.getFullLuminosity\s*\(\s*\)/gi, (_, varName) => {
         const tsl = state.tslReadings;

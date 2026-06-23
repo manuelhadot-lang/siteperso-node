@@ -222,6 +222,10 @@ function isGroveTsl2591Type(t) {
     return t === "grove_tsl2591";
 }
 
+function isGroveBmp280Type(t) {
+    return t === "grove_bmp280";
+}
+
 function isJoyitTft18Type(t) {
     return t === "joyit_tft18";
 }
@@ -246,6 +250,7 @@ function terminalKeysForComponent(c) {
     if (isGroveLcdType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isGroveDht22Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isGroveTsl2591Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
+    if (isGroveBmp280Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isJoyitTft18Type(c.type)) {
         const keys = [];
         for (let i = 0; i < 7; i++) keys.push(`${c.id}#${i}`);
@@ -1180,6 +1185,7 @@ function isArduinoIdealOnlyCircuit(components) {
             c.type === "grove_lcd16x2" ||
             c.type === "grove_dht22" ||
             c.type === "grove_tsl2591" ||
+            c.type === "grove_bmp280" ||
             c.type === "joyit_tft18" ||
             c.type === "ground" ||
             c.type === "gnd" ||
@@ -2770,6 +2776,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         if (c.type === "grove_tsl2591") {
             warnings.push(
                 `${c.id} (Grove TSL2591) : luminosité simulée via Adafruit_TSL2591 sur I²C (SDA/SCL, adresse 0x29, VCC/GND). Double-clic pour régler les lux.`
+            );
+        }
+        if (c.type === "grove_bmp280") {
+            warnings.push(
+                `${c.id} (Grove BMP280) : pression/température simulées via Adafruit_BMP280 sur I²C (SDA/SCL, adresse 0x76/0x77, VCC/GND). Double-clic pour régler hPa et °C.`
             );
         }
         if (c.type === "joyit_tft18") {

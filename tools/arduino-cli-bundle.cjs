@@ -101,6 +101,12 @@ async function seedArduinoDataIfNeeded(repoRoot, userDataDir) {
     await fs.promises.rm(dest, { recursive: true, force: true }).catch(() => {});
     console.log("[arduino-cli] Copie des cores embarqués (premier lancement, patience)…");
     await fs.promises.cp(seedSrc, dest, { recursive: true });
+    try {
+        const { repairArduinoData } = require(path.join(repoRoot, "scripts", "repair-esp32-toolchain.cjs"));
+        repairArduinoData(dest);
+    } catch (err) {
+        console.warn("[arduino-cli] Réparation toolchain ESP32 :", err?.message || err);
+    }
     console.log("[arduino-cli] Cores prêts : " + dest);
     return { seeded: true, dataDir: dest, version: seedVersion };
 }

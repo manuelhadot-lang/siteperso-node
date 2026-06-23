@@ -41,10 +41,10 @@ const COMPONENT_PREFIX = {
     battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', push_button: 'BP', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', opamp: 'AOP',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
-    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', led: 'LED', seg7: 'SEG', bargraph_dc10h: 'BAR', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', joyit_tft18: 'TFT',
+    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', led: 'LED', seg7: 'SEG', bargraph_dc10h: 'BAR', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', grove_bmp280: 'BMP', joyit_tft18: 'TFT',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7', 'bargraph_dc10h', 'grove_dht22', 'grove_tsl2591']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'seg7', 'bargraph_dc10h', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
@@ -246,7 +246,7 @@ window.addEventListener('keydown', (e) => {
     if (key === 'x' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
         const flippable = interaction.selectedComponents.filter(comp =>
-            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'joyit_tft18' || comp.type === 'bargraph_dc10h');
+            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18' || comp.type === 'bargraph_dc10h');
         if (flippable.length === 0) return;
         saveState(); flippable.forEach(comp => { comp.flipX = !comp.flipX; }); draw(); return;
     }
@@ -714,6 +714,23 @@ canvas.addEventListener('dblclick', async (e) => {
             draw();
             if (live) requestLiveSimulation();
         }
+        else if (target.type === 'grove_bmp280') {
+            const curP = target.pressureHpa ?? 1013.25;
+            const curT = target.temperature ?? 22;
+            const p = await showValuePrompt(`Pression simulée ${target.label} (hPa) :`, String(curP));
+            if (p === null || p.trim() === '') return;
+            const pVal = parseFloat(p);
+            if (!Number.isFinite(pVal)) return;
+            const t = await showValuePrompt(`Température simulée ${target.label} (°C) :`, String(curT));
+            if (t === null || t.trim() === '') return;
+            const tVal = parseFloat(t);
+            if (!Number.isFinite(tVal)) return;
+            if (!live) saveState();
+            target.pressureHpa = Math.max(300, Math.min(1100, pVal));
+            target.temperature = Math.max(-40, Math.min(85, tVal));
+            draw();
+            if (live) requestLiveSimulation();
+        }
         else if (target.type === 'push_button') {
             const cur = target.maintained ? 'maintenu' : 'momentane';
             let v = await showValuePrompt(
@@ -833,6 +850,11 @@ function applyNewComponentDefaults(nc, type) {
         nc.flipX = false;
         nc.i2cAddress = 0x29;
         nc.lux = 100;
+    } else if (type === 'grove_bmp280') {
+        nc.flipX = false;
+        nc.i2cAddress = 0x76;
+        nc.pressureHpa = 1013.25;
+        nc.temperature = 22;
     } else if (type === 'joyit_tft18') {
         nc.flipX = false;
     }

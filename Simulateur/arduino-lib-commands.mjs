@@ -78,6 +78,21 @@ export const ARDUINO_LIB_DOCS = [
         ],
     },
     {
+        id: "adafruit_bmp280",
+        match: /BMP280|Adafruit_BMP/i,
+        title: "Adafruit BMP280 (pression / T° I²C)",
+        header: "#include <Wire.h>\n#include <Adafruit_BMP280.h>",
+        ctor: "Adafruit_BMP280 bmp;",
+        note: "Grove BMP280 : SDA→A4 (UNO) ou GPIO I²C (ESP32-C3), SCL, VCC/GND. Adresse I²C 0x76 ou 0x77. Double-clic sur le capteur pour régler pression (hPa) et température.",
+        commands: [
+            { sig: "bmp.begin(0x76)", desc: "Initialise le capteur (adresse I²C).", simSupported: true },
+            { sig: "bmp.readTemperature()", desc: "Température en °C (simulation).", simSupported: true },
+            { sig: "bmp.readPressure()", desc: "Pression en hPa (simulation, ex. 1013.25).", simSupported: true },
+            { sig: "bmp.readAltitude(seaLevel)", desc: "Altitude estimée en m (simulation).", simSupported: true },
+            { sig: "bmp.setSampling", desc: "Réglages matériels (non simulés).", simSupported: false },
+        ],
+    },
+    {
         id: "grove_rgb_lcd",
         match: /grove.*lcd.*rgb|rgb_lcd/i,
         title: "Grove — LCD RGB Backlight",

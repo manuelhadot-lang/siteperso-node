@@ -6,8 +6,10 @@ import { applyArduinoSketchToComponent, evaluateLoopVarBindings, sketchUsesAnalo
 import { parseGroveLcdFromSketch, pickLcdPhaseAt, resolveLcdDisplayAt, effectiveLcdLoopCycleMs, emptyLcdBuffer } from "./grove-lcd-sketch-parse.mjs";
 import { resolveDhtPrintArg, buildDhtVarBindings } from "./dht22-ideal.mjs";
 import { resolveTslPrintArg, buildTslVarBindings } from "./tsl2591-ideal.mjs";
+import { resolveBmpPrintArg, buildBmpVarBindings } from "./bmp280-ideal.mjs";
 import { sketchLcdUsesDhtReads } from "./dht22-sketch-parse.mjs";
 import { sketchLcdUsesTslReads } from "./tsl2591-sketch-parse.mjs";
+import { sketchLcdUsesBmpReads } from "./bmp280-sketch-parse.mjs";
 import { readBoardAnalogInputs } from "./arduino-analog-ideal.mjs";
 import { reachableJonctions } from "./hc90-cascade.mjs";
 import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
@@ -109,8 +111,9 @@ function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
     const sketch = board?.sketch || "";
     const hasDht = sketchLcdUsesDhtReads(sketch);
     const hasTsl = sketchLcdUsesTslReads(sketch);
+    const hasBmp = sketchLcdUsesBmpReads(sketch);
     const hasAnalog = sketchUsesAnalogInput(sketch);
-    if (!hasDht && !hasTsl && !hasAnalog) return null;
+    if (!hasDht && !hasTsl && !hasBmp && !hasAnalog) return null;
 
     const analogInputs = () => readBoardAnalogInputs(board, {
         components,
@@ -128,6 +131,9 @@ function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
         resolveTsl: hasTsl
             ? (arg) => resolveTslPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
+        resolveBmp: hasBmp
+            ? (arg) => resolveBmpPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
+            : undefined,
         collectVarBindings: (body) => {
             let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs()) : {};
             if (hasDht) {
@@ -142,6 +148,12 @@ function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
                     ...buildTslVarBindings(body, sketch, board.label, components, wires, autoJunctions),
                 };
             }
+            if (hasBmp) {
+                bindings = {
+                    ...bindings,
+                    ...buildBmpVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                };
+            }
             return bindings;
         },
     };
@@ -149,7 +161,7 @@ function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
 
 function needsRuntimeLcdCtx(board) {
     const sketch = board?.sketch || "";
-    return sketchLcdUsesDhtReads(sketch) || sketchLcdUsesTslReads(sketch) || sketchUsesAnalogInput(sketch);
+    return sketchLcdUsesDhtReads(sketch) || sketchLcdUsesTslReads(sketch) || sketchLcdUsesBmpReads(sketch) || sketchUsesAnalogInput(sketch);
 }
 
 export function refreshGroveLcdDisplayCache(components, wires, autoJunctions = []) {

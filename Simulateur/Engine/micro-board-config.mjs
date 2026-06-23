@@ -93,3 +93,68 @@ export function tft18SpiDefaults(boardType) {
     }
     return { SCL: "D13", SDA: "D11", CS: "D10", DC: "D8", RES: "D9" };
 }
+
+function stripSketchComments(src) {
+    return String(src || "")
+        .replace(/\/\/[^\n]*/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function resolveSketchToken(tok, defines) {
+    let t = String(tok || "").trim();
+    for (let i = 0; i < 8 && defines[t]; i++) {
+        t = defines[t].trim();
+    }
+    return t;
+}
+
+function sketchPinToBoardLabel(boardType, tok) {
+    const t = String(tok || "").trim();
+    if (!t) return null;
+    if (boardType === "esp32_c3") {
+        const gpio = t.match(/^GPIO(\d+)$/i);
+        if (gpio) return `GPIO${gpio[1]}`;
+        if (/^\d+$/.test(t)) return `GPIO${t}`;
+    }
+    const analog = t.match(/^A(\d+)$/i);
+    if (analog) return `A${analog[1]}`;
+    const digital = t.match(/^D(\d+)$/i);
+    if (digital) return `D${digital[1]}`;
+    if (/^\d+$/.test(t) && boardType === "arduino_uno") {
+        const n = parseInt(t, 10);
+        if (n === 18) return "A4";
+        if (n === 19) return "A5";
+        return `D${n}`;
+    }
+    return t;
+}
+
+/**
+ * Broches I²C effectives d'après Wire.begin(…) dans le sketch (sinon profil carte).
+ * @returns {{ sda: string, scl: string }}
+ */
+export function parseSketchI2cPins(sketch, boardType) {
+    const prof = boardProfile(boardType);
+    const fallback = { sda: prof.i2c.sda.name, scl: prof.i2c.scl.name };
+    const src = stripSketchComments(sketch);
+    if (!src) return fallback;
+
+    const defines = {};
+    for (const m of src.matchAll(/#define\s+(\w+)\s+(\S+)/g)) {
+        defines[m[1]] = m[2];
+    }
+
+    const wireBegin = src.match(/Wire\.begin\s*\(\s*([^)]*)\s*\)/i);
+    if (!wireBegin) return fallback;
+
+    const args = wireBegin[1].trim();
+    if (!args) return fallback;
+
+    const parts = args.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return fallback;
+
+    const sda = sketchPinToBoardLabel(boardType, resolveSketchToken(parts[0], defines));
+    const scl = sketchPinToBoardLabel(boardType, resolveSketchToken(parts[1], defines));
+    if (!sda || !scl) return fallback;
+    return { sda, scl };
+}

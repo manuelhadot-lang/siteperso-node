@@ -330,6 +330,7 @@ const dirDocs = path.join(__dirname, 'doc');
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
+const SIM_UI_VERSION = 'icons4';
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href;
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href;
 let buildNgspiceDeckFn = null;
@@ -520,13 +521,29 @@ app.get('/Digicode.html', withProjectDateGate('Digicode', (req, res) => res.send
 app.get('/Robo_Cytron_ESP32.html', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
 
 app.use(express.static('public'));
-app.use('/Simulateur', express.static(dirSimulateur));
+app.get('/Simulateur/__ui', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+        ok: true,
+        uiVersion: SIM_UI_VERSION,
+        simulateurDir: dirSimulateur,
+        pid: process.pid,
+    });
+});
+app.use('/Simulateur', express.static(dirSimulateur, {
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-Sim-UI', SIM_UI_VERSION);
+    },
+}));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
 app.get('/api/version', (req, res) => {
     res.json({
         ok: true,
         service: "siteperso-main-server",
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
+        simUiVersion: SIM_UI_VERSION,
+        simulateurDir: dirSimulateur,
         simulateAwaitFix: true,
         ngspiceDeckModuleUrl,
         ngspiceResultParserModuleUrl,
@@ -1636,7 +1653,9 @@ app.post('/api/save-note', (req, res) => {
     }
 });
 
-server.listen(PORT, LISTEN_HOST, async () => {
+let activePort = PORT;
+
+async function onServerListening() {
     try {
         const { applyArduinoCliEnvironment } = require("./tools/arduino-cli-bundle.cjs");
         const arduinoEnv = await applyArduinoCliEnvironment({
@@ -1653,13 +1672,14 @@ server.listen(PORT, LISTEN_HOST, async () => {
     const { exe: ngspiceExe, prependPath } = resolveNgspiceForServer(__dirname);
     const digitalCm = resolveDigitalCmSourcePath(__dirname);
     console.log(`🔬 Simulateur ngspice : ${ngspiceExe}`);
-    console.log(`🚀 Serveur en ligne : http://localhost:${PORT}`);
+    console.log(`🎨 Simulateur UI ${SIM_UI_VERSION} : ${dirSimulateur}`);
+    console.log(`🚀 Serveur en ligne : http://localhost:${activePort}/Simulateur/`);
     if (LISTEN_HOST === "127.0.0.1" || LISTEN_HOST === "localhost") {
         console.log(
-            `   ↳ Accès réseau local : définir LISTEN_HOST=0.0.0.0 puis ouvrir http://<IP-de-ce-PC>:${PORT}/Simulateur/`
+            `   ↳ Accès réseau local : définir LISTEN_HOST=0.0.0.0 puis ouvrir http://<IP-de-ce-PC>:${activePort}/Simulateur/`
         );
     } else {
-        console.log(`   ↳ Écoute sur ${LISTEN_HOST} (accès LAN : http://<IP-de-ce-PC>:${PORT}/Simulateur/)`);
+        console.log(`   ↳ Écoute sur ${LISTEN_HOST} (accès LAN : http://<IP-de-ce-PC>:${activePort}/Simulateur/)`);
     }
     console.log(
         `   ↳ CD4511 / bascules XSPICE : digital.cm ${digitalCm ? "OK" : "ABSENT"} — vérifiez avec npm run check-ngspice`
@@ -1692,4 +1712,23 @@ server.listen(PORT, LISTEN_HOST, async () => {
             console.log('   ↳ SITE_ACCESS_MAX_AGE_SEC=session : cookie jusqu’à fermeture du navigateur');
         }
     }
+}
+
+function startServer(port) {
+    activePort = port;
+    server.listen(port, LISTEN_HOST, onServerListening);
+}
+
+server.on("error", (err) => {
+    if (err.code === "EADDRINUSE" && activePort === 3000 && !process.env.PORT) {
+        console.warn("\n⚠️  Le port 3000 est déjà pris (souvent un ancien npm start).");
+        console.warn("   Un autre dossier sert encore theme4 / emojis.");
+        console.warn("   Nouvelle tentative sur le port 3010…\n");
+        startServer(3010);
+        return;
+    }
+    console.error(err);
+    process.exit(1);
 });
+
+startServer(PORT);

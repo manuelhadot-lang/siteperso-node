@@ -9,7 +9,7 @@ import {
     luxToRawChannels,
 } from "./tsl2591-sketch-parse.mjs";
 import { reachableJonctions } from "./hc90-cascade.mjs";
-import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
+import { boardProfile, isMicroBoardType, parseSketchI2cPins } from "./micro-board-config.mjs";
 
 const GROVE_TSL2591_DEFAULT_I2C = 0x29;
 
@@ -28,10 +28,10 @@ function isMicroBoardPowered(comp, net, rail) {
 }
 
 function isTslI2cWiredToBoard(tslLabel, board, wires, autoJunctions) {
-    const prof = boardProfile(board.type);
+    const { sda, scl } = parseSketchI2cPins(board?.sketch, board.type);
     for (const [tslPin, boardPin] of [
-        ["SDA", prof.i2c.sda.name],
-        ["SCL", prof.i2c.scl.name],
+        ["SDA", sda],
+        ["SCL", scl],
     ]) {
         const tslJ = `${tslLabel}_${tslPin}`;
         const boardJ = `${board.label}_${boardPin}`;

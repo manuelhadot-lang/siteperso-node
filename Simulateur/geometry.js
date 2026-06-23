@@ -58,6 +58,17 @@ import {
     GROVE_TSL2591_HIT_DY,
 } from './tsl2591-layout.js';
 import {
+    GROVE_BMP280_PINS,
+    GROVE_BMP280_PIN_Y,
+    GROVE_BMP280_JUNC_X,
+    GROVE_BMP280_SEL_L,
+    GROVE_BMP280_SEL_T,
+    GROVE_BMP280_SEL_W,
+    GROVE_BMP280_SEL_H,
+    GROVE_BMP280_HIT_DX,
+    GROVE_BMP280_HIT_DY,
+} from './bmp280-layout.js';
+import {
     TFT18_PINS,
     TFT18_PIN_Y,
     TFT18_JUNC_X,
@@ -170,6 +181,10 @@ export function getComponentJonctions(comp) {
         GROVE_TSL2591_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: GROVE_TSL2591_JUNC_X, y: GROVE_TSL2591_PIN_Y[i] });
         });
+    } else if (comp.type === 'grove_bmp280') {
+        GROVE_BMP280_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: GROVE_BMP280_JUNC_X, y: GROVE_BMP280_PIN_Y[i] });
+        });
     } else if (comp.type === 'joyit_tft18') {
         TFT18_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: TFT18_JUNC_X, y: TFT18_PIN_Y[i] });
@@ -259,7 +274,7 @@ export function getComponentJonctions(comp) {
             lx = rx;
             ly = ry;
         }
-        if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_tsl2591' || comp.type === 'joyit_tft18')) lx = -lx;
+        if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18')) lx = -lx;
         if (comp.flipY && comp.type === 'opamp') ly = -ly;
         list.push({ id: pt.id, x: snapToGrid(comp.x + lx), y: snapToGrid(comp.y + ly) });
     });
@@ -301,6 +316,14 @@ export function componentHitTest(comp, mx, my) {
         const selL = Math.min(fx(GROVE_TSL2591_SEL_L), fx(GROVE_TSL2591_SEL_L + GROVE_TSL2591_SEL_W));
         return x >= selL && x <= selL + GROVE_TSL2591_SEL_W
             && y >= GROVE_TSL2591_SEL_T && y <= GROVE_TSL2591_SEL_T + GROVE_TSL2591_SEL_H;
+    }
+    if (comp.type === 'grove_bmp280') {
+        const { x, y } = compLocalCoords(comp, mx, my);
+        const flip = comp.flipX ? -1 : 1;
+        const fx = (v) => flip * v;
+        const selL = Math.min(fx(GROVE_BMP280_SEL_L), fx(GROVE_BMP280_SEL_L + GROVE_BMP280_SEL_W));
+        return x >= selL && x <= selL + GROVE_BMP280_SEL_W
+            && y >= GROVE_BMP280_SEL_T && y <= GROVE_BMP280_SEL_T + GROVE_BMP280_SEL_H;
     }
     if (comp.type === 'joyit_tft18') {
         const { x, y } = compLocalCoords(comp, mx, my);

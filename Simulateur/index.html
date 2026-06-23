@@ -4,23 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simulateur de Circuits Électroniques</title>
-    <link rel="stylesheet" href="style.css?v=theme4">
+    <link rel="stylesheet" href="style.css?v=icons4">
 </head>
 <body class="theme-dark">
 
     <header class="navbar">
         <div class="menu-item">
-            <span class="menu-icon">📁</span> Fichier
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span> Fichier
             <div class="dropdown">
-                <div class="dropdown-item" id="btn-new">📄 Nouveau</div>
-                <div class="dropdown-item" id="btn-open">📂 Ouvrir...</div>
-                <div class="dropdown-item" id="btn-save">💾 Enregistrer</div>
-                <div class="dropdown-item" id="btn-save-as">💾 Enregistrer sous...</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-new"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></svg>Nouveau</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-open"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Ouvrir...</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-save"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>Enregistrer</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-save-as"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v3a2 2 0 0 0 2 2h5"/><path d="M18 8v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><path d="M7 18h7"/><path d="M7 13h10"/><path d="M7 8h3"/></svg>Enregistrer sous...</div>
             </div>
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">⚙️</span> Éditeur
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></span> Éditeur
             <div class="dropdown">
                 <div class="dropdown-item" id="btn-commands">Commandes</div>
                 <div class="dropdown-item" id="btn-theme-dark">Sombre</div>
@@ -29,7 +29,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon menu-icon--sources" aria-hidden="true"></span> Sources
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13.5 10H20a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 10.5 14Z"/></svg></span> Sources
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="battery">Pile DC</div>
                 <div class="dropdown-item" draggable="true" data-component="vcc">Alimentation VCC</div>
@@ -41,7 +41,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">🔌</span> Composants
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M11 9h4a2 2 0 0 0 2-2V5"/><path d="M9 15v-2a2 2 0 0 1 2-2h2"/><path d="M9 9v2"/><path d="M9 19v-2a2 2 0 0 1 2-2h2"/><path d="M15 15v2"/><path d="M15 5V3"/></svg></span> Composants
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="resistor">Résistance</div>
                 <div class="dropdown-item" draggable="true" data-component="capacitor">Condensateur</div>
@@ -67,7 +67,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">🧠</span> Logique
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="14" width="4" height="6" rx="2"/><rect x="6" y="4" width="4" height="6" rx="2"/><path d="M6 20h4"/><path d="M14 10h4"/><path d="M6 14h2v6"/><path d="M14 4h2v6"/></svg></span> Logique
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="logic_terminal">Borne Numérique (0/1)</div>
                 <div class="dropdown-submenu">
@@ -95,7 +95,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">📡</span> ESP32
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 12h2"/><path d="M18 16h2"/><path d="M18 8h2"/><path d="M4 12h2"/><path d="M4 16h2"/><path d="M4 8h2"/><path d="M8 4h2"/><path d="M12 4h2"/><path d="M8 20h2"/><path d="M12 20h2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span> ESP32
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="esp32_c3">ESP32-C3 DevKit</div>
                 <div class="dropdown-item dropdown-item--action" id="menu-esp32-editor">Éditeur de programme</div>
@@ -103,7 +103,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">🤖</span> Arduino
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg></span> Arduino
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="arduino_uno">Arduino UNO R3</div>
                 <div class="dropdown-item dropdown-item--action" id="menu-arduino-editor">Éditeur de programme</div>
@@ -112,6 +112,7 @@
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="grove_dht22">Grove DHT22 (T° / humidité)</div>
                         <div class="dropdown-item" draggable="true" data-component="grove_tsl2591">Grove TSL2591 (luminosité I²C)</div>
+                        <div class="dropdown-item" draggable="true" data-component="grove_bmp280">Grove BMP280 (pression / T° I²C)</div>
                     </div>
                 </div>
                 <div class="dropdown-submenu">
@@ -125,7 +126,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">🚨</span> Opto
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.2 3.2.6.6 1.2 1.1 1.8 1.8"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></span> Opto
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="led">LED (Rouge)</div>
                 <div class="dropdown-item" draggable="true" data-component="seg7">Afficheur 7 segments</div>
@@ -134,7 +135,7 @@
         </div>
 
         <div class="menu-item">
-            <span class="menu-icon">📊</span> Mesures
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m19 16-5.5-5.5"/></svg></span> Mesures
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="voltmeter">Voltmètre</div>
                 <div class="dropdown-item" draggable="true" data-component="ammeter">Ampèremètre</div>
@@ -146,9 +147,10 @@
         </div>
 
         <div class="simulation-controls">
+            <span class="ui-version-badge" id="ui-version-badge" title="Version de l'interface">UI icons4</span>
             <span id="circuit-name" class="circuit-name" title="Nom du montage">Sans titre</span>
-            <button id="btn-simulate" type="button">Lancer la simulation</button>
-            <button id="btn-stop" type="button" class="disabled">Arrêter</button>
+            <button id="btn-simulate" type="button"><span class="btn-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg></span>Lancer la simulation</button>
+            <button id="btn-stop" type="button" class="disabled"><span class="btn-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>Arrêter</button>
         </div>
     </header>
 
@@ -162,7 +164,7 @@
             <div class="panel-header panel-header--arduino">
                 <span id="arduino-panel-title">Arduino UNO</span>
                 <div class="arduino-panel-header-actions">
-                    <button type="button" id="arduino-panel-doc" class="arduino-btn arduino-btn--small" title="Documentation broches UNO">?</button>
+                    <button type="button" id="arduino-panel-doc" class="arduino-btn arduino-btn--small" title="Documentation broches UNO" aria-label="Documentation broches"></button>
                     <button type="button" id="arduino-panel-close" class="panel-close" title="Fermer">&times;</button>
                 </div>
             </div>
@@ -189,7 +191,7 @@
                         <select id="arduino-upload-port" class="arduino-upload-select" title="Port série USB">
                             <option value="">— Actualiser les ports —</option>
                         </select>
-                        <button type="button" id="arduino-btn-refresh-ports" class="arduino-btn arduino-btn--small" title="Détecter les cartes USB">↻ Ports</button>
+                        <button type="button" id="arduino-btn-refresh-ports" class="arduino-btn arduino-btn--small" title="Détecter les cartes USB">Ports</button>
                     </div>
                 </section>
                 <div class="arduino-panel-actions">
@@ -204,7 +206,7 @@
                     <summary class="arduino-libs-summary">Bibliothèques Arduino</summary>
                     <section class="arduino-libs-section" aria-label="Bibliothèques Arduino">
                         <div class="arduino-libs-header">
-                            <button type="button" id="arduino-lib-refresh" class="arduino-btn arduino-btn--small" title="Actualiser la liste">↻ Actualiser</button>
+                            <button type="button" id="arduino-lib-refresh" class="arduino-btn arduino-btn--small" title="Actualiser la liste">Actualiser</button>
                         </div>
                         <p class="arduino-lib-hint">Cliquez sur le nom d’une bibliothèque pour voir les commandes (fenêtre flottante).</p>
                         <div class="arduino-lib-search-row">
@@ -762,6 +764,7 @@ void loop() {
         </div>
     </div>
 
-    <script type="module" src="app.js?v=i2c-pro1"></script>
+    <script type="module" src="menu-icons.mjs?v=icons4"></script>
+    <script type="module" src="app.js?v=icons4"></script>
 </body>
 </html>

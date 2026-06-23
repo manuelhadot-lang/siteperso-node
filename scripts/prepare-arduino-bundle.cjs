@@ -27,6 +27,7 @@ const LIBS = [
     "Adafruit GFX Library",
     "Adafruit ST7735 and ST7789 Library",
     "Adafruit TSL2591 Library",
+    "Adafruit BMP280 Library",
     "Adafruit BusIO",
 ];
 
@@ -117,6 +118,11 @@ async function installCoresAndLibs(exe) {
     }
 
     await writeFile(path.join(DATA_DIR, ".bundle-version"), BUNDLE_VERSION + "\n", "utf8");
+    const { repairArduinoData } = require("./repair-esp32-toolchain.cjs");
+    const repair = repairArduinoData(DATA_DIR);
+    if (repair.main?.repaired) {
+        console.log(`  → réparation toolchain ESP32 (${repair.main.copied} en-têtes bits)`);
+    }
     console.log("✓ arduino-data prêt : " + DATA_DIR);
 }
 

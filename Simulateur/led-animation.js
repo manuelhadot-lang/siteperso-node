@@ -46,7 +46,9 @@ import { isJoyitTft18WiredToBoard, refreshJoyitTft18DisplayCache, getIdealJoyitT
 import { isGroveDht22WiredToBoard, getIdealDht22Reading, resolveDhtReadingsForBoard } from './Engine/dht22-ideal.mjs';
 import { sketchUsesDht } from './Engine/dht22-sketch-parse.mjs';
 import { isGroveTsl2591WiredToBoard, resolveTslReadingsForBoard } from './Engine/tsl2591-ideal.mjs';
+import { isGroveBmp280WiredToBoard, resolveBmpReadingsForBoard } from './Engine/bmp280-ideal.mjs';
 import { sketchUsesTsl2591 } from './Engine/tsl2591-sketch-parse.mjs';
+import { sketchUsesBmp280 } from './Engine/bmp280-sketch-parse.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -205,6 +207,14 @@ function updateArduinoRuntimes() {
             : null;
         entry.rt.state.tslReadings = sketchUsesTsl2591(comp.sketch || '')
             ? resolveTslReadingsForBoard(
+                comp,
+                circuit.components,
+                circuit.wires,
+                circuit.autoJunctions
+            )
+            : null;
+        entry.rt.state.bmpReadings = sketchUsesBmp280(comp.sketch || '')
+            ? resolveBmpReadingsForBoard(
                 comp,
                 circuit.components,
                 circuit.wires,
@@ -658,6 +668,13 @@ function hasTsl2591Simulation() {
     );
 }
 
+function hasBmp280Simulation() {
+    syncArduinoSketchesFromEditor();
+    return circuit.components.some(
+        (c) => c.type === 'grove_bmp280' && isGroveBmp280WiredToBoard(c.label, circuit.components, circuit.wires, circuit.autoJunctions)
+    );
+}
+
 export function ensureArduinoLedAnimation() {
     if (!flags.isSimulating) return;
     indexArduinoLedDrives();
@@ -666,6 +683,7 @@ export function ensureArduinoLedAnimation() {
         !hasArduinoLoopSimulation() &&
         !hasDht22Simulation() &&
         !hasTsl2591Simulation() &&
+        !hasBmp280Simulation() &&
         !Object.keys(anim.arduinoLedDrive).length &&
         !hasArduinoStaticIdealDisplay() &&
         !hasLcdTimeVaryingDisplay()

@@ -11,8 +11,10 @@ import {
 } from "./tft18-sketch-parse.mjs";
 import { resolveDhtPrintArg, buildDhtVarBindings } from "./dht22-ideal.mjs";
 import { resolveTslPrintArg, buildTslVarBindings } from "./tsl2591-ideal.mjs";
+import { resolveBmpPrintArg, buildBmpVarBindings } from "./bmp280-ideal.mjs";
 import { sketchUsesDht } from "./dht22-sketch-parse.mjs";
 import { sketchUsesTsl2591 } from "./tsl2591-sketch-parse.mjs";
+import { sketchUsesBmp280 } from "./bmp280-sketch-parse.mjs";
 import { readBoardAnalogInputs } from "./arduino-analog-ideal.mjs";
 import { reachableJonctions } from "./hc90-cascade.mjs";
 import { boardProfile, isMicroBoardType, tft18SpiDefaults, digitalPinsForBoard } from "./micro-board-config.mjs";
@@ -128,8 +130,9 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
     const sketch = board?.sketch || "";
     const hasDht = sketchUsesDht(sketch);
     const hasTsl = sketchUsesTsl2591(sketch);
+    const hasBmp = sketchUsesBmp280(sketch);
     const hasAnalog = sketchUsesAnalogInput(sketch);
-    if (!hasDht && !hasTsl && !hasAnalog) return null;
+    if (!hasDht && !hasTsl && !hasBmp && !hasAnalog) return null;
 
     const analogInputs = () => readBoardAnalogInputs(board, {
         components,
@@ -147,6 +150,9 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
         resolveTsl: hasTsl
             ? (arg) => resolveTslPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
+        resolveBmp: hasBmp
+            ? (arg) => resolveBmpPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
+            : undefined,
         collectVarBindings: (body) => {
             let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs()) : {};
             if (hasDht) {
@@ -161,6 +167,12 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
                     ...buildTslVarBindings(body, sketch, board.label, components, wires, autoJunctions),
                 };
             }
+            if (hasBmp) {
+                bindings = {
+                    ...bindings,
+                    ...buildBmpVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                };
+            }
             return bindings;
         },
     };
@@ -168,7 +180,7 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
 
 function needsRuntimeTftCtx(board) {
     const sketch = board?.sketch || "";
-    return sketchUsesDht(sketch) || sketchUsesTsl2591(sketch) || sketchUsesAnalogInput(sketch);
+    return sketchUsesDht(sketch) || sketchUsesTsl2591(sketch) || sketchUsesBmp280(sketch) || sketchUsesAnalogInput(sketch);
 }
 
 function tftHasVisibleContent(parsed) {

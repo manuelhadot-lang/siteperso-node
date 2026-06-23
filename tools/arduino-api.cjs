@@ -189,10 +189,23 @@ function isArduinoLibraryDir(dir) {
 /** Chemins des bibliothèques locales (--library arduino-cli). */
 function resolveUserLibraryPaths() {
     const paths = [];
+    const seen = new Set();
+    const addDir = (dir) => {
+        const abs = path.resolve(dir);
+        if (seen.has(abs)) return;
+        if (!isArduinoLibraryDir(abs)) return;
+        seen.add(abs);
+        paths.push(abs);
+    };
     for (const root of resolveUserLibraryRoots()) {
         for (const name of fs.readdirSync(root)) {
-            const libDir = path.join(root, name);
-            if (isArduinoLibraryDir(libDir)) paths.push(libDir);
+            addDir(path.join(root, name));
+        }
+        const nested = path.join(root, "libraries");
+        if (fs.existsSync(nested) && fs.statSync(nested).isDirectory()) {
+            for (const name of fs.readdirSync(nested)) {
+                addDir(path.join(nested, name));
+            }
         }
     }
     return paths;
@@ -213,6 +226,8 @@ const HEADER_LIB_REGISTRY = {
     "DHT.h": "DHT sensor library",
     "Adafruit_ST7735.h": "Adafruit ST7735 and ST7789 Library",
     "Adafruit_GFX.h": "Adafruit GFX Library",
+    "Adafruit_TSL2591.h": "Adafruit TSL2591 Library",
+    "Adafruit_BMP280.h": "Adafruit BMP280 Library",
 };
 
 function findLocalLibraryForHeader(header, libraryPaths) {

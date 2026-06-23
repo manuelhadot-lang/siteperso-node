@@ -159,6 +159,10 @@ function parsePrintArg(arg, ctx) {
         const tslVal = ctx.resolveTsl(t);
         if (tslVal != null) return String(tslVal).replace(".", ",");
     }
+    if (ctx?.resolveBmp) {
+        const bmpVal = ctx.resolveBmp(t);
+        if (bmpVal != null) return String(bmpVal).replace(".", ",");
+    }
     if (ctx?.varBindings && Object.prototype.hasOwnProperty.call(ctx.varBindings, t)) {
         return String(ctx.varBindings[t]).replace(".", ",");
     }

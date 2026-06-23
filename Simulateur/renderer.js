@@ -155,6 +155,26 @@ import {
     GROVE_TSL2591_PIN_LABEL_X,
 } from './tsl2591-layout.js';
 import {
+    GROVE_BMP280_CONN_L,
+    GROVE_BMP280_BOX_L,
+    GROVE_BMP280_BOX_R,
+    GROVE_BMP280_BOX_T,
+    GROVE_BMP280_BOX_B,
+    GROVE_BMP280_JUNC_X,
+    GROVE_BMP280_PIN_Y,
+    GROVE_BMP280_PINS,
+    GROVE_BMP280_CONNECTOR_W,
+    GROVE_BMP280_SENSOR_L,
+    GROVE_BMP280_SENSOR_R,
+    GROVE_BMP280_SENSOR_T,
+    GROVE_BMP280_SENSOR_B,
+    GROVE_BMP280_SEL_L,
+    GROVE_BMP280_SEL_T,
+    GROVE_BMP280_SEL_W,
+    GROVE_BMP280_SEL_H,
+    GROVE_BMP280_PIN_LABEL_X,
+} from './bmp280-layout.js';
+import {
     DC10H_SEG_COUNT,
     DC10H_SEG_NAMES,
     DC10H_PIN_Y,
@@ -1165,6 +1185,101 @@ function drawGroveTsl2591(comp) {
     drawTextFx(comp.label, 0, boxB + 8);
 }
 
+function drawGroveBmp280(comp) {
+    const flip = comp.flipX ? -1 : 1;
+    const fx = (x) => flip * x;
+    const fillRectFx = (x, y, w, h) => ctx.fillRect(fx(x) - (flip < 0 ? w : 0), y, w, h);
+    const strokeRectFx = (x, y, w, h) => ctx.strokeRect(fx(x) - (flip < 0 ? w : 0), y, w, h);
+    const drawTextFx = (text, x, y) => {
+        ctx.save();
+        if (comp.flipX) {
+            ctx.translate(fx(x), y);
+            ctx.scale(-1, 1);
+            ctx.fillText(text, 0, 0);
+        } else {
+            ctx.fillText(text, x, y);
+        }
+        ctx.restore();
+    };
+
+    const boxL = GROVE_BMP280_BOX_L;
+    const boxR = GROVE_BMP280_BOX_R;
+    const boxT = GROVE_BMP280_BOX_T;
+    const boxB = GROVE_BMP280_BOX_B;
+    const connL = GROVE_BMP280_CONN_L;
+
+    ctx.fillStyle = '#141414';
+    fillRectFx(connL, boxT, GROVE_BMP280_CONNECTOR_W, boxB - boxT);
+
+    ctx.fillStyle = '#1a2a4a';
+    ctx.strokeStyle = '#102040';
+    ctx.lineWidth = 2;
+    fillRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+    strokeRectFx(boxL, boxT, boxR - boxL, boxB - boxT);
+
+    const sx = GROVE_BMP280_SENSOR_L;
+    const sy = GROVE_BMP280_SENSOR_T;
+    const sw = GROVE_BMP280_SENSOR_R - GROVE_BMP280_SENSOR_L;
+    const sh = GROVE_BMP280_SENSOR_B - GROVE_BMP280_SENSOR_T;
+    ctx.fillStyle = '#0d1a30';
+    fillRectFx(sx, sy, sw, sh);
+    strokeRectFx(sx, sy, sw, sh);
+    ctx.strokeStyle = '#64b5f6';
+    ctx.lineWidth = 1.5;
+    const cx = sx + sw / 2;
+    const cy = sy + sh / 2;
+    const r = Math.min(sw, sh) * 0.38;
+    ctx.beginPath();
+    ctx.arc(fx(cx), cy, r, Math.PI * 0.75, Math.PI * 0.25);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx(cx), cy);
+    ctx.lineTo(fx(cx + r * 0.55), cy - r * 0.35);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.strokeMuted;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < GROVE_BMP280_PINS.length; i++) {
+        const py = GROVE_BMP280_PIN_Y[i];
+        ctx.beginPath();
+        ctx.moveTo(fx(GROVE_BMP280_JUNC_X), py);
+        ctx.lineTo(fx(connL), py);
+        ctx.stroke();
+    }
+
+    const pinStep = GROVE_BMP280_PIN_Y.length > 1
+        ? GROVE_BMP280_PIN_Y[1] - GROVE_BMP280_PIN_Y[0]
+        : 14;
+    const labelGap = 3;
+    const pinLabelFontSize = Math.min(8, Math.max(6, Math.floor(pinStep - labelGap - 2)));
+    ctx.font = `bold ${pinLabelFontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = COLORS.ink;
+    for (let i = 0; i < GROVE_BMP280_PINS.length; i++) {
+        const py = GROVE_BMP280_PIN_Y[i];
+        drawTextFx(GROVE_BMP280_PINS[i], GROVE_BMP280_PIN_LABEL_X, py - labelGap);
+    }
+
+    const pressureHpa = Number.isFinite(comp.pressureHpa) ? comp.pressureHpa : 1013.25;
+    const tempC = Number.isFinite(comp.temperature) ? comp.temperature : 22;
+    const pressText = `${Math.round(pressureHpa * 10) / 10} hPa`;
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = '8px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    drawTextFx(pressText, 0, (boxT + boxB) / 2 - 2);
+    ctx.font = '7px Arial';
+    drawTextFx(`${Math.round(tempC * 10) / 10}°C`, 0, (boxT + boxB) / 2 + 8);
+
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    drawTextFx('BMP280', 0, boxT - 12);
+    drawTextFx(comp.label, 0, boxB + 8);
+}
+
 function drawLogicGateSymbol(gateType) {
     const inTopY = -20;
     const inBottomY = 20;
@@ -1325,7 +1440,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     ctx.save(); ctx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'joyit_tft18';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     ctx.rotate(rot * Math.PI / 180);
 
@@ -1374,6 +1489,12 @@ function drawComponentBody(comp) {
             const fx = (x) => flip * x;
             const selL = Math.min(fx(GROVE_TSL2591_SEL_L), fx(GROVE_TSL2591_SEL_L + GROVE_TSL2591_SEL_W));
             ctx.strokeRect(selL, GROVE_TSL2591_SEL_T, GROVE_TSL2591_SEL_W, GROVE_TSL2591_SEL_H);
+        }
+        else if (comp.type === 'grove_bmp280') {
+            const flip = comp.flipX ? -1 : 1;
+            const fx = (x) => flip * x;
+            const selL = Math.min(fx(GROVE_BMP280_SEL_L), fx(GROVE_BMP280_SEL_L + GROVE_BMP280_SEL_W));
+            ctx.strokeRect(selL, GROVE_BMP280_SEL_T, GROVE_BMP280_SEL_W, GROVE_BMP280_SEL_H);
         }
         else if (comp.type === 'logic_terminal') ctx.strokeRect(-14, -10, 24, 20);
         else if (comp.type !== 'logic_terminal') ctx.strokeRect(-45, -25, 90, 50);
@@ -1861,6 +1982,9 @@ function drawComponentBody(comp) {
     }
     else if (comp.type === 'grove_tsl2591') {
         drawGroveTsl2591(comp);
+    }
+    else if (comp.type === 'grove_bmp280') {
+        drawGroveBmp280(comp);
     }
     else if (comp.type === 'led') {
         const ledCurrent = getLedCurrentAmps(comp);

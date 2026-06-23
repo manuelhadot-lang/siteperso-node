@@ -85,7 +85,7 @@ const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
-    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591', joyit_tft18: 'joyit_tft18',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591', grove_bmp280: 'grove_bmp280', joyit_tft18: 'joyit_tft18',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -193,6 +193,11 @@ function jonctionIdToTerminalKey(jonctionId) {
                 if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
             }
         } else if (comp.type === 'grove_tsl2591') {
+            const pins = ['SDA', 'SCL', 'VCC', 'GND'];
+            for (let i = 0; i < pins.length; i++) {
+                if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
+            }
+        } else if (comp.type === 'grove_bmp280') {
             const pins = ['SDA', 'SCL', 'VCC', 'GND'];
             for (let i = 0; i < pins.length; i++) {
                 if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;

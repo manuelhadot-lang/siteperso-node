@@ -67,6 +67,12 @@ export function migrateLoadedComponents(components) {
             if (comp.i2cAddress == null) comp.i2cAddress = 0x29;
             if (comp.lux == null || !Number.isFinite(comp.lux)) comp.lux = 100;
         }
+        if (comp.type === 'grove_bmp280') {
+            comp.flipX = !!comp.flipX;
+            if (comp.i2cAddress == null) comp.i2cAddress = 0x76;
+            if (comp.pressureHpa == null || !Number.isFinite(comp.pressureHpa)) comp.pressureHpa = 1013.25;
+            if (comp.temperature == null || !Number.isFinite(comp.temperature)) comp.temperature = 22;
+        }
         if (comp.type === 'joyit_tft18') {
             comp.flipX = !!comp.flipX;
             delete comp.tftDisplayCache;
