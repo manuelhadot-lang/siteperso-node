@@ -6,6 +6,7 @@ import { refreshGroveLcdDisplayCache } from './Engine/grove-lcd-ideal.mjs';
 import { refreshJoyitTft18DisplayCache } from './Engine/tft18-ideal.mjs';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { DEFAULT_ESP32_SKETCH, ESP32_FQBN, uploadProfilesForBoardType, normalizeBoardFqbn } from './esp32-c3-layout.js';
+import { DEFAULT_ESP32_DEVKIT_SKETCH } from './esp32-devkit-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { registerArduinoSketchSync, syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
@@ -480,11 +481,13 @@ export function getActiveArduinoBoard() {
 
 function boardPanelTitle(comp) {
     if (comp.type === 'esp32_c3') return `${comp.label} — ESP32-C3`;
+    if (comp.type === 'esp32_devkit') return `${comp.label} — ESP32 DevKit`;
     return `${comp.label} — Arduino UNO`;
 }
 
 function defaultSketchForBoard(comp) {
     if (comp.type === 'esp32_c3') return DEFAULT_ESP32_SKETCH;
+    if (comp.type === 'esp32_devkit') return DEFAULT_ESP32_DEVKIT_SKETCH;
     return DEFAULT_ARDUINO_SKETCH;
 }
 
@@ -518,9 +521,11 @@ export function openArduinoEditorForCircuit(preferredType) {
     if (!board) {
         const hint = preferredType === 'esp32_c3'
             ? 'Ajoutez d’abord une carte ESP32-C3 au schéma (menu ESP32).'
+            : preferredType === 'esp32_devkit'
+                ? 'Ajoutez d’abord une carte ESP32 DevKit au schéma (menu ESP32).'
             : preferredType === 'arduino_uno'
                 ? 'Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).'
-                : 'Ajoutez d’abord une carte Arduino UNO ou ESP32-C3 au schéma.';
+                : 'Ajoutez d’abord une carte Arduino UNO ou ESP32 au schéma.';
         alert(hint);
         return false;
     }

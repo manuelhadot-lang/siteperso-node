@@ -50,6 +50,10 @@ const footer = `
     const { mountArduinoRoutes } = require(path.join(repoRoot, "tools", "arduino-routes.cjs"));
     mountArduinoRoutes(app);
 
+    app.get("/favicon.ico", (req, res) => {
+        res.type("image/svg+xml");
+        res.sendFile(path.join(dirSimulateur, "favicon.svg"));
+    });
     app.use("/Simulateur", express.static(dirSimulateur));
     app.get("/", (req, res) => res.redirect("/Simulateur/"));
     return app;

@@ -258,6 +258,7 @@ app.post("/api/simulate", async (req, res) => {
         quickTran: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
+    if (req.body?.liveSourceTuning === true) deckOpts.liveSourceTuning = true;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
     if (!built || typeof built !== "object") {
         return res.status(500).json({
@@ -592,6 +593,10 @@ app.post("/api/simulate", async (req, res) => {
     const { mountArduinoRoutes } = require(path.join(repoRoot, "tools", "arduino-routes.cjs"));
     mountArduinoRoutes(app);
 
+    app.get("/favicon.ico", (req, res) => {
+        res.type("image/svg+xml");
+        res.sendFile(path.join(dirSimulateur, "favicon.svg"));
+    });
     app.use("/Simulateur", express.static(dirSimulateur));
     app.get("/", (req, res) => res.redirect("/Simulateur/"));
     return app;

@@ -11,11 +11,18 @@ import {
     registersToPinModes,
 } from "./arduino-avr-registers.mjs";
 import { expandUserFunctionCalls } from "./sketch-functions.mjs";
+import {
+    isEsp32BoardType,
+    isMicroBoardType,
+    esp32GpioNumbersForBoard,
+    esp32LedBuiltinPin,
+    portRegisterLabels,
+} from "./micro-board-config.mjs";
 
 export function resolvePinToken(token, boardType = "arduino_uno") {
     const t = String(token || "").trim();
-    if (boardType === "esp32_c3") {
-        if (/LED_BUILTIN/i.test(t)) return 8;
+    if (isEsp32BoardType(boardType)) {
+        if (/LED_BUILTIN/i.test(t)) return esp32LedBuiltinPin(boardType);
         const gpio = t.match(/^GPIO\s*(\d+)$/i);
         if (gpio) return parseInt(gpio[1], 10);
         const m = t.match(/\bD?\s*(\d+)\b/i);
@@ -56,8 +63,8 @@ function extractLoopBody(src) {
 
 function pinLabel(pin, boardType = "arduino_uno") {
     if (pin == null || pin < 0) return null;
-    if (boardType === "esp32_c3") {
-        const valid = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21]);
+    if (isEsp32BoardType(boardType)) {
+        const valid = new Set(esp32GpioNumbersForBoard(boardType));
         return valid.has(pin) ? `GPIO${pin}` : null;
     }
     if (pin <= 13) return `D${pin}`;
@@ -470,6 +477,11 @@ function configUartPins(state) {
         if (state.pins.GPIO20 == null) state.pins.GPIO20 = 0;
         return;
     }
+    if (state.boardType === "esp32_devkit") {
+        state.pins.GPIO1 = 1;
+        if (state.pins.GPIO3 == null) state.pins.GPIO3 = 0;
+        return;
+    }
     state.regs.DDRD = ((state.regs.DDRD || 0) & ~0x01) | 0x02;
     state.regs.PORTD = (state.regs.PORTD || 0) | 0x02;
     state.pins.D1 = 1;
@@ -733,14 +745,9 @@ const DDR_FOR_PORT = { PORTD: "DDRD", PORTB: "DDRB", PORTC: "DDRC" };
 
 function resolveOutputLevels(state) {
     const levels = {};
-    const portMap =
-        state.boardType === "esp32_c3"
-            ? {
-                PORTD: ["GPIO0", "GPIO1", "GPIO2", "GPIO3", "GPIO4", "GPIO5", "GPIO6", "GPIO7"],
-                PORTB: ["GPIO8", "GPIO9", "GPIO10"],
-                PORTC: [],
-            }
-            : PORT_TO_LABELS;
+    const portMap = isEsp32BoardType(state.boardType)
+        ? portRegisterLabels(state.boardType)
+        : PORT_TO_LABELS;
     for (const [port, labels] of Object.entries(portMap)) {
         const ddrReg = DDR_FOR_PORT[port];
         if (!ddrReg) continue;
@@ -1058,7 +1065,7 @@ export function resolvePinLevelsAt(uno, tSec = 0) {
     if (uno && uno.liveLevels) return { ...uno.liveLevels };
     const dynamic = computeDynamicPinLevels(uno, tSec);
     const hasDynamic = Object.keys(dynamic).length > 0;
-    if (uno?.type === "esp32_c3") {
+    if (isEsp32BoardType(uno?.type)) {
         const out = { ...(uno?.pinLevels || {}) };
         if (hasDynamic) {
             for (const [k, v] of Object.entries(dynamic)) out[k] = v;
@@ -1081,7 +1088,7 @@ export function resolvePinLevelsAt(uno, tSec = 0) {
 }
 
 export function arduinoGpioIsTimeVarying(uno) {
-    if (!uno || (uno.type !== "arduino_uno" && uno.type !== "esp32_c3")) return false;
+    if (!uno || !isMicroBoardType(uno.type)) return false;
     if (Array.isArray(uno.pinPhases) && uno.pinPhases.length >= 2) return true;
     return !!(uno.pinPulses && Object.keys(uno.pinPulses).length > 0);
 }
@@ -1220,6 +1227,10 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
             pinModes.GPIO21 = "OUTPUT";
             pinLevels.GPIO21 = 1;
             if (!pinModes.GPIO20) pinModes.GPIO20 = "INPUT_PULLUP";
+        } else if (boardType === "esp32_devkit") {
+            pinModes.GPIO1 = "OUTPUT";
+            pinLevels.GPIO1 = 1;
+            if (!pinModes.GPIO3) pinModes.GPIO3 = "INPUT_PULLUP";
         } else {
             pinModes.D1 = "OUTPUT";
             pinLevels.D1 = 1;
@@ -1227,7 +1238,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
         }
     }
 
-    if (boardType === "esp32_c3") {
+    if (isEsp32BoardType(boardType)) {
         const execState = interpretRegisterState(src, boardType);
         if (execState && pinPhases.length < 2) {
             const levels = resolveOutputLevels({
@@ -1289,7 +1300,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
 }
 
 export function applyArduinoSketchToComponent(comp) {
-    if (!comp || (comp.type !== "arduino_uno" && comp.type !== "esp32_c3")) return;
+    if (!comp || !isMicroBoardType(comp.type)) return;
     const parsed = parseArduinoSketch(comp.sketch || "", comp.type);
     comp.pinModes = parsed.pinModes;
     comp.pinLevels = parsed.pinLevels;
@@ -1302,7 +1313,7 @@ export function applyArduinoSketchToComponent(comp) {
 export function arduinoUnoMinPulsePeriodSec(components) {
     let min = Infinity;
     for (const c of components) {
-        if (c.type !== "arduino_uno" && c.type !== "esp32_c3") continue;
+        if (!isMicroBoardType(c.type)) continue;
         if (Array.isArray(c.pinPhases) && c.pinPhases.length >= 2) {
             for (const ph of c.pinPhases) {
                 const d = (ph.durationMs || 0) / 1000;

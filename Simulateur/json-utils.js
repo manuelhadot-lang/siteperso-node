@@ -3,6 +3,7 @@
  */
 
 import { DC10H_COLOR_IDS } from './bargraph-dc10h-layout.js';
+import { MATRIX_COLOR_IDS } from './matrix-8x8-layout.js';
 import { normalizeBoardFqbn } from './esp32-c3-layout.js';
 
 export function parseJsonText(raw) {
@@ -83,7 +84,12 @@ export function migrateLoadedComponents(components) {
             comp.flipX = !!comp.flipX;
             comp.rotation = 0;
         }
-        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3') {
+        if (comp.type === 'matrix_8x8') {
+            if (!comp.matrixColor || !MATRIX_COLOR_IDS.includes(comp.matrixColor)) comp.matrixColor = 'red';
+            comp.flipX = !!comp.flipX;
+            comp.rotation = 0;
+        }
+        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit') {
             comp.fqbn = normalizeBoardFqbn(comp);
         }
     }

@@ -11,6 +11,8 @@
     "repair-esp32-toolchain": "node scripts/repair-esp32-toolchain.cjs",
     "check-ngspice": "node tools/check-ngspice.cjs",
     "prepare-arduino-bundle": "node scripts/prepare-arduino-bundle.cjs",
+    "slim": "node scripts/slim-workspace.cjs",
+    "slim:apply": "node scripts/slim-workspace.cjs --apply",
     "simulateur-h": "npm start --prefix SimulateurH",
     "simulateur-h:build": "npm run dist --prefix SimulateurH",
     "simulateur-h:setup": "npm run dist:setup --prefix SimulateurH",

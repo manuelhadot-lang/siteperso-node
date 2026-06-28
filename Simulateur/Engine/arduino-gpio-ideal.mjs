@@ -14,6 +14,7 @@ import {
     boardProfile,
     bcdInputJonctionRegex,
     isMicroBoardType,
+    isEsp32BoardType,
 } from "./micro-board-config.mjs";
 
 const CD4511_BCD_INPUTS = { A: 0, B: 1, C: 2, D: 3 };
@@ -33,7 +34,7 @@ function isGpioOutputPin(comp, suffix) {
             comp.pinModes?.[suffix] === "OUTPUT"
         );
     }
-    if (comp.type === "esp32_c3") {
+    if (isEsp32BoardType(comp.type)) {
         return comp.pinModes?.[suffix] === "OUTPUT";
     }
     return false;
@@ -156,7 +157,8 @@ function findBoardPortDMappingForCd4511(cd4511Label, components, wires, autoJunc
 }
 
 function pinLabelForBcdBit(boardType, bitNum) {
-    if (boardType === "esp32_c3") return `GPIO${bitNum}`;
+    const prof = boardProfile(boardType);
+    if (isEsp32BoardType(boardType)) return `${prof.bcdPinPrefix}${bitNum}`;
     return `D${bitNum}`;
 }
 
@@ -184,7 +186,7 @@ function bcdFromMappedPortDAtTime(board, map, tSec) {
         }
         return bcd;
     }
-    if (board.type === "esp32_c3") {
+    if (isEsp32BoardType(board.type)) {
         return bcdFromMappedGpioLevels(board.pinLevels || {}, map);
     }
     return bcdFromPortDRegister(board.avrRegisters?.PORTD ?? 0, map);

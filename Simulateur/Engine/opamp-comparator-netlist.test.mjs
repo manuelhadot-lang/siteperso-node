@@ -209,4 +209,57 @@ assert(!/u\(0-/.test(inv.netlist.split("BAOP")[1] || ""), "Inverseur: pas de com
 const nonInv = runCase("amplificateur non inverseur", nonInvertingAmpState());
 assert(/tanh\(/.test(nonInv.netlist), "Non-inverseur: modèle tanh attendu");
 
+/** Suiveur + HP + non-inverseur (montage audio STI2D) — AOP2 ne doit pas être en comparateur. */
+function audioChainState() {
+    return {
+        components: [
+            { id: "Sin1", type: "vsin", x: 0, y: 0, value: "5V 1kHz 0V", orient: 0 },
+            { id: "R2", type: "resistor", x: 100, y: 0, value: "1k", orient: 0 },
+            { id: "C1", type: "capacitor", x: 200, y: 50, value: "10uF", orient: 0 },
+            { id: "AOP1", type: "opamp", x: 300, y: 0, value: "uA741", vp: 15, vn: -15, orient: 0 },
+            { id: "HP1", type: "speaker", x: 450, y: 50, value: "8", orient: 0 },
+            { id: "R3", type: "resistor", x: 500, y: -50, value: "1k", orient: 0 },
+            { id: "R4", type: "resistor", x: 500, y: 50, value: "1k", orient: 0 },
+            { id: "AOP2", type: "opamp", x: 600, y: 0, value: "uA741", vp: 15, vn: -15, orient: 0 },
+            { id: "Osci1", type: "oscilloscope", x: 750, y: 0, orient: 0 },
+            { id: "GND1", type: "ground", x: 300, y: 150, orient: 0 },
+        ],
+        wires: [
+            wire("Sin1#0", "R2#0", []),
+            wire("Sin1#1", "GND1#0", []),
+            wire("R2#1", "C1#0", []),
+            wire("C1#0", "AOP1#0", []),
+            wire("C1#1", "GND1#0", []),
+            wire("AOP1#1", "AOP1#2", []),
+            wire("AOP1#2", "HP1#1", []),
+            wire("HP1#0", "GND1#0", []),
+            wire("AOP1#2", "AOP2#0", []),
+            wire("AOP2#2", "R3#0", []),
+            wire("R3#1", "AOP2#1", []),
+            wire("AOP2#1", "R4#0", []),
+            wire("R4#1", "GND1#0", []),
+            wire("AOP2#2", "Osci1#0", []),
+            wire("Sin1#0", "Osci1#1", []),
+            wire("Osci1#2", "GND1#0", []),
+        ],
+    };
+}
+
+const chain = runCase("suiveur + HP + non-inverseur", audioChainState());
+const aop2Block = chain.netlist.split("BAOP_AOP2")[1]?.split("\n")[0] || "";
+assert(/tanh\(/.test(chain.netlist), "Chaîne audio: modèle tanh attendu sur AOP2");
+assert(!/u\(/.test(aop2Block), "Chaîne audio: AOP2 ne doit pas être en comparateur u()");
+
+/** Erreur fréquente : + et − de AOP2 sur la sortie du suiveur → sortie 0 V. */
+function audioChainShortedInputsState() {
+    const s = audioChainState();
+    s.wires.push(wire("AOP1#2", "AOP2#1", []));
+    return s;
+}
+const shorted = runCase("AOP2 + et − sur même fil", audioChainShortedInputsState());
+assert(
+    shorted.warnings?.some((w) => /AOP2.*\+.*−|même nœud|même fil/i.test(w)),
+    "Court-circuit +/− : avertissement attendu"
+);
+
 console.log("Tous les tests netlist AOP comparateur ont réussi.");

@@ -31,5 +31,12 @@ Simulateur/arduino-data/tmp/
 Simulateur/arduino-data/library/
 Simulateur/arduino-data/.cache/
 Simulateur/arduino-data/.bundle-version
+Simulateur/arduino-data/library_index.json
+Simulateur/arduino-data/library_index.json.sig
+Simulateur/arduino-data/package_index.json
+Simulateur/arduino-data/package_index.json.sig
+Simulateur/arduino-data/inventory.yaml
 Simulateur/bin/arduino-cli/arduino-cli.exe
 Simulateur/bin/arduino-cli/*.zip
+SimulateurH/dist-out/
+SimulateurH/node_modules/

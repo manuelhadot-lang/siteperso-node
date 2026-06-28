@@ -2,6 +2,8 @@
  * Interprétation minimale DHT.h (DHT22 / Grove T° humidité).
  */
 
+import { isEsp32BoardType } from "./micro-board-config.mjs";
+
 function stripComments(src) {
     return String(src || "")
         .replace(/\/\/[^\n]*/g, "")
@@ -28,8 +30,9 @@ function resolvePinToken(tok, boardType = "arduino_uno") {
     if (/^D\d+$/i.test(t)) return t.toUpperCase();
     const n = parseInt(t, 10);
     if (Number.isFinite(n)) {
-        if (boardType === "esp32_c3") {
+        if (isEsp32BoardType(boardType)) {
             if (PIN_MAP_ESP32[n]) return PIN_MAP_ESP32[n];
+            return `GPIO${n}`;
         } else if (PIN_MAP_UNO[n]) {
             return PIN_MAP_UNO[n];
         }

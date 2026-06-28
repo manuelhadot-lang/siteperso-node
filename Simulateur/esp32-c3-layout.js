@@ -47,6 +47,8 @@ export const ESP32_FQBN = 'esp32:esp32:esp32c3';
 /** Seeed XIAO ESP32-C3 — téléversement USB (arduino-cli). */
 export const ESP32_XIAO_FQBN = 'esp32:esp32:seeed_xiao_esp32c3';
 
+import { ESP32_DEVKIT_UPLOAD_PROFILES } from './esp32-devkit-layout.js';
+
 export const ARDUINO_UNO_FQBN = 'arduino:avr:uno';
 
 /** Profils FQBN pour compilation / téléversement USB. */
@@ -58,6 +60,7 @@ export const UPLOAD_PROFILES = {
         { id: 'esp32c3', label: 'ESP32-C3 DevKit', fqbn: ESP32_FQBN },
         { id: 'xiao', label: 'Seeed XIAO ESP32-C3', fqbn: ESP32_XIAO_FQBN },
     ],
+    esp32_devkit: ESP32_DEVKIT_UPLOAD_PROFILES,
 };
 
 export function uploadProfilesForBoardType(boardType) {
@@ -70,6 +73,7 @@ export function normalizeBoardFqbn(comp) {
     const fqbn = String(comp.fqbn || profiles[0]?.fqbn || ARDUINO_UNO_FQBN);
     if (profiles.some((p) => p.fqbn === fqbn)) return fqbn;
     if (comp.type === 'esp32_c3' && fqbn.includes('esp32')) return ESP32_FQBN;
+    if (comp.type === 'esp32_devkit' && fqbn.includes('esp32')) return UPLOAD_PROFILES.esp32_devkit[0]?.fqbn || fqbn;
     return profiles[0]?.fqbn || ARDUINO_UNO_FQBN;
 }
 

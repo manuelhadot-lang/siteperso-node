@@ -2,6 +2,19 @@
 import { circuit, flags, simulationResults, snapToGrid, GRID_SIZE } from './state.js';
 import { CD4511_JUNC_L, CD4511_JUNC_R, CD4511_PIN_Y, CD4511_HIT_DX, CD4511_HIT_DY } from './cd4511-layout.js';
 import {
+    LM386_BOX_L,
+    LM386_BOX_R,
+    LM386_BOX_T,
+    LM386_BOX_B,
+    LM386_JUNC_L,
+    LM386_JUNC_R,
+    LM386_LEFT_PIN_Y,
+    LM386_RIGHT_PIN_Y,
+    LM386_HIT_DX,
+    LM386_HIT_DY,
+    lm386JonctionToTerminalKey,
+} from './lm386-layout.js';
+import {
     IC90_JUNC_L,
     IC90_JUNC_R,
     IC90_LEFT_PIN_Y,
@@ -30,6 +43,16 @@ import {
     ESP32_HIT_DX,
     ESP32_HIT_DY,
 } from './esp32-c3-layout.js';
+import {
+    ESP32_DEVKIT_JUNC_L,
+    ESP32_DEVKIT_JUNC_R,
+    ESP32_DEVKIT_LEFT_PINS,
+    ESP32_DEVKIT_RIGHT_PINS,
+    ESP32_DEVKIT_LEFT_PIN_Y,
+    ESP32_DEVKIT_RIGHT_PIN_Y,
+    ESP32_DEVKIT_HIT_DX,
+    ESP32_DEVKIT_HIT_DY,
+} from './esp32-devkit-layout.js';
 import {
     GROVE_LCD_PINS,
     GROVE_LCD_PIN_Y,
@@ -90,6 +113,17 @@ import {
     DC10H_SEL_H,
     dc10hComX,
 } from './bargraph-dc10h-layout.js';
+import {
+    MATRIX_PIN_Y,
+    MATRIX_ROW_NAMES,
+    MATRIX_COL_NAMES,
+    MATRIX_SEL_L,
+    MATRIX_SEL_T,
+    MATRIX_SEL_W,
+    MATRIX_SEL_H,
+    matrixRowJuncX,
+    matrixColJuncX,
+} from './matrix-8x8-layout.js';
 
 export function isPointOnSegment(px, py, p1, p2, tolerance = 1) {
     const minX = Math.min(p1.x, p2.x) - tolerance, maxX = Math.max(p1.x, p2.x) + tolerance;
@@ -163,6 +197,15 @@ export function getComponentJonctions(comp) {
         const comX = dc10hComX(!!comp.flipX);
         localPts = DC10H_SEG_NAMES.map((n, i) => ({ id: `${comp.label}_${n}`, x: jx, y: DC10H_PIN_Y[i] }));
         localPts.push({ id: `${comp.label}_COM`, x: comX, y: DC10H_COM_Y });
+    } else if (comp.type === 'matrix_8x8') {
+        const rx = matrixRowJuncX(!!comp.flipX);
+        const cx = matrixColJuncX(!!comp.flipX);
+        MATRIX_ROW_NAMES.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: rx, y: MATRIX_PIN_Y[i] });
+        });
+        MATRIX_COL_NAMES.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: cx, y: MATRIX_PIN_Y[i] });
+        });
     } else if (comp.type === 'grove_lcd16x2') {
         GROVE_LCD_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: GROVE_LCD_JUNC_X, y: GROVE_LCD_PIN_Y[i] });
@@ -247,12 +290,28 @@ export function getComponentJonctions(comp) {
         right.forEach((n, i) => {
             if (n) localPts.push({ id: `${comp.label}_${n}`, x: IC90_JUNC_R, y: IC90_RIGHT_PIN_Y[i] });
         });
+    } else if (comp.type === 'lm386') {
+        const left = ['G1', 'INM', 'INP', 'GND'];
+        const right = ['G8', 'BYP', 'VCC', 'OUT'];
+        left.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: LM386_JUNC_L, y: LM386_LEFT_PIN_Y[i] });
+        });
+        right.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: LM386_JUNC_R, y: LM386_RIGHT_PIN_Y[i] });
+        });
     } else if (comp.type === 'esp32_c3') {
         ESP32_LEFT_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: ESP32_JUNC_L, y: ESP32_LEFT_PIN_Y[i] });
         });
         ESP32_RIGHT_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: ESP32_JUNC_R, y: ESP32_RIGHT_PIN_Y[i] });
+        });
+    } else if (comp.type === 'esp32_devkit') {
+        ESP32_DEVKIT_LEFT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_DEVKIT_JUNC_L, y: ESP32_DEVKIT_LEFT_PIN_Y[i] });
+        });
+        ESP32_DEVKIT_RIGHT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_DEVKIT_JUNC_R, y: ESP32_DEVKIT_RIGHT_PIN_Y[i] });
         });
     } else if (comp.type === 'arduino_uno') {
         UNO_LEFT_PINS.forEach((n, i) => {
@@ -268,7 +327,7 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'arduino_uno' && comp.type !== 'esp32_c3' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'grove_dht22') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'lm386' && comp.type !== 'arduino_uno' && comp.type !== 'esp32_c3' && comp.type !== 'esp32_devkit' && comp.type !== 'npn' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'matrix_8x8' && comp.type !== 'grove_dht22') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
@@ -276,7 +335,10 @@ export function getComponentJonctions(comp) {
         }
         if (comp.flipX && (comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18')) lx = -lx;
         if (comp.flipY && comp.type === 'opamp') ly = -ly;
-        list.push({ id: pt.id, x: snapToGrid(comp.x + lx), y: snapToGrid(comp.y + ly) });
+        const exactJunc = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit';
+        const wx = comp.x + lx;
+        const wy = comp.y + ly;
+        list.push({ id: pt.id, x: exactJunc ? wx : snapToGrid(wx), y: exactJunc ? wy : snapToGrid(wy) });
     });
     return list;
 }
@@ -289,7 +351,9 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'd_flipflop' || comp.type === 'jk_flipflop') return dx < 45 && dy < 68;
     if (comp.type === 'cd4511') return dx < CD4511_HIT_DX && dy < CD4511_HIT_DY;
     if (comp.type === 'ic_74hc90') return dx < IC90_HIT_DX && dy < IC90_HIT_DY;
+    if (comp.type === 'lm386') return dx < LM386_HIT_DX && dy < LM386_HIT_DY;
     if (comp.type === 'esp32_c3') return dx < ESP32_HIT_DX && dy < ESP32_HIT_DY;
+    if (comp.type === 'esp32_devkit') return dx < ESP32_DEVKIT_HIT_DX && dy < ESP32_DEVKIT_HIT_DY;
     if (comp.type === 'arduino_uno') return dx < UNO_HIT_DX && dy < UNO_HIT_DY;
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
@@ -299,6 +363,12 @@ export function componentHitTest(comp, mx, my) {
         const y = my - comp.y;
         return x >= DC10H_SEL_L && x <= DC10H_SEL_L + DC10H_SEL_W
             && y >= DC10H_SEL_T && y <= DC10H_SEL_T + DC10H_SEL_H;
+    }
+    if (comp.type === 'matrix_8x8') {
+        const x = mx - comp.x;
+        const y = my - comp.y;
+        return x >= MATRIX_SEL_L && x <= MATRIX_SEL_L + MATRIX_SEL_W
+            && y >= MATRIX_SEL_T && y <= MATRIX_SEL_T + MATRIX_SEL_H;
     }
     if (comp.type === 'grove_lcd16x2') {
         const { x, y } = compLocalCoords(comp, mx, my);
@@ -376,6 +446,33 @@ export function pushButtonToggleHit(comp, mx, my) {
 
 export function isJonctionConnected(jonctionId) {
     return circuit.wires.some(w => w.fromJonctionId === jonctionId || w.toJonctionId === jonctionId);
+}
+
+/** Positions monde des jonctions composants + auto-jonctions. */
+export function buildJonctionPositionMap() {
+    const map = new Map();
+    for (const comp of circuit.components) {
+        for (const j of getComponentJonctions(comp)) map.set(j.id, { x: j.x, y: j.y });
+    }
+    for (const aj of circuit.autoJunctions) map.set(aj.id, { x: aj.x, y: aj.y });
+    return map;
+}
+
+/** Recale les extrémités des fils sur les jonctions (après déplacement composant ou correction géométrie). */
+export function syncWireEndpointsToJonctions() {
+    const pos = buildJonctionPositionMap();
+    for (const w of circuit.wires) {
+        const from = pos.get(w.fromJonctionId);
+        const to = pos.get(w.toJonctionId);
+        if (from && w.points.length > 0) {
+            w.points[0].x = from.x;
+            w.points[0].y = from.y;
+        }
+        if (to && w.points.length > 0) {
+            w.points[w.points.length - 1].x = to.x;
+            w.points[w.points.length - 1].y = to.y;
+        }
+    }
 }
 
 export function getVoltageAtJonction(targetJonctionId) {

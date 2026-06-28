@@ -520,6 +520,10 @@ app.get('/StationMeteoConnectee.html', withProjectDateGate('Station_Meteo', (req
 app.get('/Digicode.html', withProjectDateGate('Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html'))));
 app.get('/Robo_Cytron_ESP32.html', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
 
+app.get('/favicon.ico', (req, res) => {
+    res.type('image/svg+xml');
+    res.sendFile(path.join(__dirname, 'public', 'favicon.svg'));
+});
 app.use(express.static('public'));
 app.get('/Simulateur/__ui', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -711,6 +715,7 @@ app.post("/api/simulate", async (req, res) => {
         quickTran: linuxServer,
     };
     if (Number.isFinite(gs) && gs > 0) deckOpts.gridStep = gs;
+    if (req.body?.liveSourceTuning === true) deckOpts.liveSourceTuning = true;
     const built = await invokeBuildNgspiceDeck(buildNgspiceDeck, state, deckOpts);
     if (!built || typeof built !== "object") {
         return res.status(500).json({

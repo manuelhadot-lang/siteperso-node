@@ -29,6 +29,20 @@ import {
     IC90_Q_STACK_INDICES,
 } from './ic74hc90-layout.js';
 import {
+    LM386_BOX_B,
+    LM386_BOX_L,
+    LM386_BOX_R,
+    LM386_BOX_T,
+    LM386_JUNC_L,
+    LM386_JUNC_R,
+    LM386_LABEL_L,
+    LM386_LABEL_R,
+    LM386_LEFT_PIN_Y,
+    LM386_RIGHT_PIN_Y,
+    LM386_HIT_DX,
+    LM386_HIT_DY,
+} from './lm386-layout.js';
+import {
     UNO_BOX_B,
     UNO_BOX_L,
     UNO_BOX_R,
@@ -62,7 +76,23 @@ import {
     ESP32_GPIO_PINS,
     formatEsp32PinLabel,
 } from './esp32-c3-layout.js';
-import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction } from './geometry.js';
+import {
+    ESP32_DEVKIT_BOX_B,
+    ESP32_DEVKIT_BOX_L,
+    ESP32_DEVKIT_BOX_R,
+    ESP32_DEVKIT_BOX_T,
+    ESP32_DEVKIT_JUNC_L,
+    ESP32_DEVKIT_JUNC_R,
+    ESP32_DEVKIT_LABEL_L,
+    ESP32_DEVKIT_LABEL_R,
+    ESP32_DEVKIT_LEFT_PINS,
+    ESP32_DEVKIT_RIGHT_PINS,
+    ESP32_DEVKIT_LEFT_PIN_Y,
+    ESP32_DEVKIT_RIGHT_PIN_Y,
+    ESP32_DEVKIT_GPIO_PINS,
+    formatEsp32DevkitPinLabel,
+} from './esp32-devkit-layout.js';
+import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction, syncWireEndpointsToJonctions } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
 import { getArduinoPanelWidth } from './arduino-editor.js';
 import { isGroveLcdWiredToBoard } from './Engine/grove-lcd-ideal.mjs';
@@ -200,13 +230,36 @@ import {
     dc10hPalette,
 } from './bargraph-dc10h-layout.js';
 import {
+    MATRIX_SIZE,
+    MATRIX_PIN_Y,
+    MATRIX_ROW_NAMES,
+    MATRIX_COL_NAMES,
+    MATRIX_BOX_L,
+    MATRIX_BOX_R,
+    MATRIX_BOX_T,
+    MATRIX_BOX_B,
+    MATRIX_BOX_CX,
+    MATRIX_CELL,
+    MATRIX_SEL_L,
+    MATRIX_SEL_T,
+    MATRIX_SEL_W,
+    MATRIX_SEL_H,
+    MATRIX_COMP_LABEL_OFFSET,
+    MATRIX_TYPE_LABEL_OFFSET,
+    MATRIX_PIN_LABEL_OFFSET_X,
+    matrixCellOrigin,
+    matrixRowJuncX,
+    matrixColJuncX,
+    matrixPalette,
+} from './matrix-8x8-layout.js';
+import {
     getHd44780Glyph,
     HD44780_CHAR_W,
     HD44780_CHAR_H,
     HD44780_NATIVE_W,
 } from './hd44780-font.js';
 import { getGfxGlyph } from './gfx-glcd-font.js';
-import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedBargraphSegments, getAnimatedVoltmeterVoltage, getIdealSeg7Display, getIdealBargraphDisplay, getAnimatedGroveLcdDisplay, getAnimatedJoyitTft18Display, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
+import { getAnimatedHc90Bcd, getAnimatedLedCurrent, getAnimatedSeg7Segments, getAnimatedBargraphSegments, getAnimatedMatrix8x8Cells, getAnimatedVoltmeterVoltage, getIdealSeg7Display, getIdealBargraphDisplay, getIdealMatrix8x8Display, getAnimatedGroveLcdDisplay, getAnimatedJoyitTft18Display, isLedOvercurrent, quantizeVoltmeterReading } from './led-animation.js';
 import { isSpeakerAudioPlaying } from './speaker-audio.js';
 import { COLORS } from './theme.js';
 function hc90SimCount(comp) {
@@ -600,6 +653,94 @@ function drawBargraphDc10h(comp) {
     });
 
     drawBargraphLabel('DC10H', cx, comY + DC10H_TYPE_LABEL_OFFSET, {
+        font: '9px Arial',
+        align: 'center',
+        baseline: 'top',
+        fill: '#aaa',
+    });
+}
+
+function matrixLitSetFrom(cells) {
+    return new Set(Object.entries(cells).filter(([, on]) => on).map(([k]) => k));
+}
+
+function getMatrixLitSet(comp) {
+    if (!flags.isSimulating) return new Set();
+    const anim = getAnimatedMatrix8x8Cells(comp.label);
+    if (anim?.cells) return matrixLitSetFrom(anim.cells);
+    const ideal = getIdealMatrix8x8Display(comp.label);
+    return ideal?.cells ? matrixLitSetFrom(ideal.cells) : new Set();
+}
+
+function drawMatrix8x8(comp) {
+    const lit = getMatrixLitSet(comp);
+    const pal = matrixPalette(comp.matrixColor || 'red');
+    const flip = !!comp.flipX;
+    const rowJx = matrixRowJuncX(flip);
+    const colJx = matrixColJuncX(flip);
+    const boxPinRowX = flip ? MATRIX_BOX_R : MATRIX_BOX_L;
+    const boxPinColX = flip ? MATRIX_BOX_L : MATRIX_BOX_R;
+    const pinColor = pal.pin;
+
+    ctx.strokeStyle = pinColor;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < MATRIX_SIZE; i++) {
+        ctx.beginPath();
+        ctx.moveTo(rowJx, MATRIX_PIN_Y[i]);
+        ctx.lineTo(boxPinRowX, MATRIX_PIN_Y[i]);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(colJx, MATRIX_PIN_Y[i]);
+        ctx.lineTo(boxPinColX, MATRIX_PIN_Y[i]);
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = COLORS.componentStroke;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(MATRIX_BOX_L, MATRIX_BOX_T, MATRIX_BOX_R - MATRIX_BOX_L, MATRIX_BOX_B - MATRIX_BOX_T);
+
+    for (let r = 0; r < MATRIX_SIZE; r++) {
+        for (let c = 0; c < MATRIX_SIZE; c++) {
+            const key = `r${r}c${c}`;
+            const { x, y } = matrixCellOrigin(r, c);
+            ctx.fillStyle = lit.has(key) ? pal.lit : pal.dim;
+            ctx.fillRect(x, y, MATRIX_CELL, MATRIX_CELL);
+            if (lit.has(key)) {
+                ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                ctx.fillRect(x, y, MATRIX_CELL, MATRIX_CELL * 0.35);
+            }
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(x, y, MATRIX_CELL, MATRIX_CELL);
+        }
+    }
+
+    const rowLabelX = rowJx + (flip ? -MATRIX_PIN_LABEL_OFFSET_X : MATRIX_PIN_LABEL_OFFSET_X);
+    const colLabelX = colJx + (flip ? MATRIX_PIN_LABEL_OFFSET_X : -MATRIX_PIN_LABEL_OFFSET_X);
+    for (let i = 0; i < MATRIX_SIZE; i++) {
+        drawBargraphLabel(MATRIX_ROW_NAMES[i], rowLabelX, MATRIX_PIN_Y[i], {
+            font: 'bold 7px Arial',
+            align: flip ? 'left' : 'right',
+            baseline: 'middle',
+            outlined: true,
+        });
+        drawBargraphLabel(MATRIX_COL_NAMES[i], colLabelX, MATRIX_PIN_Y[i], {
+            font: 'bold 7px Arial',
+            align: flip ? 'right' : 'left',
+            baseline: 'middle',
+            outlined: true,
+        });
+    }
+
+    drawBargraphLabel(comp.label, MATRIX_BOX_CX, MATRIX_BOX_T - MATRIX_COMP_LABEL_OFFSET, {
+        font: '11px Arial',
+        align: 'center',
+        baseline: 'bottom',
+        outlined: true,
+    });
+
+    drawBargraphLabel('8×8 CC', MATRIX_BOX_CX, MATRIX_BOX_B + MATRIX_TYPE_LABEL_OFFSET, {
         font: '9px Arial',
         align: 'center',
         baseline: 'top',
@@ -1170,17 +1311,10 @@ function drawGroveTsl2591(comp) {
         drawTextFx(GROVE_TSL2591_PINS[i], GROVE_TSL2591_PIN_LABEL_X, py - labelGap);
     }
 
-    const lux = Number.isFinite(comp.lux) ? comp.lux : 100;
-    const luxText = `${Math.round(lux * 10) / 10} lx`;
-    ctx.fillStyle = COLORS.ink;
-    ctx.font = '9px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    drawTextFx(luxText, 0, (boxT + boxB) / 2 + 1);
-
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    ctx.fillStyle = COLORS.ink;
     drawTextFx('TSL2591', 0, boxT - 12);
     drawTextFx(comp.label, 0, boxB + 8);
 }
@@ -1262,20 +1396,10 @@ function drawGroveBmp280(comp) {
         drawTextFx(GROVE_BMP280_PINS[i], GROVE_BMP280_PIN_LABEL_X, py - labelGap);
     }
 
-    const pressureHpa = Number.isFinite(comp.pressureHpa) ? comp.pressureHpa : 1013.25;
-    const tempC = Number.isFinite(comp.temperature) ? comp.temperature : 22;
-    const pressText = `${Math.round(pressureHpa * 10) / 10} hPa`;
-    ctx.fillStyle = COLORS.ink;
-    ctx.font = '8px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    drawTextFx(pressText, 0, (boxT + boxB) / 2 - 2);
-    ctx.font = '7px Arial';
-    drawTextFx(`${Math.round(tempC * 10) / 10}°C`, 0, (boxT + boxB) / 2 + 8);
-
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    ctx.fillStyle = COLORS.ink;
     drawTextFx('BMP280', 0, boxT - 12);
     drawTextFx(comp.label, 0, boxB + 8);
 }
@@ -1440,7 +1564,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     ctx.save(); ctx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'matrix_8x8' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     ctx.rotate(rot * Math.PI / 180);
 
@@ -1452,6 +1576,9 @@ function drawComponentBody(comp) {
         else if (comp.type === 'ic_74hc90') {
             ctx.strokeRect(-IC90_HIT_DX, -IC90_HIT_DY, IC90_HIT_DX * 2, IC90_HIT_DY * 2);
         }
+        else if (comp.type === 'lm386') {
+            ctx.strokeRect(-LM386_HIT_DX, -LM386_HIT_DY, LM386_HIT_DX * 2, LM386_HIT_DY * 2);
+        }
         else if (comp.type === 'jk_flipflop' || comp.type === 'd_flipflop') ctx.strokeRect(-45, -68, 90, 136);
         else if (comp.type === 'oscilloscope') ctx.strokeRect(-50, -38, 100, 100);
         else if (comp.type === 'npn') ctx.strokeRect(-42, -42, 64, 84);
@@ -1459,6 +1586,9 @@ function drawComponentBody(comp) {
         else if (comp.type === 'seg7') ctx.strokeRect(-52, -86, 124, 200);
         else if (comp.type === 'bargraph_dc10h') {
             ctx.strokeRect(DC10H_SEL_L, DC10H_SEL_T, DC10H_SEL_W, DC10H_SEL_H);
+        }
+        else if (comp.type === 'matrix_8x8') {
+            ctx.strokeRect(MATRIX_SEL_L, MATRIX_SEL_T, MATRIX_SEL_W, MATRIX_SEL_H);
         }
         else if (comp.type === 'grove_lcd16x2') {
             ctx.save();
@@ -1842,6 +1972,44 @@ function drawComponentBody(comp) {
         ctx.font = '11px Arial';
         ctx.fillText(comp.label, 0, IC90_BOX_T - 12);
     }
+    else if (comp.type === 'lm386') {
+        const leftLbl = ['1 G1', '2 −', '3 +', '4 GND'];
+        const rightLbl = ['8 G8', '7 BP', '6 V+', '5 OUT'];
+        ctx.strokeStyle = '#8d6e63';
+        ctx.lineWidth = 2;
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(LM386_BOX_L, LM386_BOX_T, LM386_BOX_R - LM386_BOX_L, LM386_BOX_B - LM386_BOX_T);
+        ctx.strokeRect(LM386_BOX_L, LM386_BOX_T, LM386_BOX_R - LM386_BOX_L, LM386_BOX_B - LM386_BOX_T);
+        ctx.beginPath();
+        ctx.arc(LM386_BOX_L + 6, LM386_BOX_T + 6, 3, 0, Math.PI * 2);
+        ctx.stroke();
+        LM386_LEFT_PIN_Y.forEach((y, i) => {
+            ctx.moveTo(LM386_JUNC_L, y);
+            ctx.lineTo(LM386_BOX_L, y);
+        });
+        LM386_RIGHT_PIN_Y.forEach((y, i) => {
+            ctx.moveTo(LM386_BOX_R, y);
+            ctx.lineTo(LM386_JUNC_R, y);
+        });
+        ctx.stroke();
+        ctx.fillStyle = '#efebe9';
+        ctx.font = '7px Arial';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        leftLbl.forEach((t, i) => ctx.fillText(t, LM386_LABEL_L, LM386_LEFT_PIN_Y[i]));
+        ctx.textAlign = 'right';
+        rightLbl.forEach((t, i) => ctx.fillText(t, LM386_LABEL_R, LM386_RIGHT_PIN_Y[i]));
+        ctx.font = 'bold 9px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffcc80';
+        ctx.fillText('LM386', 0, -2);
+        ctx.font = '7px Arial';
+        const vplus = comp.vplus ?? 9;
+        ctx.fillText(`${vplus} V`, 0, 8);
+        ctx.fillStyle = '#efebe9';
+        ctx.font = '10px Arial';
+        ctx.fillText(comp.label, 0, LM386_BOX_T - 10);
+    }
     else if (comp.type === 'arduino_uno') {
         ctx.fillStyle = '#00979d';
         ctx.strokeStyle = '#006064';
@@ -1965,11 +2133,77 @@ function drawComponentBody(comp) {
         ctx.textAlign = 'center';
         ctx.fillText(comp.label, 0, ESP32_BOX_T - 12);
     }
+    else if (comp.type === 'esp32_devkit') {
+        ctx.fillStyle = '#1565c0';
+        ctx.strokeStyle = '#0d47a1';
+        ctx.lineWidth = 2;
+        ctx.fillRect(ESP32_DEVKIT_BOX_L, ESP32_DEVKIT_BOX_T, ESP32_DEVKIT_BOX_R - ESP32_DEVKIT_BOX_L, ESP32_DEVKIT_BOX_B - ESP32_DEVKIT_BOX_T);
+        ctx.strokeRect(ESP32_DEVKIT_BOX_L, ESP32_DEVKIT_BOX_T, ESP32_DEVKIT_BOX_R - ESP32_DEVKIT_BOX_L, ESP32_DEVKIT_BOX_B - ESP32_DEVKIT_BOX_T);
+        ctx.beginPath();
+        ESP32_DEVKIT_LEFT_PIN_Y.forEach((y) => {
+            ctx.moveTo(ESP32_DEVKIT_JUNC_L, y);
+            ctx.lineTo(ESP32_DEVKIT_BOX_L, y);
+        });
+        ESP32_DEVKIT_RIGHT_PIN_Y.forEach((y) => {
+            ctx.moveTo(ESP32_DEVKIT_BOX_R, y);
+            ctx.lineTo(ESP32_DEVKIT_JUNC_R, y);
+        });
+        ctx.strokeStyle = '#1a237e';
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '5px Arial';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ESP32_DEVKIT_LEFT_PINS.forEach((t, i) => ctx.fillText(formatEsp32DevkitPinLabel(t), ESP32_DEVKIT_LABEL_L, ESP32_DEVKIT_LEFT_PIN_Y[i]));
+        ctx.textAlign = 'right';
+        ESP32_DEVKIT_RIGHT_PINS.forEach((t, i) => ctx.fillText(formatEsp32DevkitPinLabel(t), ESP32_DEVKIT_LABEL_R, ESP32_DEVKIT_RIGHT_PIN_Y[i]));
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('ESP32', 0, -4);
+        ctx.font = '7px Arial';
+        ctx.fillText('WROOM-32', 0, 8);
+        if (flags.isSimulating && comp.label) {
+            ESP32_DEVKIT_GPIO_PINS.forEach((pinName) => {
+                const lv = simulationResults.logicValues?.[`${comp.label}_${pinName}`]
+                    ?? simulationResults.logicValues?.[`${comp.label}/${pinName}`];
+                if (!lv) return;
+                const idx = ESP32_DEVKIT_RIGHT_PINS.indexOf(pinName);
+                const side = idx >= 0 ? 'R' : 'L';
+                const pinIdx = side === 'R' ? idx : ESP32_DEVKIT_LEFT_PINS.indexOf(pinName);
+                if (pinIdx < 0) return;
+                const y = side === 'R' ? ESP32_DEVKIT_RIGHT_PIN_Y[pinIdx] : ESP32_DEVKIT_LEFT_PIN_Y[pinIdx];
+                const x = side === 'R' ? ESP32_DEVKIT_JUNC_R - 8 : ESP32_DEVKIT_JUNC_L + 8;
+                ctx.beginPath();
+                ctx.fillStyle = lv.logic === 1 ? '#76ff03' : '#455a64';
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        if (comp.lastCompileOk === true) {
+            ctx.fillStyle = '#76ff03';
+            ctx.font = '7px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('✓ compile', ESP32_DEVKIT_BOX_L + 4, ESP32_DEVKIT_BOX_B - 6);
+        } else if (comp.lastCompileOk === false) {
+            ctx.fillStyle = '#ff5252';
+            ctx.font = '7px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('✗ compile', ESP32_DEVKIT_BOX_L + 4, ESP32_DEVKIT_BOX_B - 6);
+        }
+        ctx.fillStyle = COLORS.ink;
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(comp.label, 0, ESP32_DEVKIT_BOX_T - 12);
+    }
     else if (comp.type === 'seg7') {
         drawSeg7Display(comp);
     }
     else if (comp.type === 'bargraph_dc10h') {
         drawBargraphDc10h(comp);
+    }
+    else if (comp.type === 'matrix_8x8') {
+        drawMatrix8x8(comp);
     }
     else if (comp.type === 'grove_lcd16x2') {
         drawGroveLcd16x2(comp);
@@ -2214,6 +2448,7 @@ function drawGrid() {
 }
 
 export function draw() {
+    syncWireEndpointsToJonctions();
     ctx.fillStyle = COLORS.canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save();

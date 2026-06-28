@@ -1,9 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simulateur de Circuits Électroniques</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css?v=icons4">
 </head>
 <body class="theme-dark">
@@ -61,6 +62,7 @@
                     <span class="dropdown-item submenu-title">AOP</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="opamp">uA741</div>
+                        <div class="dropdown-item" draggable="true" data-component="lm386" title="Amplificateur audio mono 9 V — double-clic pour la fiche broches / gain">LM386</div>
                     </div>
                 </div>
             </div>
@@ -98,6 +100,7 @@
             <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 12h2"/><path d="M18 16h2"/><path d="M18 8h2"/><path d="M4 12h2"/><path d="M4 16h2"/><path d="M4 8h2"/><path d="M8 4h2"/><path d="M12 4h2"/><path d="M8 20h2"/><path d="M12 20h2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span> ESP32
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="esp32_c3">ESP32-C3 DevKit</div>
+                <div class="dropdown-item" draggable="true" data-component="esp32_devkit">ESP32 DevKit (WROOM-32)</div>
                 <div class="dropdown-item dropdown-item--action" id="menu-esp32-editor">Éditeur de programme</div>
             </div>
         </div>
@@ -131,6 +134,7 @@
                 <div class="dropdown-item" draggable="true" data-component="led">LED (Rouge)</div>
                 <div class="dropdown-item" draggable="true" data-component="seg7">Afficheur 7 segments</div>
                 <div class="dropdown-item" draggable="true" data-component="bargraph_dc10h">Bargraph DC10H</div>
+                <div class="dropdown-item" draggable="true" data-component="matrix_8x8">Matrice LED 8×8</div>
             </div>
         </div>
 
@@ -311,6 +315,11 @@
             <label class="panel-field">
                 <span>Ampli vert. CH1</span>
                 <select id="scope-ch1-vdiv">
+                    <option value="0.01">10 mV/div</option>
+                    <option value="0.02">20 mV/div</option>
+                    <option value="0.05">50 mV/div</option>
+                    <option value="0.1">0,1 V/div</option>
+                    <option value="0.2">0,2 V/div</option>
                     <option value="0.5">0,5 V/div</option>
                     <option value="1" selected>1 V/div</option>
                     <option value="2">2 V/div</option>
@@ -320,11 +329,22 @@
             <label class="panel-field">
                 <span>Ampli vert. CH2</span>
                 <select id="scope-ch2-vdiv">
+                    <option value="0.01">10 mV/div</option>
+                    <option value="0.02">20 mV/div</option>
+                    <option value="0.05">50 mV/div</option>
+                    <option value="0.1">0,1 V/div</option>
+                    <option value="0.2">0,2 V/div</option>
                     <option value="0.5">0,5 V/div</option>
                     <option value="1" selected>1 V/div</option>
                     <option value="2">2 V/div</option>
                     <option value="5">5 V/div</option>
                 </select>
+            </label>
+            <label class="panel-field panel-field-range">
+                <span>Synchro trigger</span>
+                <input type="range" id="scope-sync-offset" min="-4" max="4" step="0.1" value="0">
+                <output id="scope-sync-offset-val">0,0 div</output>
+                <button type="button" id="scope-sync-reset" class="panel-mini-btn" title="Remettre la synchro à zéro">↺</button>
             </label>
             <label class="panel-field panel-field-range">
                 <span>Position horiz.</span>
@@ -500,6 +520,129 @@
                     <li>Pour un niveau analogique : comparateur ou sorties numériques décimales (CD4511, compteur, Arduino).</li>
                 </ul>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche et changer la couleur.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="matrix-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-matrix-doc">&times;</span>
+            <h2 id="matrix-doc-title">Matrice LED 8×8 — Kingbright 1588BS</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    La <strong>1588BS</strong> (Kingbright, équivalent FC-16 / Joy-it YRO203-0088A) est une matrice
+                    <strong>8×8 LED cathode commune</strong> : 8 lignes (anodes <strong>R0…R7</strong>) et
+                    8 colonnes (cathodes <strong>C0…C7</strong>). Une LED s’allume lorsque sa ligne est au
+                    niveau haut et sa colonne au niveau bas.
+                </p>
+                <h3>Couleur des pixels</h3>
+                <p>Choisissez la couleur d’affichage (cosmétique — n’affecte pas la simulation) :</p>
+                <div id="matrix-color-picker" class="bargraph-color-picker"></div>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th><th>Connexion typique</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>R0 … R7</td><td>Lignes (anodes)</td><td>Sorties Arduino via résistances 220 Ω … 1 kΩ</td></tr>
+                        <tr><td>C0 … C7</td><td>Colonnes (cathodes)</td><td>Sorties Arduino (niveau bas = colonne active)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Câblage typique (Arduino)</h3>
+                <ul class="doc-list">
+                    <li>16 broches GPIO : 8 pour les lignes, 8 pour les colonnes.</li>
+                    <li>Multiplexage logiciel : une colonne à la fois (scan rapide) pour afficher un motif complet.</li>
+                    <li>Pilotage idéal GPIO dans le simulateur (pas de modèle SPICE sur les 64 LED).</li>
+                </ul>
+                <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche et changer la couleur.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="lm386-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-lm386-doc">&times;</span>
+            <h2 id="lm386-doc-title">LM386 — Amplificateur audio</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>LM386N</strong> est un amplificateur <strong>mono-alimentation</strong> (4…18 V)
+                    pour audio faible puissance (haut-parleur 8 Ω). Dans le simulateur, la sortie est
+                    <strong>écrêtée</strong> entre <strong>0,2 V</strong> et <strong>V+ − 0,2 V</strong>.
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche DIP</th><th>Symbole</th><th>Jonction</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>G1</td><td><code>…_G1</code></td><td>Gain (avec broche 8)</td></tr>
+                        <tr><td>2</td><td>−</td><td><code>…_INM</code></td><td>Entrée inverseuse</td></tr>
+                        <tr><td>3</td><td>+</td><td><code>…_INP</code></td><td>Entrée non inverseuse (signal audio)</td></tr>
+                        <tr><td>4</td><td>GND</td><td><code>…_GND</code></td><td>Masse</td></tr>
+                        <tr><td>5</td><td>OUT</td><td><code>…_OUT</code></td><td>Sortie audio</td></tr>
+                        <tr><td>6</td><td>V+</td><td><code>…_VCC</code></td><td>Alimentation (+9 V typique STI2D)</td></tr>
+                        <tr><td>7</td><td>BP</td><td><code>…_BYP</code></td><td>Bypass (condensateur vers GND, optionnel)</td></tr>
+                        <tr><td>8</td><td>G8</td><td><code>…_G8</code></td><td>Gain (avec broche 1)</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Vue de dessus du boîtier DIP-8 : broches <strong>1…4 à gauche</strong> (haut → bas),
+                    <strong>8…5 à droite</strong> (haut → bas). Pastille = repère broche 1.
+                </p>
+                <h3>Gain (broches 1 et 8)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Câblage entre G1 (1) et G8 (8)</th><th>Gain</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Rien (broches ouvertes)</td><td><strong>×20</strong></td></tr>
+                        <tr><td>Résistance <strong>1,2 kΩ</strong></td><td><strong>×50</strong></td></tr>
+                        <tr><td>Condensateur <strong>10 µF</strong></td><td><strong>×200</strong></td></tr>
+                        <tr><td>Court-circuit (fil direct)</td><td><strong>×200</strong></td></tr>
+                    </tbody>
+                </table>
+                <h3>Montage type STI2D (chaîne audio)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Remarque</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>Sin_1</code> (ou sortie filtre)</td><td>C d’entrée puis <code>LM386_1</code> <strong>+</strong> (3)</td><td>Couplage AC (ex. 10 µF)</td></tr>
+                        <tr><td><code>LM386_1</code> <strong>−</strong> (2)</td><td><code>GND_1</code></td><td>Entrée à la masse</td></tr>
+                        <tr><td><code>LM386_1</code> GND (4)</td><td><code>GND_1</code></td><td>Masse CI</td></tr>
+                        <tr><td>Pile / <code>VCC_1</code> 9 V</td><td><code>LM386_1</code> V+ (6)</td><td>Alimentation</td></tr>
+                        <tr><td><code>LM386_1</code> OUT (5)</td><td>C de sortie → <code>HP_1</code></td><td>Ex. 220 µF puis HP 8 Ω</td></tr>
+                        <tr><td><code>HP_1</code></td><td><code>GND_1</code></td><td>Retour masse</td></tr>
+                        <tr><td><code>LM386_1</code> OUT (5)</td><td><code>Osci_1</code> CH1</td><td>Visualisation (option)</td></tr>
+                        <tr><td><code>Sin_1</code></td><td><code>Osci_1</code> CH2</td><td>Comparaison entrée/sortie</td></tr>
+                    </tbody>
+                </table>
+                <h3>Options</h3>
+                <ul class="doc-list">
+                    <li><strong>Gain ×200</strong> : condensateur 10 µF entre broches <strong>1</strong> et <strong>8</strong>.</li>
+                    <li><strong>Bypass (7)</strong> : 10 µF entre broche <strong>7</strong> et <strong>GND</strong> (réduction bruit — broche documentée, modèle simplifié).</li>
+                    <li><strong>V+</strong> : lue sur la broche <strong>6</strong> si reliée à une pile ; sinon valeur affichée sur le symbole (9 V par défaut).</li>
+                </ul>
+                <h3>Simulation</h3>
+                <p>
+                    Modèle idéal SPICE : <code>Vout = gain × (V+ − V−)</code> limité entre 0,2 V et V+ − 0,2 V.
+                    Compatible <strong>oscilloscope</strong>, <strong>haut-parleur</strong> (son) et aperçu live du scope
+                    avec filtre RC / AOP en amont.
+                </p>
+                <h3>Dépannage — pas de signal en sortie</h3>
+                <ul class="doc-list">
+                    <li><strong>Court-circuit V+ / OUT</strong> : ne pas relier les broches <strong>6</strong> et <strong>5</strong> sur le même fil vertical (9 V en direct sur la sortie).</li>
+                    <li><strong>Nœud de sortie</strong> : C2, HP et CH2 doivent partager un point — cliquez sur l’intersection d’un fil existant pour créer un point de connexion (pastille verte).</li>
+                    <li><strong>Broches obligatoires</strong> : 2 (−) et 4 (GND) à la masse, 3 (+) vers le signal, 6 (V+) vers 9 V, 5 (OUT) vers C2.</li>
+                    <li><strong>Oscilloscope</strong> : CH2 sur la sortie (après C2) ; régler V/div si l’amplitude est faible (ex. 0,5 V/div).</li>
+                    <li><strong>CH2 oscilloscope</strong> : branchez-le <strong>après C2</strong> (côté HP), pas sur la broche OUT (5) — sur OUT vous verriez un <strong>continu ~4,5 V</strong> (repos du LM386).</li>
+                    <li><strong>Échelle CH2</strong> : ~2 V/div pour une sortie amplifiée typique ; position verticale CH2 à 0 div.</li>
+                    <li><strong>Fenêtre scope</strong> : double-clic sur l’oscillo → bouton « Afficher fenêtre scope » pour une vue agrandie.</li>
+                </ul>
+                <p class="doc-hint">
+                    <strong>Double-clic</strong> sur le symbole pour rouvrir cette fiche.
+                    <strong>Maj + double-clic</strong> pour modifier la tension V+ de secours (si broche 6 non câblée).
+                </p>
             </div>
         </div>
     </div>
@@ -700,7 +843,8 @@ void loop() {
         <div class="modal-content modal-content--doc">
             <span class="close-modal" id="close-esp32-doc">&times;</span>
             <h2 id="esp32-doc-title">ESP32-C3 DevKit</h2>
-            <div class="modal-body modal-body--doc">
+            <div id="esp32-doc-body" class="modal-body modal-body--doc">
+                <div class="esp32-doc-c3">
                 <p>
                     Carte <strong>ESP32-C3 DevKitM-1</strong> (RISC-V, Wi-Fi/BLE) : logique <strong>3,3 V</strong>,
                     alimentation USB <strong>5 V</strong> sur la broche dédiée, <strong>13 GPIO</strong> simulées.
@@ -728,6 +872,33 @@ void loop() {
                     <li>À la simulation, le moteur interprète <code>pinMode</code>, <code>digitalWrite</code>, <code>delay(ms)</code> et les registres AVR <code>DDRD</code> / <code>PORTD</code> (GPIO0–GPIO7), <code>DDRB</code> / <code>PORTB</code> (GPIO8–GPIO10).</li>
                     <li>Reliez <strong>GND</strong> à la masse du circuit si vous utilisez les rails 3V3 / 5V.</li>
                 </ul>
+                </div>
+                <div class="esp32-doc-devkit hidden">
+                <p>
+                    Carte <strong>ESP32 DevKit V1 (WROOM-32)</strong> : double cœur Xtensa, Wi-Fi/BLE, logique <strong>3,3 V</strong>,
+                    <strong>36 broches</strong> dont <strong>~30 GPIO</strong> utilisables — idéal pour matrice LED 8×8, capteurs Grove et TFT.
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>3V3 / 5V</td><td>Alimentation</td></tr>
+                        <tr><td>GND / GND2</td><td>Masse</td></tr>
+                        <tr><td>GPIO21 / GPIO22</td><td>I²C SDA / SCL (défaut Grove)</td></tr>
+                        <tr><td>GPIO1 / GPIO3</td><td>UART TX0 / RX0 (USB série)</td></tr>
+                        <tr><td>GPIO2</td><td>LED intégrée (<code>LED_BUILTIN</code>)</td></tr>
+                        <tr><td>GPIO0 … GPIO27, 32–39</td><td>GPIO digitales / analogiques</td></tr>
+                    </tbody>
+                </table>
+                <h3>Programmation</h3>
+                <ul class="doc-list">
+                    <li>Carte cible : <code>esp32:esp32:esp32</code> (ou DOIT DevKit V1).</li>
+                    <li>Registres <code>PORTD</code> (GPIO0–7), <code>PORTB</code> (GPIO8–15), <code>PORTC</code> (GPIO16–23) pour compteurs / bargraph.</li>
+                    <li>Broches entrée seule : GPIO34, GPIO35, GPIO36, GPIO39.</li>
+                </ul>
+                </div>
                 <p class="doc-hint">Double-clic sur le symbole pour rouvrir cette fiche.</p>
             </div>
         </div>

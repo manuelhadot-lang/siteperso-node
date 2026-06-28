@@ -10,11 +10,17 @@ const __schematicDir = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = join(__schematicDir, "..", "..");
 
 import {
+    appendLm386Netlist,
+    isLm386Type,
+} from "./lm386.mjs";
+
+import {
     logicVhi,
     logicVth,
     parseLogicRail,
     parseLogicStateVolts,
 } from "./logic-rails.mjs";
+
 import {
     appendIc74ls00Netlist,
     appendIc74ls74Netlist,
@@ -82,6 +88,13 @@ import {
     isEsp32C3Type,
 } from "./esp32-c3.mjs";
 import {
+    appendEsp32DevkitNetlist,
+    esp32DevkitDigitalPinIndices,
+    esp32DevkitGpioPinName,
+    esp32DevkitTerminalKeys,
+    isEsp32DevkitType,
+} from "./esp32-devkit.mjs";
+import {
     arduinoUnoMinPulsePeriodSec,
     applyArduinoSketchToComponent,
     arduinoGpioIsTimeVarying,
@@ -93,7 +106,7 @@ import {
 } from "./hc90-cascade.mjs";
 
 function isMicroBoardType(t) {
-    return isArduinoUnoType(t) || isEsp32C3Type(t);
+    return isArduinoUnoType(t) || isEsp32C3Type(t) || isEsp32DevkitType(t);
 }
 
 function isLedType(t) {
@@ -198,6 +211,10 @@ function isOpampType(t) {
     return t === "opamp";
 }
 
+function isLm386ComponentType(t) {
+    return isLm386Type(t);
+}
+
 function isThreeTerminalType(t) {
     return t === "npn" || t === "opamp" || t === "potentiometer" || t === "switch_spdt";
 }
@@ -208,6 +225,10 @@ function isSeg7Type(t) {
 
 function isBargraphDc10hType(t) {
     return t === "bargraph_dc10h";
+}
+
+function isMatrix8x8Type(t) {
+    return t === "matrix_8x8";
 }
 
 function isGroveLcdType(t) {
@@ -242,11 +263,18 @@ function bargraphTerminalKeys(c) {
     return keys;
 }
 
+function matrix8x8TerminalKeys(c) {
+    const keys = [];
+    for (let i = 0; i < 16; i++) keys.push(`${c.id}#${i}`);
+    return keys;
+}
+
 /** Bornes SPICE à enregistrer pour le câblage (union-find). */
 function terminalKeysForComponent(c) {
     if (!c || !c.id) return [];
     if (isSeg7Type(c.type)) return seg7TerminalKeys(c);
     if (isBargraphDc10hType(c.type)) return bargraphTerminalKeys(c);
+    if (isMatrix8x8Type(c.type)) return matrix8x8TerminalKeys(c);
     if (isGroveLcdType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isGroveDht22Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
     if (isGroveTsl2591Type(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`, `${c.id}#3`];
@@ -257,6 +285,11 @@ function terminalKeysForComponent(c) {
         return keys;
     }
     if (isOscilloscopeType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
+    if (isLm386ComponentType(c.type)) {
+        const keys = [];
+        for (let i = 0; i < 8; i++) keys.push(`${c.id}#${i}`);
+        return keys;
+    }
     if (isThreeTerminalType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
     if (isLogicGateComponentType(c.type)) {
         return [...logicGateInputNodeKeys(c), logicGateOutputNodeKey(c)];
@@ -282,6 +315,7 @@ function terminalKeysForComponent(c) {
     }
     if (isArduinoUnoType(c.type)) return arduinoUnoTerminalKeys(c);
     if (isEsp32C3Type(c.type)) return esp32C3TerminalKeys(c);
+    if (isEsp32DevkitType(c.type)) return esp32DevkitTerminalKeys(c);
     if (isSingleTerminalRefType(c.type)) return [`${c.id}#0`];
     if (isTwoTerminalType(c.type) || isSignalGeneratorType(c.type)) {
         return [`${c.id}#0`, `${c.id}#1`];
@@ -320,6 +354,17 @@ const OPAMP_FEEDBACK_PROBE_TYPES = new Set([
     "bode_analyzer",
 ]);
 
+/** Bornes reliées à la masse schéma — exclues de l'union-find rétroaction (évite faux positifs via GND). */
+function isGroundFeedbackTerminalKey(key, components) {
+    const id = String(key).split("#")[0];
+    const idx = String(key).split("#")[1];
+    const comp = components.find((c) => c.id === id);
+    if (!comp) return false;
+    if (comp.type === "ground" || comp.type === "gnd") return true;
+    if (comp.type === "oscilloscope" && idx === "2") return true;
+    return false;
+}
+
 /** Union-find pour la rétroaction AOP : ignore les sondes (haute-Z), qui ne forment pas une boucle réelle. */
 function buildOpampFeedbackParent(components, wires) {
     const probeIds = new Set(
@@ -338,16 +383,90 @@ function buildOpampFeedbackParent(components, wires) {
     for (const wire of wires) {
         if (!wire?.solid || !wire.fromKey || !wire.toKey) continue;
         if (isProbeKey(wire.fromKey) || isProbeKey(wire.toKey)) continue;
+        if (
+            isGroundFeedbackTerminalKey(wire.fromKey, components) ||
+            isGroundFeedbackTerminalKey(wire.toKey, components)
+        ) {
+            continue;
+        }
         touch(wire.fromKey);
         touch(wire.toKey);
         ufUnion(topo, wire.fromKey, wire.toKey);
     }
+    unionVirtualWireJunctions(topo, wires, touch);
     ufUnionPassiveInternals(topo, components);
     return topo;
 }
 
+function unionVirtualWireJunctions(parent, wires, touch) {
+    const virtualKeys = new Set();
+    for (const wire of wires) {
+        if (!wire?.solid) continue;
+        if (parseVirtualWirePointKey(wire.fromKey)) virtualKeys.add(wire.fromKey);
+        if (parseVirtualWirePointKey(wire.toKey)) virtualKeys.add(wire.toKey);
+    }
+    for (const key of virtualKeys) {
+        const p = parseVirtualWirePointKey(key);
+        if (!p) continue;
+        touch(key);
+        for (const wire of wires) {
+            if (!wire?.solid || !wire.fromKey || !Array.isArray(wire.points) || wire.points.length < 2) continue;
+            for (let i = 0; i < wire.points.length - 1; i++) {
+                if (pointOnWireSegment(p, wire.points[i], wire.points[i + 1])) {
+                    touch(wire.fromKey);
+                    ufUnion(parent, key, wire.fromKey);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/** Union-find complet (tous les fils) — détection résistance sortie → −. */
+function buildFullWireParent(components, wires, { includePassiveInternals = true } = {}) {
+    const parent = new Map();
+    const touch = (key) => {
+        if (!parent.has(key)) parent.set(key, key);
+    };
+    for (const comp of components) {
+        for (const key of terminalKeysForComponent(comp)) touch(key);
+    }
+    for (const wire of wires) {
+        if (!wire?.solid || !wire.fromKey || !wire.toKey) continue;
+        touch(wire.fromKey);
+        touch(wire.toKey);
+        ufUnion(parent, wire.fromKey, wire.toKey);
+    }
+    unionVirtualWireJunctions(parent, wires, touch);
+    if (includePassiveInternals) ufUnionPassiveInternals(parent, components);
+    return parent;
+}
+
+/** Une résistance relie directement la sortie (#2) et l'entrée − (#1). */
+function opampResistorBetweenOutputAndMinus(c, components, wires) {
+    const full = buildFullWireParent(components, wires, { includePassiveInternals: false });
+    const outR = ufFind(full, `${c.id}#2`);
+    const negR = ufFind(full, `${c.id}#1`);
+    for (const r of components) {
+        if (r.type !== "resistor") continue;
+        const r0 = ufFind(full, `${r.id}#0`);
+        const r1 = ufFind(full, `${r.id}#1`);
+        if ((r0 === outR && r1 === negR) || (r1 === outR && r0 === negR)) return true;
+    }
+    return false;
+}
+
 /** Comparateur / Schmitt (boucle + ou boucle ouverte) : bascule dure. Amplificateur (boucle −) : tanh raide. */
 function opampUsesComparatorModel(c, components, wires) {
+    if (opampResistorBetweenOutputAndMinus(c, components, wires)) {
+        const topo = buildOpampFeedbackParent(components, wires);
+        const outRoot = ufFind(topo, `${c.id}#2`);
+        const posRoot = ufFind(topo, `${c.id}#0`);
+        if (outRoot === posRoot) {
+            return true;
+        }
+        return false;
+    }
     const topo = buildOpampFeedbackParent(components, wires);
     const outKey = `${c.id}#2`;
     const posKey = `${c.id}#0`;
@@ -366,6 +485,36 @@ function opampUsesComparatorModel(c, components, wires) {
         return false;
     }
     return positiveFeedback || !negativeFeedback;
+}
+
+/** Avertissements câblage AOP (non-inverseur, suiveur, comparateur). */
+function appendOpampWiringWarnings(c, { nPlus, nMinus, comparatorMode, topo, terminalWireCount, warnings, components, wires }) {
+    const outRoot = ufFind(topo, `${c.id}#2`);
+    const negRoot = ufFind(topo, `${c.id}#1`);
+    const posRoot = ufFind(topo, `${c.id}#0`);
+    const label = c.id || "AOP";
+    const hasOutToMinusR = opampResistorBetweenOutputAndMinus(c, components, wires);
+    if (nPlus === nMinus) {
+        warnings.push(
+            `${label} : entrées + et − sur le même nœud — sortie bloquée à 0 V. ` +
+                `Non-inverseur : + sur le signal, R3 entre sortie et −, R4 entre − et la masse (ne reliez pas − sur la sortie du suiveur).`
+        );
+        return;
+    }
+    const minusWired = (terminalWireCount.get(`${c.id}#1`) || 0) > 0;
+    const outWired = (terminalWireCount.get(`${c.id}#2`) || 0) > 0;
+    const full = buildFullWireParent(components, wires);
+    const directFollower = ufFind(full, `${c.id}#2`) === ufFind(full, `${c.id}#1`);
+    if (minusWired && outWired && !hasOutToMinusR && !directFollower) {
+        warnings.push(
+            `${label} : câblage non-inverseur incorrect — branchez R3 entre la sortie (→) et l'entrée − (broche du bas, marquée « − »), ` +
+                `puis R4 entre − et GND. L'entrée + (haut, « + ») reçoit le signal. Ne reliez pas R3 sur + ni directement sur GND.`
+        );
+    } else if (comparatorMode && outRoot === posRoot && outRoot !== negRoot) {
+        warnings.push(
+            `${label} : rétroaction détectée vers l'entrée + (pas −) — montage type comparateur / Schmitt.`
+        );
+    }
 }
 
 /** Source comportementale AOP : saturation aux rails (comparateur, hystérésis, amplif.). */
@@ -614,6 +763,43 @@ function parseCapacitanceFarad(s) {
     return Number.isFinite(n) && n > 0 ? n * mult : 1e-6;
 }
 
+/** Constante de temps RC max (R×C) pour les paires R/C qui partagent un nœud. */
+function estimateMaxRcTauSec(components, wires) {
+    const parent = new Map();
+    const touch = (k) => {
+        if (k && !parent.has(k)) parent.set(k, k);
+    };
+    for (const c of components) {
+        for (const k of terminalKeysForComponent(c)) touch(k);
+    }
+    for (const w of wires || []) {
+        if (!w?.solid || !w.fromKey || !w.toKey) continue;
+        touch(w.fromKey);
+        touch(w.toKey);
+        ufUnion(parent, w.fromKey, w.toKey);
+    }
+    let maxTau = 0;
+    const caps = components.filter((c) => c.type === "capacitor");
+    const resistors = components.filter(
+        (c) => c.type === "resistor" || c.type === "potentiometer"
+    );
+    for (const cap of caps) {
+        const c0 = ufFind(parent, `${cap.id}#0`);
+        const c1 = ufFind(parent, `${cap.id}#1`);
+        const cFarad = parseCapacitanceFarad(cap.value);
+        for (const res of resistors) {
+            const r0 = ufFind(parent, `${res.id}#0`);
+            const r1 = ufFind(parent, `${res.id}#1`);
+            const shares =
+                c0 === r0 || c0 === r1 || c1 === r0 || c1 === r1;
+            if (!shares) continue;
+            const tau = parseResistanceOhm(res.value) * cFarad;
+            if (tau > maxTau) maxTau = tau;
+        }
+    }
+    return maxTau;
+}
+
 function parseInductanceHenry(s) {
     if (s == null) return 1e-3;
     let t = String(s).trim().toLowerCase().replace(/\s/g, "").replace(",", ".").replace("µ", "u");
@@ -717,9 +903,18 @@ function parseOpampVn(c) {
     return Number.isFinite(n) ? n : -15;
 }
 
+function positiveNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function formatPwlVoltageLine(branch, nPlus, nMinus, points) {
+    const chunks = points.map((p) => `${formatSpiceTime(p.t)} ${p.v}`);
+    return `${branch} ${nPlus} ${nMinus} PWL(${chunks.join(" ")})`;
+}
+
 /** Offset DC (V) : dernier « …V » après la fréquence (sinus ou carré), ou mot offset. */
 function parseOffsetVolts(s) {
-    if (s == null) return 0;
     const raw = String(s).trim();
     const mOff = /(?:offset|off|dc)\s*([-+]?[\d.]+)\s*v?/i.exec(raw);
     if (mOff) {
@@ -998,7 +1193,7 @@ const SLOW_CLOCK_MOD60_PERIODS = 60;
 const SLOW_CLOCK_MAX_TSTOP_SEC = 120;
 
 /** Pas et durée de simulation transitoire selon les générateurs AC et la base de temps du scope. */
-function computeTranTiming(components, deckOpts = {}) {
+function computeTranTiming(components, wires = [], deckOpts = {}) {
     let minPeriod = Infinity;
     for (const c of components) {
         if (c.type !== "vsin" && c.type !== "vsquare" && c.type !== "vpulse") continue;
@@ -1029,12 +1224,16 @@ function computeTranTiming(components, deckOpts = {}) {
     }
     if (scopeWindowSec <= 0) scopeWindowSec = TRAN_SCOPE_H_DIVS * 0.001;
 
+    const rcTau = estimateMaxRcTauSec(components, wires);
+    const rcSettleSec = rcTau > 0 ? rcTau * 10 : 0;
+    const scopedAcPeriods = 12;
+
     let tstep = minPeriod / TRAN_SAMPLES_PER_PERIOD;
     const hasScope = components.some((c) => c.type === "oscilloscope");
     const hasSpeaker = components.some((c) => isSpeakerType(c.type));
     let tstop = hasScope
-        ? Math.max(scopeWindowSec, minPeriod * 2)
-        : Math.max(minPeriod * 8, scopeWindowSec);
+        ? Math.max(scopeWindowSec, minPeriod * scopedAcPeriods, rcSettleSec)
+        : Math.max(minPeriod * 8, scopeWindowSec, rcSettleSec);
     if (hasSpeaker) {
         tstop = Math.max(tstop, minPeriod * 20, 0.25);
         // Durée = nombre entier de périodes du générateur → boucle audio sans « toc ».
@@ -1129,6 +1328,13 @@ function computeTranTiming(components, deckOpts = {}) {
             tstep = tstop / TRAN_MAX_POINTS;
         }
     }
+    if (deckOpts.liveSourceTuning && hasAcGenerator) {
+        const quickTstop = Math.max(scopeWindowSec, minPeriod * 8, 0.002);
+        if (tstop > quickTstop * 1.2) tstop = quickTstop;
+        if (tstop / tstep > TRAN_MAX_POINTS) {
+            tstep = tstop / TRAN_MAX_POINTS;
+        }
+    }
     return {
         tstep,
         tstop,
@@ -1180,6 +1386,7 @@ function isArduinoIdealOnlyCircuit(components) {
         if (isMicroBoardType(c.type)) continue;
         if (
             c.type === "bargraph_dc10h" ||
+            c.type === "matrix_8x8" ||
             c.type === "seg7" ||
             c.type === "led" ||
             c.type === "grove_lcd16x2" ||
@@ -1627,8 +1834,18 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const nPlus = nodeFor(`${c.id}#0`);
             const nMinus = nodeFor(`${c.id}#1`);
             const nOut = nodeFor(`${c.id}#2`);
-            const comparatorMode = opampUsesComparatorModel(c, components, wires);
             const topo = buildOpampFeedbackParent(components, wires);
+            const comparatorMode = opampUsesComparatorModel(c, components, wires);
+            appendOpampWiringWarnings(c, {
+                nPlus,
+                nMinus,
+                comparatorMode,
+                topo,
+                terminalWireCount,
+                warnings,
+                components,
+                wires,
+            });
             const outEqualsPlus = ufFind(topo, `${c.id}#2`) === ufFind(topo, `${c.id}#0`);
             let bOut = nOut;
             if (outEqualsPlus) {
@@ -1637,6 +1854,17 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 lines.push(`${spiceBranchName("R", c.id)}_iso ${nOut} ${bOut} 1`);
             }
             lines.push(formatOpampBsourceLine(c, bOut, nPlus, nMinus, { comparatorMode }));
+        } else if (isLm386ComponentType(c.type)) {
+            appendLm386Netlist(c, {
+                nodeFor,
+                components,
+                wires,
+                lines,
+                warnings,
+                terminalWireCount,
+                spiceBranchName,
+                spiceVoltageDiffExpr,
+            });
         } else if (isLogicGateComponentType(c.type)) {
             const inKeys = logicGateInputNodeKeys(c);
             const inNodes = inKeys.map(k => nodeFor(k));
@@ -1692,6 +1920,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             appendArduinoUnoNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isEsp32C3Type(c.type)) {
             appendEsp32C3Netlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
+        } else if (isEsp32DevkitType(c.type)) {
+            appendEsp32DevkitNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isLogicCd4511Type(c.type)) {
             const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
@@ -1865,6 +2095,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         }
         const n0IsGnd = n0 === "0" || isNodeLikelyLogicLow(n0, components, nodeFor);
         const n1IsGnd = n1 === "0" || isNodeLikelyLogicLow(n1, components, nodeFor);
+        if (n0IsGnd && n1IsGnd) {
+            warnings.push(
+                `Analyse fréquentielle ${c.id} : les deux bornes sont sur la masse — reliez la borne + sur la sortie du filtre (jonction R/C), pas sur la patte masse du condensateur.`
+            );
+        }
         if (!n0IsGnd && !n1IsGnd) {
             warnings.push(
                 `Analyse fréquentielle ${c.id} : reliez la borne − à la masse (symbole GND relié au même fil). Sans référence masse, la courbe peut ressembler à un passe-haut.`
@@ -2124,7 +2359,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
         }
     } else if (useTran) {
         const hc90Mod60 = detectHc90Mod60FromGraphicalState(components, wires);
-        const tranTiming = computeTranTiming(components, { ...deckOpts, hc90Mod60 });
+        const tranTiming = computeTranTiming(components, wires, { ...deckOpts, hc90Mod60 });
         const { tstepStr, tstopStr, slowClock, clockPeriodSec } = tranTiming;
         analysisTran = true;
         const hc90InCircuit = components.some((c) => isIc74hc90Type(c.type));
@@ -2317,6 +2552,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 outKeys = arduinoUnoDigitalPinIndices().map((i) => `${c.id}#${i}`);
             } else if (isEsp32C3Type(c.type)) {
                 outKeys = esp32C3DigitalPinIndices().map((i) => `${c.id}#${i}`);
+            } else if (isEsp32DevkitType(c.type)) {
+                outKeys = esp32DevkitDigitalPinIndices().map((i) => `${c.id}#${i}`);
             }
             let vhiTran = 5;
             if (isLogicGateComponentType(c.type)) {
@@ -2349,6 +2586,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 vhiTran = 5;
             } else if (isEsp32C3Type(c.type)) {
                 vhiTran = 3.3;
+            } else if (isEsp32DevkitType(c.type)) {
+                vhiTran = 3.3;
             }
             for (const outKey of outKeys) {
                 const nOut = nodeFor(outKey);
@@ -2378,6 +2617,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 } else if (isEsp32C3Type(c.type)) {
                     const pinIdx = Number(String(outKey).split("#")[1]);
                     if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${esp32C3GpioPinName(pinIdx)}`;
+                } else if (isEsp32DevkitType(c.type)) {
+                    const pinIdx = Number(String(outKey).split("#")[1]);
+                    if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${esp32DevkitGpioPinName(pinIdx)}`;
                 }
                 logicGatesTranMeta.push({
                     id: icOutId,
@@ -2804,6 +3046,21 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 );
             }
         }
+        if (c.type === "matrix_8x8") {
+            let wiredRows = 0;
+            let wiredCols = 0;
+            for (let i = 0; i < 8; i++) {
+                if ((terminalWireCount.get(`${c.id}#${i}`) || 0) > 0) wiredRows++;
+            }
+            for (let i = 8; i < 16; i++) {
+                if ((terminalWireCount.get(`${c.id}#${i}`) || 0) > 0) wiredCols++;
+            }
+            if (wiredRows === 0 || wiredCols === 0) {
+                warnings.push(
+                    `Matrice ${c.id} : reliez les lignes R0…R7 et les colonnes C0…C7 (pilotage GPIO idéal, pas de modèle SPICE).`
+                );
+            }
+        }
     }
 
     const rippleMod10Warn = detectRippleMod10ResetAndWarning(components, parent);
@@ -2914,6 +3171,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const vhi = 3.3;
             for (const pinIdx of esp32C3DigitalPinIndices()) {
                 const pinName = esp32C3GpioPinName(pinIdx);
+                logicGates.push({
+                    id: `${c.id}_${pinName}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${pinIdx}`),
+                    inputs: [],
+                    vhi,
+                    vth: 1.65,
+                });
+            }
+        } else if (isEsp32DevkitType(c.type)) {
+            const vhi = 3.3;
+            for (const pinIdx of esp32DevkitDigitalPinIndices()) {
+                const pinName = esp32DevkitGpioPinName(pinIdx);
                 logicGates.push({
                     id: `${c.id}_${pinName}`,
                     type: c.type,

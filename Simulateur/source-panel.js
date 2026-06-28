@@ -2,6 +2,9 @@
 import { flags, saveState } from './state.js';
 import { draw, resizeCanvas } from './renderer.js';
 import { requestLiveSimulation } from './simulation.js';
+import { ensureScopeFieldsVisible, updateBottomPanelTitle } from './scope-panel.js';
+import { refreshScopePopup } from './scope-popup.js';
+import { syncSpeakerAudioLive } from './speaker-audio.js';
 
 let activeSource = null;
 
@@ -77,21 +80,34 @@ function syncFieldsFromComponent(comp) {
     if (!comp) return;
     showFieldsForType(comp.type);
     if (comp.type === 'gimp') {
-        if (titleEl()) titleEl().textContent = `${comp.label} — Générateur d'impulsions`;
         if (gimpVoltageEl()) gimpVoltageEl().value = String(comp.voltageRail ?? 5);
         if (gimpFreqEl()) gimpFreqEl().value = String(comp.frequency ?? 1000);
         if (gimpDutyEl()) gimpDutyEl().value = String(comp.dutyCycle ?? 10);
     } else if (comp.type === 'gsin') {
-        if (titleEl()) titleEl().textContent = `${comp.label} — Générateur sinusoïdal`;
         if (gsinAmpEl()) gsinAmpEl().value = String(comp.peakAmplitude ?? 5);
         if (gsinFreqEl()) gsinFreqEl().value = String(comp.frequency ?? 1000);
         if (gsinOffsetEl()) gsinOffsetEl().value = String(comp.offset ?? 0);
     } else if (comp.type === 'gsqr') {
-        if (titleEl()) titleEl().textContent = `${comp.label} — Générateur carré`;
         if (gsqrAmpEl()) gsqrAmpEl().value = String(comp.peakAmplitude ?? 5);
         if (gsqrFreqEl()) gsqrFreqEl().value = String(comp.frequency ?? 1000);
         if (gsqrOffsetEl()) gsqrOffsetEl().value = String(comp.offset ?? 0);
     }
+}
+
+export function flushSourcePanelFields() {
+    if (!activeSource) return;
+    applyFieldsToComponent();
+}
+
+function beginLiveTuning() {
+    if (!activeSource) return;
+    flags.sourcePanelTuning = true;
+    flags.tuningSourceLabel = activeSource.label ?? null;
+}
+
+function endLiveTuning() {
+    flags.sourcePanelTuning = false;
+    flags.tuningSourceLabel = null;
 }
 
 function applyFieldsToComponent() {
@@ -110,15 +126,33 @@ function applyFieldsToComponent() {
         activeSource.offset = parseFloat(gsqrOffsetEl()?.value) || 0;
     }
     draw();
-    if (flags.isSimulating) requestLiveSimulation();
+    if (flags.isSimulating) {
+        if (flags.sourcePanelTuning) {
+            syncSpeakerAudioLive();
+            refreshScopePopup();
+        }
+        requestLiveSimulation();
+    }
+}
+
+function applyLive() {
+    if (!activeSource) return;
+    beginLiveTuning();
+    applyFieldsToComponent();
+}
+
+export function ensureActiveSourceFieldsVisible() {
+    if (!activeSource) return;
+    showFieldsForType(activeSource.type);
+    panel()?.classList.remove('hidden');
 }
 
 export function openSourcePanel(comp) {
     if (!comp || (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr')) return;
     activeSource = comp;
     syncFieldsFromComponent(comp);
-    const sf = document.getElementById('scope-fields');
-    if (sf) { sf.classList.add('hidden'); sf.style.display = 'none'; }
+    ensureScopeFieldsVisible();
+    updateBottomPanelTitle();
     panel()?.classList.remove('hidden');
     resizeCanvas();
 }
@@ -129,12 +163,16 @@ export function openGimpPanel(comp) {
 
 export function closeSourcePanel() {
     activeSource = null;
+    flags.sourcePanelTuning = false;
+    flags.tuningSourceLabel = null;
     if (gimpFields()) { gimpFields().classList.add('hidden'); gimpFields().style.display = 'none'; }
     if (gsinFields()) { gsinFields().classList.add('hidden'); gsinFields().style.display = 'none'; }
     if (gsqrFields()) { gsqrFields().classList.add('hidden'); gsqrFields().style.display = 'none'; }
     const sf = document.getElementById('scope-fields');
     if (!sf || sf.classList.contains('hidden')) {
         panel()?.classList.add('hidden');
+    } else {
+        updateBottomPanelTitle();
     }
     resizeCanvas();
 }
@@ -179,15 +217,34 @@ export function formatGsinLabel(comp) {
 }
 
 export function initSourcePanel() {
-    const apply = () => {
-        if (!activeSource) return;
-        applyFieldsToComponent();
-    };
+    const apply = () => applyLive();
+
     const onChange = () => {
         if (!activeSource) return;
-        if (!flags.isSimulating) saveState();
-        applyFieldsToComponent();
+        if (flags.isSimulating) applyLive();
+        else {
+            applyFieldsToComponent();
+            endLiveTuning();
+            saveState();
+        }
     };
+
+    const onBlur = () => endLiveTuning();
+
+    /** Flèches / spinner : `change` parfois sans `input` — appliquer après mise à jour du champ. */
+    const onStepKey = (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        queueMicrotask(() => applyLive());
+    };
+
+    for (const el of [
+        gimpVoltageEl(), gimpFreqEl(), gimpDutyEl(),
+        gsinAmpEl(), gsinFreqEl(), gsinOffsetEl(),
+        gsqrAmpEl(), gsqrFreqEl(), gsqrOffsetEl(),
+    ]) {
+        el?.addEventListener('blur', onBlur);
+        el?.addEventListener('keydown', onStepKey);
+    }
 
     gimpVoltageEl()?.addEventListener('change', onChange);
     gimpFreqEl()?.addEventListener('change', onChange);

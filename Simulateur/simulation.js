@@ -1,18 +1,22 @@
 // simulation.js
-import { circuit, flags, simulationResults, GRID_SIZE } from './state.js';
+import { circuit, flags, simulationResults, GRID_SIZE, snapToGrid } from './state.js';
 import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
+import { lm386JonctionToTerminalKey } from './lm386-layout.js';
 import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
 import { esp32C3JonctionToTerminalKey, ESP32_FQBN } from './esp32-c3-layout.js';
+import { esp32DevkitJonctionToTerminalKey, ESP32_DEVKIT_FQBN } from './esp32-devkit-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { draw } from './renderer.js';
 import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes } from './led-animation.js';
-import { startScopeAnimation, stopScopeAnimation, SCOPE_H_DIVS } from './scope-animation.js';
-import { openScopePanel, isScopePanelOpen, getActiveScope, refreshScopePanelFields } from './scope-panel.js';
+import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
+import { shouldAnimateGsinScope } from './Engine/scope-gsin-ideal.mjs';
+import { openScopePanel, closeScopePanelFully, isScopePanelOpen, getActiveScope, refreshScopePanelFields } from './scope-panel.js';
 import { isScopePopupOpen, refreshScopePopup } from './scope-popup.js';
 import { isSerialMonitorOpen, refreshSerialMonitor } from './serial-monitor-popup.js';
 import { isBodePopupOpen, openBodePopup, refreshBodePopup } from './bode-popup.js';
-import { startSpeakerAudio, stopSpeakerAudio } from './speaker-audio.js';
+import { startSpeakerAudio, stopSpeakerAudio, primeSpeakerAudioContext, shouldPlaySpeakerAudio } from './speaker-audio.js';
+import { flushSourcePanelFields } from './source-panel.js';
 
 let liveSimTimer = null;
 let simulationInFlight = false;
@@ -25,67 +29,24 @@ let simulationGeneration = 0;
 export function requestLiveSimulation() {
     if (!flags.isSimulating) return;
     clearTimeout(liveSimTimer);
+    const delay = flags.sourcePanelTuning ? 50 : 400;
     liveSimTimer = setTimeout(() => {
         if (flags.isSimulating) triggerSimulation(true);
-    }, 400);
+    }, delay);
 }
 
 import { prepareArduinoForSimulation } from './arduino-editor.js';
 import {
-    arduinoUnoMinPulsePeriodSec,
     applyArduinoSketchToComponent,
     arduinoGpioIsTimeVarying,
     sketchHasLoop,
 } from './Engine/arduino-sketch-parse.mjs';
-import { arduinoUartScopePeriodSec } from './Engine/arduino-uart-wave.mjs';
-import { annotateMicroBoardI2cBusEngine } from './Engine/i2c-bus-ideal.mjs';
-
-/** Base de temps adaptée à l'I²C (100 kHz) si le scope est encore en ms/div. */
-function autoTuneScopeForI2c() {
-    const simWires = circuit.wires
-        .filter((w) => w.fromJonctionId && w.toJonctionId)
-        .map((w) => ({
-            solid: true,
-            fromKey: jonctionIdToTerminalKey(w.fromJonctionId),
-            toKey: jonctionIdToTerminalKey(w.toJonctionId),
-            points: [],
-        }))
-        .filter((w) => w.fromKey && w.toKey);
-    let hasI2c = false;
-    for (const comp of circuit.components) {
-        if (!isMicroBoard(comp)) continue;
-        annotateMicroBoardI2cBusEngine(comp, circuit.components, simWires);
-        if (comp.i2cBus?.active) hasI2c = true;
-    }
-    if (!hasI2c) return;
-    for (const osc of circuit.components) {
-        if (osc.type !== 'oscilloscope') continue;
-        if ((osc.timeDivSec ?? 0.001) > 0.0001) osc.timeDivSec = 0.00005;
-    }
-}
-
-/** Base de temps adaptée au clignotement Arduino (delay) sur l'oscilloscope. */
-function autoTuneScopeForArduino() {
-    for (const comp of circuit.components) {
-        if (isMicroBoard(comp)) applyArduinoSketchToComponent(comp);
-    }
-    const uartPeriod = arduinoUartScopePeriodSec(circuit.components);
-    const gpioPeriod = arduinoUnoMinPulsePeriodSec(circuit.components);
-    const period = uartPeriod > 0 ? uartPeriod : gpioPeriod;
-    if (!period || period <= 0) return;
-    const idealDiv = Math.min(0.1, period / SCOPE_H_DIVS);
-    for (const osc of circuit.components) {
-        if (osc.type !== 'oscilloscope') continue;
-        const cur = osc.timeDivSec ?? 0.001;
-        if (cur < idealDiv * 0.5) osc.timeDivSec = idealDiv;
-    }
-}
 
 const COMPONENT_TYPE_TO_ENGINE = {
     battery: 'vsource', vcc: 'vterm', logic_terminal: 'logic_state',
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
-    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591', grove_bmp280: 'grove_bmp280', joyit_tft18: 'joyit_tft18',
+    d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90', arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', esp32_devkit: 'esp32_devkit', led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', matrix_8x8: 'matrix_8x8', grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591', grove_bmp280: 'grove_bmp280', joyit_tft18: 'joyit_tft18',
     gimp: 'vpulse', gsin: 'vsin', gsqr: 'vsquare',
 };
 
@@ -182,6 +143,13 @@ function jonctionIdToTerminalKey(jonctionId) {
                 if (jonctionId === `${id}_s${i + 1}`) return `${id}#${i}`;
             }
             if (jonctionId === `${id}_COM`) return `${id}#10`;
+        } else if (comp.type === 'matrix_8x8') {
+            for (let i = 0; i < 8; i++) {
+                if (jonctionId === `${id}_R${i}`) return `${id}#${i}`;
+            }
+            for (let i = 0; i < 8; i++) {
+                if (jonctionId === `${id}_C${i}`) return `${id}#${8 + i}`;
+            }
         } else if (comp.type === 'grove_lcd16x2') {
             const pins = ['SDA', 'SCL', 'VCC', 'GND'];
             for (let i = 0; i < pins.length; i++) {
@@ -213,8 +181,14 @@ function jonctionIdToTerminalKey(jonctionId) {
         } else if (comp.type === 'ic_74hc90') {
             const key = ic74hc90JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
+        } else if (comp.type === 'lm386') {
+            const key = lm386JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
         } else if (comp.type === 'esp32_c3') {
             const key = esp32C3JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'esp32_devkit') {
+            const key = esp32DevkitJonctionToTerminalKey(id, jonctionId);
             if (key) return key;
         } else if (comp.type === 'arduino_uno') {
             const key = arduinoUnoJonctionToTerminalKey(id, jonctionId);
@@ -271,6 +245,10 @@ function buildSimulationState() {
             out.vp = comp.vp ?? 15;
             out.vn = comp.vn ?? -15;
         }
+        if (comp.type === 'lm386') {
+            out.value = comp.value || 'LM386N-1';
+            out.vplus = comp.vplus ?? 9;
+        }
         if (comp.type === 'oscilloscope') {
             out.timeDivSec = comp.timeDivSec ?? 0.001;
             out.ch1VoltsPerDiv = comp.ch1VoltsPerDiv ?? 1;
@@ -278,11 +256,12 @@ function buildSimulationState() {
             out.ch1PositionDiv = comp.ch1PositionDiv ?? 0;
             out.ch2PositionDiv = comp.ch2PositionDiv ?? 0;
             out.timePositionDiv = comp.timePositionDiv ?? 0;
+            out.syncOffsetDiv = comp.syncOffsetDiv ?? 0;
         }
-        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3') {
+        if (isMicroBoard(comp)) {
             applyArduinoSketchToComponent(comp);
             out.sketch = comp.sketch || '';
-            out.fqbn = comp.fqbn || (comp.type === 'esp32_c3' ? ESP32_FQBN : 'arduino:avr:uno');
+            out.fqbn = comp.fqbn || (comp.type === 'esp32_c3' ? ESP32_FQBN : comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : 'arduino:avr:uno');
             out.pinModes = comp.pinModes || {};
             out.pinLevels = comp.pinLevels || {};
             out.pinPulses = comp.pinPulses || {};
@@ -302,13 +281,35 @@ function buildSimulationState() {
             return { solid: true, fromKey, toKey, points: pts };
         })
         .filter((w) => w.fromKey && w.toKey);
+    /** Nœuds en T : tout point de fil partage la même connexion SPICE. */
+    const bridges = [];
+    const gridKeys = new Map();
+    for (const w of circuit.wires) {
+        if (!w.fromJonctionId || !w.toJonctionId) continue;
+        const fromKey = jonctionIdToTerminalKey(w.fromJonctionId);
+        const toKey = jonctionIdToTerminalKey(w.toJonctionId);
+        if (!fromKey || !toKey || !Array.isArray(w.points) || w.points.length < 2) continue;
+        const wireKeys = [fromKey, toKey];
+        for (const pt of w.points) {
+            const g = `${snapToGrid(pt.x)},${snapToGrid(pt.y)}`;
+            if (!gridKeys.has(g)) gridKeys.set(g, new Set());
+            for (const k of wireKeys) gridKeys.get(g).add(k);
+        }
+    }
+    for (const keys of gridKeys.values()) {
+        if (keys.size < 2) continue;
+        const arr = [...keys];
+        for (let i = 1; i < arr.length; i++) {
+            bridges.push({ solid: true, fromKey: arr[0], toKey: arr[i], points: [] });
+        }
+    }
     const dropped = circuit.wires.length - simWires.length;
     if (dropped > 0) {
         console.warn(
             `[Simulation] ${dropped} fil(s) ignoré(s) : jonction non reconnue ou extrémité manquante. Vérifiez le câblage (CD4511 : broches A…LT, a…g).`
         );
     }
-    return { components: simComponents, wires: simWires };
+    return { components: simComponents, wires: [...simWires, ...bridges] };
 }
 
 /** URL de POST /api/simulate (serveur Node, même machine que la page). */
@@ -374,7 +375,9 @@ function showSimulationWarnings(warnings, isSilentUpdate) {
     const text = warnings.map(String).filter((w) => w.trim()).join('\n');
     if (!text) return;
     const critical = warnings.some((w) =>
-        /CD4511|74HC90|XSPICE|digital\.cm|BI relié|LT relié|Q0 relié|fréquentielle|Analyse fréquentielle|Bode/i.test(String(w))
+        /CD4511|74HC90|XSPICE|digital\.cm|BI relié|LT relié|Q0 relié|fréquentielle|Analyse fréquentielle|Bode|AOP|amplificateur|LM386|Oscilloscope|CH1|CH2|masse|courbe|comparateur|non-inverseur|suiveur|Haut-parleur|court-circuit/i.test(
+            String(w)
+        )
     );
     if (critical) alert(`Avertissement simulation :\n${text}`);
 }
@@ -390,14 +393,24 @@ function shouldStartArduinoLiveDisplayEarly() {
     }
     if (!hasBoard) return false;
     return circuit.components.some((c) =>
-        c.type === 'bargraph_dc10h' || c.type === 'seg7' || c.type === 'grove_lcd16x2' || c.type === 'joyit_tft18'
+        c.type === 'bargraph_dc10h' || c.type === 'matrix_8x8' || c.type === 'seg7' || c.type === 'grove_lcd16x2' || c.type === 'joyit_tft18'
     );
 }
 
 export async function triggerSimulation(isSilentUpdate = false) {
     if (simulationInFlight) {
-        if (isSilentUpdate) simulationQueuedSilent = true;
-        return;
+        if (isSilentUpdate && flags.sourcePanelTuning) {
+            simulationGeneration += 1;
+            simulationQueuedSilent = false;
+            if (simulationAbortController) {
+                simulationAbortController.abort();
+                simulationAbortController = null;
+            }
+            simulationInFlight = false;
+        } else if (isSilentUpdate) {
+            simulationQueuedSilent = true;
+            return;
+        }
     }
     simulationInFlight = true;
     simulationGeneration += 1;
@@ -406,13 +419,17 @@ export async function triggerSimulation(isSilentUpdate = false) {
     simulationAbortController = new AbortController();
     const { signal } = simulationAbortController;
     prepareArduinoForSimulation();
+    flushSourcePanelFields();
     if (!isSilentUpdate) {
-        autoTuneScopeForI2c();
-        autoTuneScopeForArduino();
+        primeSpeakerAudioContext().catch(() => {});
         refreshScopePanelFields();
     }
     const baseUrl = resolveSimulationApiBaseUrl();
-    const payload = { state: buildSimulationState(), gridStep: GRID_SIZE };
+    const payload = {
+        state: buildSimulationState(),
+        gridStep: GRID_SIZE,
+        liveSourceTuning: flags.sourcePanelTuning === true,
+    };
     const wiredCount = circuit.wires.filter((w) => w.fromJonctionId && w.toJonctionId).length;
     warnDroppedWiresForLogicCircuits(wiredCount - payload.state.wires.length, isSilentUpdate);
     const btnSim = document.getElementById('btn-simulate');
@@ -460,12 +477,27 @@ export async function triggerSimulation(isSilentUpdate = false) {
             simulationResults.seg7 = result.seg7Values || {};
             simulationResults.bargraph = result.bargraphValues || {};
             simulationResults.logicValues = result.logicValues || {};
+            refreshScopePanelFields();
+            refreshScopePopup();
             const scopePlotKeys = Object.keys(simulationResults.scopePlots);
             const hasOsc = circuit.components.some((c) => c.type === 'oscilloscope');
             if (scopePlotKeys.length > 0 || hasOsc) {
-                startScopeAnimation(simulationResults.scopePlots);
+                startScopeAnimation(simulationResults.scopePlots, { keepClock: isSilentUpdate });
             } else {
                 stopScopeAnimation();
+            }
+            if (
+                !isSilentUpdate &&
+                hasOsc &&
+                scopePlotKeys.length === 0 &&
+                result.analysisTran &&
+                !shouldAnimateGsinScope(circuit.components)
+            ) {
+                alert(
+                    'Oscilloscope : aucune courbe reçue du moteur SPICE.\n\n' +
+                        'Vérifiez CH1, CH2 et la masse (borne du bas) câblés, plus une masse GND dans le circuit.\n' +
+                        'Relancez avec Ctrl+F5 si vous venez de mettre à jour le simulateur.'
+                );
             }
             const osc = circuit.components.find((c) => c.type === 'oscilloscope');
             if (osc) {
@@ -473,8 +505,9 @@ export async function triggerSimulation(isSilentUpdate = false) {
                     openScopePanel(osc, { openPopup: true });
                 } else {
                     const keepPopup = isScopePopupOpen();
-                    const keepPanel = isScopePanelOpen();
-                    if (keepPanel || keepPopup) {
+                    const sf = document.getElementById('scope-fields');
+                    const scopeFieldsVisible = sf && !sf.classList.contains('hidden');
+                    if (isScopePanelOpen() || keepPopup || scopeFieldsVisible) {
                         openScopePanel(getActiveScope() || osc, { openPopup: keepPopup });
                     }
                     refreshScopePopup();
@@ -510,9 +543,10 @@ export async function triggerSimulation(isSilentUpdate = false) {
                 } else if (!arduinoIdeal) {
                     stopLedAnimation();
                 }
+                flushSourcePanelFields();
                 const speakerPlots = result.speakerTranPlots || {};
-                if (Object.keys(speakerPlots).length > 0) {
-                    startSpeakerAudio(speakerPlots);
+                if (shouldPlaySpeakerAudio(speakerPlots)) {
+                    startSpeakerAudio(speakerPlots).catch(() => {});
                 } else {
                     stopSpeakerAudio();
                 }
@@ -561,6 +595,7 @@ export function stopSimulation() {
     liveSimTimer = null;
     stopLedAnimation();
     stopScopeAnimation();
+    closeScopePanelFully();
     stopSpeakerAudio();
     flags.isSimulating = false;
     simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.bodePlots = {}; simulationResults.seg7 = {}; simulationResults.bargraph = {}; simulationResults.logicValues = {};

@@ -38,6 +38,27 @@ function applyFloatPosition() {
     el.style.top = `${floatY}px`;
 }
 
+function channelVpp(points) {
+    if (!points?.length) return NaN;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const pt of points) {
+        const v = pt?.v;
+        if (!Number.isFinite(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+    }
+    return Number.isFinite(min) && Number.isFinite(max) ? max - min : NaN;
+}
+
+function formatVoltage(v) {
+    if (!Number.isFinite(v)) return '--';
+    const a = Math.abs(v);
+    if (a < 0.001) return `${(v * 1e6).toFixed(0)} µV`;
+    if (a < 1) return `${(v * 1e3).toFixed(a < 0.1 ? 1 : 0)} mV`;
+    return `${v.toFixed(a < 10 ? 2 : 1)} V`;
+}
+
 export function isScopePopupOpen() {
     const el = popupEl();
     return popupComp != null && el && !el.classList.contains('hidden');
@@ -93,10 +114,23 @@ export function renderScopePopup() {
                 ? `${(win.timeDiv * 1000).toFixed(win.timeDiv >= 0.01 ? 1 : 2)} ms/div`
                 : `${(win.timeDiv * 1e6).toFixed(0)} µs/div`;
             const tpos = Number.isFinite(popupComp?.timePositionDiv) ? popupComp.timePositionDiv : 0;
+            const syncOff = Number.isFinite(popupComp?.syncOffsetDiv) ? popupComp.syncOffsetDiv : 0;
             const tposStr = `${tpos >= 0 ? '+' : ''}${tpos.toFixed(1)} div`;
+            const syncStr = `${syncOff >= 0 ? '+' : ''}${syncOff.toFixed(1)} div`;
+            const ch1Vpp = channelVpp(win.ch1);
+            const ch2Vpp = channelVpp(win.ch2);
+            const ratio = Number.isFinite(ch1Vpp) && Number.isFinite(ch2Vpp) && ch2Vpp > 1e-9
+                ? `${((ch1Vpp / ch2Vpp) * 100).toFixed(1)} %`
+                : '--';
             popupCtx.fillText(
-                `${td}  |  pos ${tposStr}  |  CH1: ${win.ch1Vdiv} V/div  |  CH2: ${win.ch2Vdiv} V/div`,
+                `${td}  |  synchro ${syncStr}  |  pos ${tposStr}  |  CH1: ${win.ch1Vdiv} V/div  |  CH2: ${win.ch2Vdiv} V/div`,
                 w - margin.r,
+                h - 10
+            );
+            popupCtx.textAlign = 'left';
+            popupCtx.fillText(
+                `CH1 ${formatVoltage(ch1Vpp)}pp  |  CH2 ${formatVoltage(ch2Vpp)}pp  |  CH1/CH2 ${ratio}`,
+                margin.l,
                 h - 10
             );
         } else {

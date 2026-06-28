@@ -49,6 +49,7 @@ import { isGroveTsl2591WiredToBoard, resolveTslReadingsForBoard } from './Engine
 import { isGroveBmp280WiredToBoard, resolveBmpReadingsForBoard } from './Engine/bmp280-ideal.mjs';
 import { sketchUsesTsl2591 } from './Engine/tsl2591-sketch-parse.mjs';
 import { sketchUsesBmp280 } from './Engine/bmp280-sketch-parse.mjs';
+import { getIdealMatrix8x8FromArduino } from './Engine/matrix-8x8-ideal.mjs';
 
 /** Au-delà de cette fréquence, persistance rétinienne : LED fixe (courant moyen). */
 export const PERSISTENCE_FREQ_HZ = 50;
@@ -568,6 +569,17 @@ function hasArduinoStaticIdealDisplay() {
         if (ideal?.segments && Object.values(ideal.segments).some(Boolean)) return true;
     }
     for (const comp of circuit.components) {
+        if (comp.type !== 'matrix_8x8') continue;
+        const ideal = getIdealMatrix8x8FromArduino(
+            comp.label,
+            circuit.components,
+            circuit.wires,
+            0,
+            circuit.autoJunctions
+        );
+        if (ideal?.anyLit) return true;
+    }
+    for (const comp of circuit.components) {
         if (comp.type !== 'voltmeter') continue;
         const v = getIdealVoltmeterVoltage(
             comp.label,
@@ -612,6 +624,21 @@ export function getIdealBargraphDisplay(label, tSec) {
         tSec ??
         (anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0);
     return getIdealBargraphFromArduino(
+        label,
+        circuit.components,
+        circuit.wires,
+        elapsed,
+        circuit.autoJunctions
+    );
+}
+
+/** Matrice 8×8 pilotée directement par GPIO Arduino (sans attendre SPICE). */
+export function getIdealMatrix8x8Display(label, tSec) {
+    syncArduinoSketchesFromEditor();
+    const elapsed =
+        tSec ??
+        (anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0);
+    return getIdealMatrix8x8FromArduino(
         label,
         circuit.components,
         circuit.wires,
@@ -991,6 +1018,12 @@ export function getAnimatedBargraphSegments(label) {
     const vCom = interpolateSeries(plot.time, plot.common, tAbs);
     const segmentV = BARGRAPH_SEG_NAMES.map((n) => interpolateSeries(plot.time, plot.segments[n], tAbs));
     return { segments: bargraphLitFromVoltages(segmentV, vCom) };
+}
+
+/** Cellules matrice 8×8 allumées à l'instant courant (pilotage GPIO idéal). */
+export function getAnimatedMatrix8x8Cells(label) {
+    const ideal = getIdealMatrix8x8Display(label);
+    return ideal?.cells ? { cells: ideal.cells } : null;
 }
 
 export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGateTranPlots = {}, opts = {}) {

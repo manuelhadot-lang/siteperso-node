@@ -467,6 +467,15 @@ function parseWrdataNumericRows(waveTxt) {
     return rows;
 }
 
+/** ngspice wrdata : colonne de temps alignée sur les courbes (offset si index en tête). */
+function wrdataColOffset(rowLength, wrVarCount) {
+    return Math.max(0, rowLength - wrVarCount);
+}
+
+function wrdataTimeCol(meta, colOffset) {
+    return (meta?.timeCol ?? 0) + colOffset;
+}
+
 function waveformPeakToPeak(values) {
     if (!Array.isArray(values) || values.length === 0) return NaN;
     let min = Infinity;
@@ -510,7 +519,7 @@ export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
     }
     if (wrVarCount < 2) wrVarCount = 2;
     const ncol = rows[0].length;
-    const colOffset = Math.max(0, ncol - wrVarCount);
+    const colOffset = wrdataColOffset(ncol, wrVarCount);
 
     function channelDiff(row, ch) {
         if (!ch) return NaN;
@@ -533,7 +542,7 @@ export function mergeScopePlotsFromTranWrdata(waveTxt, meta) {
 
     for (const m of meta) {
         if (!m || !m.id) continue;
-        const timeCol = m.timeCol ?? 0;
+        const timeCol = wrdataTimeCol(m, colOffset);
         const tArr = [];
         const v1Arr = [];
         const v2Arr = [];
@@ -700,8 +709,8 @@ export function mergeVoltmeterTranPlotsFromWrdata(waveTxt, meta) {
             wrVarCount = m.channel.wrIndex + 1;
         }
         const ncol = rows[0].length;
-        const colOffset = Math.max(0, ncol - wrVarCount);
-        const timeCol = m.timeCol ?? 0;
+        const colOffset = wrdataColOffset(ncol, wrVarCount);
+        const timeCol = wrdataTimeCol(m, colOffset);
         const tArr = [];
         const vArr = [];
         for (const row of rows) {
@@ -814,8 +823,8 @@ export function mergeLedTranPlotsFromWrdata(waveTxt, meta) {
     }
     if (wrVarCount < 2) wrVarCount = 2;
     const ncol = rows[0].length;
-    const colOffset = Math.max(0, ncol - wrVarCount);
-    const timeCol = meta[0]?.timeCol ?? 0;
+    const colOffset = wrdataColOffset(ncol, wrVarCount);
+    const timeCol = wrdataTimeCol(meta[0], colOffset);
 
     for (const m of meta) {
         if (!m?.id || m.currentWrIndex == null || m.currentWrIndex === undefined) continue;
@@ -1025,8 +1034,8 @@ export function mergeSeg7TranPlotsFromWrdata(waveTxt, meta) {
         if (m.commonWrIndex != null && m.commonWrIndex + 1 > wrVarCount) {
             wrVarCount = m.commonWrIndex + 1;
         }
-        const colOffset = Math.max(0, rows[0].length - wrVarCount);
-        const timeCol = m.timeCol ?? 0;
+        const colOffset = wrdataColOffset(rows[0].length, wrVarCount);
+        const timeCol = wrdataTimeCol(m, colOffset);
         const time = [];
         const common = [];
         const segments = Object.fromEntries(SEG7_NAMES.map((n) => [n, []]));
@@ -1108,8 +1117,8 @@ export function mergeBargraphTranPlotsFromWrdata(waveTxt, meta) {
         if (m.commonWrIndex != null && m.commonWrIndex + 1 > wrVarCount) {
             wrVarCount = m.commonWrIndex + 1;
         }
-        const colOffset = Math.max(0, rows[0].length - wrVarCount);
-        const timeCol = m.timeCol ?? 0;
+        const colOffset = wrdataColOffset(rows[0].length, wrVarCount);
+        const timeCol = wrdataTimeCol(m, colOffset);
         const time = [];
         const common = [];
         const segments = Object.fromEntries(BARGRAPH_DC10H_SEG_NAMES.map((n) => [n, []]));

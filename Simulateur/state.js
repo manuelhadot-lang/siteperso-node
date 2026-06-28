@@ -15,10 +15,13 @@ export let flags = {
     isSimulating: false,
     isSelectingZone: false,
     isShiftPressed: false,
-    isDraggingFromMenu: false
+    isDraggingFromMenu: false,
+    sourcePanelTuning: false,
+    /** label du générateur en cours de réglage (panneau bas). */
+    tuningSourceLabel: null,
 };
 
-export let simulationResults = { voltmeters: {}, ammeters: {}, ohmmeters: {}, leds: {}, scopePlots: {}, bodePlots: {}, seg7: {}, bargraph: {}, logicValues: {} };
+export let simulationResults = { voltmeters: {}, ammeters: {}, ohmmeters: {}, leds: {}, scopePlots: {}, bodePlots: {}, seg7: {}, bargraph: {}, matrix8x8: {}, logicValues: {} };
 
 export let menuDrag = {
     draggedComponentType: null,
@@ -28,7 +31,7 @@ export let menuDrag = {
 
 export let file = { handle: null };
 
-export let counters = { battery: 0, resistor: 0, potentiometer: 0, switch_spdt: 0, push_button: 0, capacitor: 0, inductor: 0, diode: 0, npn: 0, opamp: 0, not: 0, and: 0, nand: 0, or: 0, nor: 0, xor: 0, xnor: 0, d_flipflop: 0, jk_flipflop: 0, cd4511: 0, ic_74hc90: 0, arduino_uno: 0, esp32_c3: 0, led: 0, seg7: 0, bargraph_dc10h: 0, grove_lcd16x2: 0, grove_dht22: 0, grove_tsl2591: 0, grove_bmp280: 0, joyit_tft18: 0, voltmeter: 0, ammeter: 0, ohmmeter: 0, oscilloscope: 0, bode_analyzer: 0, speaker: 0, junction: 0, gnd: 0, vcc: 0, logic_terminal: 0, gimp: 0, gsin: 0, gsqr: 0 };
+export let counters = { battery: 0, resistor: 0, potentiometer: 0, switch_spdt: 0, push_button: 0, capacitor: 0, inductor: 0, diode: 0, npn: 0, opamp: 0, lm386: 0, not: 0, and: 0, nand: 0, or: 0, nor: 0, xor: 0, xnor: 0, d_flipflop: 0, jk_flipflop: 0, cd4511: 0, ic_74hc90: 0, arduino_uno: 0, esp32_c3: 0, esp32_devkit: 0, led: 0, seg7: 0, bargraph_dc10h: 0, matrix_8x8: 0, grove_lcd16x2: 0, grove_dht22: 0, grove_tsl2591: 0, grove_bmp280: 0, joyit_tft18: 0, voltmeter: 0, ammeter: 0, ohmmeter: 0, oscilloscope: 0, bode_analyzer: 0, speaker: 0, junction: 0, gnd: 0, vcc: 0, logic_terminal: 0, gimp: 0, gsin: 0, gsqr: 0 };
 export let circuit = {
     components: [],
     wires: [],

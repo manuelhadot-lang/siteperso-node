@@ -15,6 +15,7 @@ export const TFT18_COLS = 21;
 export const TFT18_TEXT_ROWS = 10;
 
 import { expandUserFunctionCalls } from "./sketch-functions.mjs";
+import { isEsp32BoardType } from "./micro-board-config.mjs";
 
 function stripComments(src) {
     return String(src || "")
@@ -273,7 +274,7 @@ export function parseTft18ControlPins(sketch) {
 /** Broche carte (D9 / GPIO9) à partir d'une ref sketch (D9). */
 export function mapTftControlPinForBoard(boardType, pinRef) {
     const pin = String(pinRef || "").trim();
-    if (boardType === "esp32_c3" && /^D(\d+)$/.test(pin)) return `GPIO${pin.slice(1)}`;
+    if (isEsp32BoardType(boardType) && /^D(\d+)$/.test(pin)) return `GPIO${pin.slice(1)}`;
     return pin;
 }
 

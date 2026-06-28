@@ -1382,3 +1382,19 @@ body.arduino-panel-resizing * {
 .panel-action-btn:hover {
     background: #00838f;
 }
+
+.panel-mini-btn {
+    margin-left: 6px;
+    padding: 2px 8px;
+    background: #37474f;
+    color: #fff;
+    border: 1px solid #546e7a;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.panel-mini-btn:hover {
+    background: #455a64;
+}

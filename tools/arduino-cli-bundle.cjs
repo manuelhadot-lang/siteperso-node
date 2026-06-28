@@ -97,6 +97,20 @@ async function seedArduinoDataIfNeeded(repoRoot, userDataDir) {
         return { seeded: false, dataDir: dest, version: seedVersion };
     }
 
+    const seedPackages = fs.existsSync(path.join(seedSrc, "packages"));
+    if (!seedPackages && fs.existsSync(path.join(dest, "packages"))) {
+        return { seeded: false, dataDir: dest, version: destVersion || seedVersion };
+    }
+    if (!seedPackages) {
+        console.warn(
+            "[arduino-cli] Seed sans packages/ — exécutez npm run prepare-arduino-bundle " +
+                "ou conservez ~/.simulateur-h/arduino-data"
+        );
+        if (!fs.existsSync(path.join(dest, "packages"))) {
+            return { seeded: false, dataDir: dest, version: seedVersion };
+        }
+    }
+
     await fs.promises.mkdir(path.dirname(dest), { recursive: true });
     await fs.promises.rm(dest, { recursive: true, force: true }).catch(() => {});
     console.log("[arduino-cli] Copie des cores embarqués (premier lancement, patience)…");

@@ -36,7 +36,15 @@
       {
         "from": "../Simulateur",
         "to": "simulator-app/Simulateur",
-        "filter": ["**/*", "!**/.vs/**"]
+        "filter": [
+          "**/*",
+          "!**/.vs/**",
+          "!**/arduino-data/packages/**",
+          "!**/arduino-data/staging/**",
+          "!**/arduino-data/tmp/**",
+          "!**/arduino-data/library/**",
+          "!**/arduino-data/.cache/**"
+        ]
       },
       {
         "from": "../tools/ngspice-bundle.cjs",
