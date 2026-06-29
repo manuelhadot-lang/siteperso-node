@@ -13,6 +13,7 @@ const {
     updateArduinoLibraryIndex,
     DEFAULT_FQBN,
 } = require("./arduino-api.cjs");
+const { startCompileJob, getCompileJob } = require("./arduino-compile-jobs.cjs");
 
 /**
  * Monte les routes REST Arduino sur une app Express.
@@ -102,17 +103,8 @@ function mountArduinoRoutes(app) {
         const sketchName = req.body?.sketchName || req.body?.label || "sketch";
         const fqbn = req.body?.fqbn || DEFAULT_FQBN;
         try {
-            const result = await compileArduinoSketch({ sketch, sketchName, fqbn });
-            if (!result.ok) {
-                return res.status(400).json(result);
-            }
-            res.json({
-                ok: true,
-                log: result.log,
-                fqbn: result.fqbn,
-                exe: result.exe,
-                hexPath: result.hexPath || null,
-            });
+            const jobId = startCompileJob({ sketch, sketchName, fqbn });
+            res.json({ ok: true, pending: true, jobId, fqbn });
         } catch (err) {
             res.status(500).json({
                 ok: false,
@@ -120,6 +112,33 @@ function mountArduinoRoutes(app) {
                 log: "",
             });
         }
+    });
+
+    app.get("/api/arduino/compile/:jobId", async (req, res) => {
+        const job = getCompileJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({
+                ok: false,
+                pending: false,
+                errors: ["Compilation introuvable ou expirée. Relancez la compilation."],
+            });
+        }
+        if (job.status === "pending") {
+            return res.json({ ok: true, pending: true, jobId: req.params.jobId, fqbn: job.fqbn });
+        }
+        const result = job.result || { ok: false, errors: ["Résultat de compilation indisponible."] };
+        if (!result.ok) {
+            return res.status(400).json({ ...result, pending: false, jobId: req.params.jobId });
+        }
+        res.json({
+            ok: true,
+            pending: false,
+            jobId: req.params.jobId,
+            log: result.log,
+            fqbn: result.fqbn,
+            exe: result.exe,
+            hexPath: result.hexPath || null,
+        });
     });
 
     app.get("/api/arduino/boards", async (_req, res) => {

@@ -173,6 +173,48 @@ function resolveApiBaseUrl() {
     return origin;
 }
 
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Parse JSON même si le proxy Render coupe la requête (corps vide). */
+async function fetchJsonResponse(response) {
+    const text = await response.text();
+    if (!text.trim()) {
+        if (response.status === 502 || response.status === 504) {
+            throw new Error(
+                'Le serveur Render a interrompu la requête (timeout). La compilation continue peut‑être en arrière-plan — réessayez dans un instant.'
+            );
+        }
+        throw new Error(`Réponse vide du serveur (HTTP ${response.status}).`);
+    }
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(`Réponse invalide du serveur : ${text.slice(0, 240)}`);
+    }
+}
+
+async function fetchArduinoApi(url, options = {}) {
+    const response = await fetch(url, options);
+    return fetchJsonResponse(response);
+}
+
+const COMPILE_POLL_MS = 2000;
+const COMPILE_POLL_MAX = 180;
+
+async function pollCompileJob(base, jobId, onTick) {
+    for (let i = 0; i < COMPILE_POLL_MAX; i++) {
+        await sleep(COMPILE_POLL_MS);
+        const data = await fetchArduinoApi(`${base}/api/arduino/compile/${encodeURIComponent(jobId)}`);
+        onTick?.(i + 1);
+        if (!data.pending) return data;
+    }
+    throw new Error(
+        'Compilation trop longue (>6 min). Sur Render, préférez un sketch plus simple ou compilez en local (npm start).'
+    );
+}
+
 function setLibMsg(text, kind = '') {
     const el = libMsgEl();
     if (!el) return;
@@ -631,7 +673,7 @@ export async function compileActiveSketch() {
     }
     const base = resolveApiBaseUrl();
     try {
-        const r = await fetch(`${base}/api/arduino/compile`, {
+        const start = await fetchArduinoApi(`${base}/api/arduino/compile`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -640,7 +682,16 @@ export async function compileActiveSketch() {
                 fqbn,
             }),
         });
-        const data = await r.json();
+        let data = start;
+        if (start.pending && start.jobId) {
+            data = await pollCompileJob(base, start.jobId, (tick) => {
+                if (status) {
+                    status.textContent = isEsp32
+                        ? `Compilation ESP32… (${tick * 2} s)`
+                        : `Compilation… (${tick * 2} s)`;
+                }
+            });
+        }
         activeBoard.lastCompileOk = !!data.ok;
         activeBoard.lastCompileLog = data.log || (data.errors || []).join('\n');
         if (data.ok) {
@@ -692,7 +743,7 @@ export async function uploadActiveSketch() {
 
     const base = resolveApiBaseUrl();
     try {
-        const r = await fetch(`${base}/api/arduino/upload`, {
+        const data = await fetchArduinoApi(`${base}/api/arduino/upload`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -702,7 +753,6 @@ export async function uploadActiveSketch() {
                 port,
             }),
         });
-        const data = await r.json();
         activeBoard.lastCompileOk = !!data.ok;
         activeBoard.lastUploadOk = !!data.ok;
         activeBoard.lastCompileLog = data.log || (data.errors || []).join('\n');
