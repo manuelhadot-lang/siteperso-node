@@ -24,8 +24,18 @@ RUN mkdir -p "$ARDUINO_DIRECTORIES_DATA" \
     && /usr/local/bin/arduino-cli core install arduino:avr \
     && /usr/local/bin/arduino-cli core install esp32:esp32
 ENV ARDUINO_CLI=/usr/local/bin/arduino-cli
-# Bibliothèque LCD I2C courante (Grove) — l'utilisateur peut aussi ajouter des libs dans arduino-libraries/
-RUN /usr/local/bin/arduino-cli lib install "LiquidCrystal I2C" || true
+ENV ARDUINO_CORES_PREINSTALLED=arduino:avr,esp32:esp32
+# Bibliothèques Grove / capteurs / affichage — évite les téléchargements à la 1ère compilation
+RUN /usr/local/bin/arduino-cli lib install \
+    "LiquidCrystal I2C" \
+    "DHT sensor library" \
+    "Adafruit GFX Library" \
+    "Adafruit BusIO" \
+    "Adafruit Unified Sensor" \
+    "Adafruit ST7735 and ST7789 Library" \
+    "Adafruit TSL2591 Library" \
+    "Adafruit BMP280 Library" \
+    || true
 
 # 3. Définition du répertoire de travail dans le conteneur
 WORKDIR /app

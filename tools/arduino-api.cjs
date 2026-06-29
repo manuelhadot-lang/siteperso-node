@@ -4,12 +4,27 @@
  * Variable d'environnement ARDUINO_CLI = chemin vers arduino-cli(.exe).
  */
 const { execFile } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { mkdir, mkdtemp, readFile, rm, writeFile } = require("node:fs/promises");
+const { mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 
 const DEFAULT_FQBN = "arduino:avr:uno";
+const BUILD_CACHE_ROOT = path.join(os.tmpdir(), "sim-arduino-build-cache");
+/** Cores déjà installés en session (évite core list à chaque compilation). */
+const installedCoresCache = new Set();
+/** Noms de bibliothèques déjà installées via Library Manager (cache session). */
+let installedRegistryLibNames = null;
+
+/** Dépendances locales connues (dossier arduino-libraries/). */
+const LOCAL_LIB_EXTRA_DEPS = {
+    Adafruit_ST7735_and_ST7789_Library: ["Adafruit_GFX_Library", "Adafruit_BusIO"],
+    Adafruit_TSL2591_Library: ["Adafruit_GFX_Library", "Adafruit_BusIO", "Adafruit_Unified_Sensor"],
+    Adafruit_BMP280_Library: ["Adafruit_BusIO", "Adafruit_Unified_Sensor"],
+    Adafruit_GFX_Library: ["Adafruit_BusIO"],
+    DHT_sensor_library: ["Adafruit_Unified_Sensor"],
+};
 
 /** Ancien FQBN (espressif:esp32) → core actuel esp32:esp32 dans arduino-cli. */
 function normalizeFqbn(fqbn) {
@@ -40,6 +55,43 @@ function isCoreInstalledInList(coreListJson, coreId) {
     return false;
 }
 
+function parsePreinstalledCores() {
+    return String(process.env.ARDUINO_CORES_PREINSTALLED || "")
+        .split(/[,;|]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+/** Vérifie la présence du core sur disque (image Docker Render). */
+function isCoreInstalledOnDisk(coreId) {
+    const dataDir = process.env.ARDUINO_DIRECTORIES_DATA;
+    if (!dataDir || !coreId) return false;
+    const [vendor, arch] = coreId.split(":");
+    if (!vendor || !arch) return false;
+    const hwDir = path.join(dataDir, "packages", vendor, "hardware", arch);
+    if (!fs.existsSync(hwDir)) return false;
+    try {
+        return fs.readdirSync(hwDir).some((name) => {
+            const p = path.join(hwDir, name);
+            return fs.statSync(p).isDirectory();
+        });
+    } catch {
+        return false;
+    }
+}
+
+function markCoreInstalled(coreId) {
+    if (coreId) installedCoresCache.add(coreId);
+}
+
+function isCoreKnownInstalled(coreId) {
+    if (!coreId) return true;
+    if (installedCoresCache.has(coreId)) return true;
+    if (parsePreinstalledCores().includes(coreId)) return true;
+    if (isCoreInstalledOnDisk(coreId)) return true;
+    return false;
+}
+
 /**
  * Installe le core requis pour le FQBN (AVR ou ESP32) si absent.
  * @returns {Promise<{ ok: boolean; coreId?: string; log?: string; errors?: string[] }>}
@@ -47,9 +99,16 @@ function isCoreInstalledInList(coreListJson, coreId) {
 async function ensureCoreForFqbn(fqbn) {
     const coreId = coreIdFromFqbn(fqbn);
     if (!coreId) return { ok: true };
+    if (isCoreKnownInstalled(coreId)) {
+        markCoreInstalled(coreId);
+        return { ok: true, coreId };
+    }
 
     const listRun = await runCli(["core", "list", "--format", "json"], { timeoutMs: 90000 });
-    if (isCoreInstalledInList(listRun.stdout, coreId)) return { ok: true, coreId };
+    if (isCoreInstalledInList(listRun.stdout, coreId) || isCoreInstalledOnDisk(coreId)) {
+        markCoreInstalled(coreId);
+        return { ok: true, coreId };
+    }
 
     const logs = [];
 
@@ -82,6 +141,7 @@ async function ensureCoreForFqbn(fqbn) {
         };
     }
 
+    markCoreInstalled(coreId);
     return { ok: true, coreId, log: logs.filter(Boolean).join("\n\n") };
 }
 
@@ -211,6 +271,75 @@ function resolveUserLibraryPaths() {
     return paths;
 }
 
+function addLibraryWithDeps(libDir, allByBase, selected) {
+    const abs = path.resolve(libDir);
+    if (!selected.has(abs)) selected.add(abs);
+    const base = path.basename(abs);
+    for (const dep of LOCAL_LIB_EXTRA_DEPS[base] || []) {
+        const depDir = allByBase.get(dep);
+        if (depDir) addLibraryWithDeps(depDir, allByBase, selected);
+    }
+}
+
+/**
+ * Ne passe à arduino-cli que les bibliothèques locales réellement utiles au sketch.
+ * Évite de scanner 10+ libs à chaque compilation (lent sur Render).
+ */
+function resolveLibrariesForSketch(sketch, fqbn) {
+    const allPaths = resolveUserLibraryPaths();
+    const allByBase = new Map(allPaths.map((p) => [path.basename(p), p]));
+    const selected = new Set();
+    const headers = parseSketchIncludes(sketch);
+
+    if (sketchUsesAvrRegisters(sketch) && coreIdFromFqbn(fqbn) === "esp32:esp32") {
+        const compat = allByBase.get("SimAVRCompat");
+        if (compat) selected.add(path.resolve(compat));
+    }
+
+    for (const header of headers) {
+        const libDir = findLocalLibraryForHeader(header, allPaths);
+        if (libDir) addLibraryWithDeps(libDir, allByBase, selected);
+    }
+
+    return [...selected];
+}
+
+function buildCacheKey(sketch, fqbn, libraryPaths) {
+    return crypto
+        .createHash("sha256")
+        .update(fqbn)
+        .update("\0")
+        .update(sketch)
+        .update("\0")
+        .update(libraryPaths.slice().sort().join("|"))
+        .digest("hex")
+        .slice(0, 24);
+}
+
+function resolveBuildWorkspace(sketch, fqbn, libraryPaths, folderName) {
+    const key = buildCacheKey(sketch, fqbn, libraryPaths);
+    const tmpRoot = path.join(BUILD_CACHE_ROOT, key);
+    return {
+        tmpRoot,
+        sketchDir: path.join(tmpRoot, folderName),
+        outDir: path.join(tmpRoot, "build"),
+        cacheKey: key,
+    };
+}
+
+async function getInstalledRegistryLibNames() {
+    if (installedRegistryLibNames) return installedRegistryLibNames;
+    const run = await runCli(["lib", "list", "--format", "json"], { timeoutMs: 60000 });
+    const data = tryParseCliJson(run.stdout);
+    let raw = [];
+    if (Array.isArray(data)) raw = data;
+    else if (Array.isArray(data?.installed_libraries)) raw = data.installed_libraries;
+    installedRegistryLibNames = new Set(
+        raw.map((e) => String(e?.library?.name || e?.name || "").trim().toLowerCase()).filter(Boolean)
+    );
+    return installedRegistryLibNames;
+}
+
 function parseSketchIncludes(sketch) {
     const headers = new Set();
     for (const m of String(sketch || "").matchAll(/#include\s*[<"]([^">]+)[">]/g)) {
@@ -241,6 +370,7 @@ function findLocalLibraryForHeader(header, libraryPaths) {
 async function ensureRegistryLibraries(headers, libraryPaths) {
     const installed = [];
     const skipped = [];
+    const registryNames = await getInstalledRegistryLibNames();
     for (const header of headers) {
         if (findLocalLibraryForHeader(header, libraryPaths)) {
             skipped.push(header);
@@ -248,8 +378,15 @@ async function ensureRegistryLibraries(headers, libraryPaths) {
         }
         const libName = HEADER_LIB_REGISTRY[header];
         if (!libName) continue;
+        if (registryNames.has(libName.toLowerCase())) {
+            skipped.push(header);
+            continue;
+        }
         const result = await installArduinoLibrary(libName);
-        if (result.ok) installed.push(libName);
+        if (result.ok) {
+            installed.push(libName);
+            registryNames.add(libName.toLowerCase());
+        }
     }
     return { installed, skipped };
 }
@@ -494,24 +631,21 @@ async function compileArduinoSketch(opts) {
     }
     const fqbn = normalizeFqbn(String(opts?.fqbn || DEFAULT_FQBN));
     const folderName = sanitizeSketchFolderName(opts?.sketchName || "sketch");
-    const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "sim-arduino-"));
-    const sketchDir = path.join(tmpRoot, folderName);
+    let libraryPaths = resolveLibrariesForSketch(sketch, fqbn);
+    const headers = parseSketchIncludes(sketch);
+    let registryInstall = await ensureRegistryLibraries(headers, resolveUserLibraryPaths());
+    if (registryInstall.installed.length > 0) {
+        libraryPaths = resolveLibrariesForSketch(sketch, fqbn);
+    }
+
+    const { tmpRoot, sketchDir, outDir } = resolveBuildWorkspace(sketch, fqbn, libraryPaths, folderName);
     await mkdir(sketchDir, { recursive: true });
+    await mkdir(outDir, { recursive: true });
     const sketchSource = prepareSketchForCompile(sketch, fqbn);
     await writeFile(path.join(sketchDir, `${folderName}.ino`), sketchSource, "utf8");
-    const outDir = path.join(tmpRoot, "build");
-    await mkdir(outDir, { recursive: true });
-
-    let libraryPaths = resolveUserLibraryPaths();
-    const headers = parseSketchIncludes(sketch);
-    let registryInstall = await ensureRegistryLibraries(headers, libraryPaths);
-    if (registryInstall.installed.length > 0) {
-        libraryPaths = resolveUserLibraryPaths();
-    }
 
     const coreEnsure = await ensureCoreForFqbn(fqbn);
     if (!coreEnsure.ok) {
-        await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
         return {
             ok: false,
             errors: coreEnsure.errors || [`Core requis pour ${fqbn} non installé.`],
@@ -520,6 +654,7 @@ async function compileArduinoSketch(opts) {
         };
     }
 
+    const useEphemeral = !!opts?.ephemeral;
     try {
         let compileRun = await runCli(
             buildCompileArgs(fqbn, outDir, sketchDir, libraryPaths),
@@ -528,19 +663,19 @@ async function compileArduinoSketch(opts) {
         let log = [compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim();
 
         if (!compileRun.ok && /No such file or directory/i.test(log)) {
-            registryInstall = await ensureRegistryLibraries(headers, libraryPaths);
+            registryInstall = await ensureRegistryLibraries(headers, resolveUserLibraryPaths());
             if (registryInstall.installed.length > 0) {
-                libraryPaths = resolveUserLibraryPaths();
+                libraryPaths = resolveLibrariesForSketch(sketch, fqbn);
                 compileRun = await runCli(
                     buildCompileArgs(fqbn, outDir, sketchDir, libraryPaths),
-                    { timeoutMs: 180000 }
+                    { timeoutMs: coreIdFromFqbn(fqbn) === "esp32:esp32" ? 300000 : 180000 }
                 );
                 log = [compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim();
             }
         }
 
         if (!compileRun.ok) {
-            await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+            if (useEphemeral) await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
             const libHint = libraryPaths.length
                 ? `Bibliothèques locales : ${libraryPaths.map((p) => path.basename(p)).join(", ")}`
                 : "Ajoutez vos bibliothèques dans le dossier arduino-libraries/ (un sous-dossier par lib).";
@@ -555,8 +690,8 @@ async function compileArduinoSketch(opts) {
                 log,
                 fqbn,
                 exe: compileRun.exe,
-                libraryPaths,
-            };
+            libraryPaths,
+        };
         }
         let hexPath = resolveBuildArtifactPath(sketchDir, outDir, fqbn, ".hex");
         const result = {
@@ -570,14 +705,17 @@ async function compileArduinoSketch(opts) {
             tmpRoot,
             libraryPaths,
         };
-        if (!opts?.keepTemp) {
+        if (opts?.keepTemp) {
+            return result;
+        }
+        if (useEphemeral) {
             await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
             delete result.tmpRoot;
             delete result.sketchDir;
         }
         return result;
     } catch (err) {
-        await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+        if (useEphemeral) await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
         return {
             ok: false,
             errors: [err?.message || String(err)],
@@ -695,6 +833,7 @@ module.exports = {
     resolveArduinoCliPath,
     resolveUserLibraryRoots,
     resolveUserLibraryPaths,
+    resolveLibrariesForSketch,
     parseSketchIncludes,
     searchArduinoLibraries,
     listInstalledArduinoLibraries,

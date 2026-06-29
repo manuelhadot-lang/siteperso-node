@@ -620,7 +620,7 @@ export async function compileActiveSketch() {
     if (status) {
         const isEsp32 = String(fqbn).includes('esp32');
         status.textContent = isEsp32
-            ? 'Compilation ESP32… (1ère fois : installation du core, plusieurs minutes)'
+            ? 'Compilation ESP32… (serveur Render : 1 à 3 min, soyez patient)'
             : 'Compilation…';
         status.className = 'arduino-compile-status arduino-compile-status--busy';
     }
