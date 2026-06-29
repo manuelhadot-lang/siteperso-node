@@ -1,5 +1,5 @@
 /** Panneau latéral droit — éditeur sketch Arduino + compilation arduino-cli. */
-import { saveState, circuit, flags } from './state.js';
+import { saveState, circuit, flags, interaction } from './state.js';
 import { draw, resizeCanvas } from './renderer.js';
 import { onArduinoSketchUpdated } from './led-animation.js';
 import { refreshGroveLcdDisplayCache } from './Engine/grove-lcd-ideal.mjs';
@@ -509,7 +509,29 @@ export function openArduinoEditor(comp) {
     requestAnimationFrame(() => sketchEl()?.focus({ preventScroll: true }));
 }
 
+function boardMatchesPreferredType(board, preferredType) {
+    if (!board || !isMicroBoard(board)) return false;
+    if (!preferredType) return true;
+    if (preferredType === 'esp32') {
+        return board.type === 'esp32_devkit' || board.type === 'esp32_c3';
+    }
+    return board.type === preferredType;
+}
+
+function findSelectedBoardForEditor(preferredType) {
+    for (const comp of interaction.selectedComponents) {
+        if (boardMatchesPreferredType(comp, preferredType)) return comp;
+    }
+    return null;
+}
+
 function findBoardForEditor(preferredType) {
+    if (preferredType === 'esp32_devkit') {
+        return circuit.components.find((c) => c.type === 'esp32_devkit');
+    }
+    if (preferredType === 'esp32_c3') {
+        return circuit.components.find((c) => c.type === 'esp32_c3');
+    }
     if (preferredType === 'esp32') {
         return (
             circuit.components.find((c) => c.type === 'esp32_devkit') ||
@@ -522,18 +544,28 @@ function findBoardForEditor(preferredType) {
     return circuit.components.find((c) => isMicroBoard(c));
 }
 
-/** Ouvre l’éditeur sur la première carte du schéma (ou la carte déjà active). */
+/** Ferme l’éditeur si la carte active n’est plus dans le schéma (undo/redo, suppression). */
+export function syncActiveBoardAfterCircuitChange() {
+    if (!activeBoard) return;
+    if (!circuit.components.includes(activeBoard)) {
+        closeArduinoEditor();
+    }
+}
+
+/** Ouvre l’éditeur sur la carte sélectionnée, active ou la première compatible. */
 export function openArduinoEditorForCircuit(preferredType) {
-    if (activeBoard && circuit.components.includes(activeBoard)) {
-        if (!preferredType || preferredType === 'esp32') {
-            if (activeBoard.type === 'esp32_devkit' || activeBoard.type === 'esp32_c3') {
-                openArduinoEditor(activeBoard);
-                return true;
-            }
-        } else if (activeBoard.type === preferredType) {
-            openArduinoEditor(activeBoard);
-            return true;
-        }
+    const selected = findSelectedBoardForEditor(preferredType);
+    if (selected) {
+        openArduinoEditor(selected);
+        return true;
+    }
+    if (
+        activeBoard &&
+        circuit.components.includes(activeBoard) &&
+        boardMatchesPreferredType(activeBoard, preferredType)
+    ) {
+        openArduinoEditor(activeBoard);
+        return true;
     }
     const board = findBoardForEditor(preferredType);
     if (!board) {
@@ -713,6 +745,24 @@ export function initArduinoEditor() {
     });
     document.getElementById('arduino-panel-doc')?.addEventListener('click', () => {
         if (!activeBoard) return;
+        if (activeBoard.type === 'esp32_c3' || activeBoard.type === 'esp32_devkit') {
+            const modal = document.getElementById('esp32-doc-modal');
+            const title = document.getElementById('esp32-doc-title');
+            const body = document.getElementById('esp32-doc-body');
+            const isDevkit = activeBoard.type === 'esp32_devkit';
+            if (title) {
+                title.textContent = isDevkit
+                    ? `ESP32 DevKit WROOM-32 — ${activeBoard.label}`
+                    : `ESP32-C3 DevKit — ${activeBoard.label}`;
+            }
+            if (body) {
+                body.dataset.boardType = isDevkit ? 'esp32_devkit' : 'esp32_c3';
+                body.querySelector('.esp32-doc-c3')?.classList.toggle('hidden', isDevkit);
+                body.querySelector('.esp32-doc-devkit')?.classList.toggle('hidden', !isDevkit);
+            }
+            showModal(modal);
+            return;
+        }
         const modal = document.getElementById('uno-doc-modal');
         const title = document.getElementById('uno-doc-title');
         if (title) title.textContent = `Arduino UNO R3 — ${activeBoard.label}`;

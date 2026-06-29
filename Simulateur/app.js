@@ -23,6 +23,7 @@ import {
     onArduinoBoardRemoved,
     resetArduinoEditorOnCircuitLoad,
     flushArduinoSketchesBeforeSave,
+    syncActiveBoardAfterCircuitChange,
 } from './arduino-editor.js';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { DEFAULT_ESP32_SKETCH, ESP32_FQBN } from './esp32-c3-layout.js';
@@ -91,7 +92,9 @@ function undo() {
     redoStack.push(JSON.stringify({ components: circuit.components, wires: circuit.wires, autoJunctions: circuit.autoJunctions, counters }));
     const prev = JSON.parse(undoStack.pop());
     circuit.components = prev.components; circuit.wires = prev.wires; circuit.autoJunctions = prev.autoJunctions; Object.assign(counters, prev.counters);
-    interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null; draw();
+    interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
+    syncActiveBoardAfterCircuitChange();
+    draw();
 }
 function redo() {
     if (flags.isSimulating) { alert("Veuillez arrêter la simulation avant de modifier le schéma."); return; }
@@ -99,7 +102,9 @@ function redo() {
     undoStack.push(JSON.stringify({ components: circuit.components, wires: circuit.wires, autoJunctions: circuit.autoJunctions, counters }));
     const next = JSON.parse(redoStack.pop());
     circuit.components = next.components; circuit.wires = next.wires; circuit.autoJunctions = next.autoJunctions; Object.assign(counters, next.counters);
-    interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null; draw();
+    interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; interaction.selectedWire = null;
+    syncActiveBoardAfterCircuitChange();
+    draw();
 }
 
 // --- FICHIERS ET SAUVEGARDE ---
@@ -174,7 +179,7 @@ function repairComponentsAfterLoad(components) {
             if (!comp.fqbn) {
                 comp.fqbn = comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : comp.type === 'esp32_c3' ? ESP32_FQBN : 'arduino:avr:uno';
             } else if ((comp.type === 'esp32_c3' || comp.type === 'esp32_devkit') && String(comp.fqbn).startsWith('espressif:esp32:')) {
-                comp.fqbn = ESP32_FQBN;
+                comp.fqbn = comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : ESP32_FQBN;
             }
             comp.pinModes = comp.pinModes || {};
             comp.pinLevels = comp.pinLevels || {};
