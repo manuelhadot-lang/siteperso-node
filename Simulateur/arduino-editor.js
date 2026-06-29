@@ -509,23 +509,40 @@ export function openArduinoEditor(comp) {
     requestAnimationFrame(() => sketchEl()?.focus({ preventScroll: true }));
 }
 
+function findBoardForEditor(preferredType) {
+    if (preferredType === 'esp32') {
+        return (
+            circuit.components.find((c) => c.type === 'esp32_devkit') ||
+            circuit.components.find((c) => c.type === 'esp32_c3')
+        );
+    }
+    if (preferredType) {
+        return circuit.components.find((c) => c.type === preferredType);
+    }
+    return circuit.components.find((c) => isMicroBoard(c));
+}
+
 /** Ouvre l’éditeur sur la première carte du schéma (ou la carte déjà active). */
 export function openArduinoEditorForCircuit(preferredType) {
     if (activeBoard && circuit.components.includes(activeBoard)) {
-        openArduinoEditor(activeBoard);
-        return true;
+        if (!preferredType || preferredType === 'esp32') {
+            if (activeBoard.type === 'esp32_devkit' || activeBoard.type === 'esp32_c3') {
+                openArduinoEditor(activeBoard);
+                return true;
+            }
+        } else if (activeBoard.type === preferredType) {
+            openArduinoEditor(activeBoard);
+            return true;
+        }
     }
-    const board = preferredType
-        ? circuit.components.find((c) => c.type === preferredType)
-        : circuit.components.find((c) => isMicroBoard(c));
+    const board = findBoardForEditor(preferredType);
     if (!board) {
-        const hint = preferredType === 'esp32_c3'
-            ? 'Ajoutez d’abord une carte ESP32-C3 au schéma (menu ESP32).'
-            : preferredType === 'esp32_devkit'
-                ? 'Ajoutez d’abord une carte ESP32 DevKit au schéma (menu ESP32).'
-            : preferredType === 'arduino_uno'
-                ? 'Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).'
-                : 'Ajoutez d’abord une carte Arduino UNO ou ESP32 au schéma.';
+        const hint =
+            preferredType === 'esp32' || preferredType === 'esp32_c3' || preferredType === 'esp32_devkit'
+                ? 'Ajoutez d’abord une carte ESP32 au schéma (menu ESP32 — C3 ou DevKit WROOM-32).'
+                : preferredType === 'arduino_uno'
+                  ? 'Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).'
+                  : 'Ajoutez d’abord une carte Arduino UNO ou ESP32 au schéma.';
         alert(hint);
         return false;
     }

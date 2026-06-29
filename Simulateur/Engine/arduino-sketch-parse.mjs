@@ -7,6 +7,8 @@
 import {
     buildAvrRegistersFromParsed,
     applyDynamicLevelsToRegisters,
+    applyDigitalWriteToRegisters,
+    applyPinModeToRegisters,
     registersToPinLevels,
     registersToPinModes,
 } from "./arduino-avr-registers.mjs";
@@ -21,6 +23,7 @@ import {
 
 export function resolvePinToken(token, boardType = "arduino_uno") {
     const t = String(token || "").trim();
+    if (/\[/.test(t)) return null;
     if (isEsp32BoardType(boardType)) {
         if (/LED_BUILTIN/i.test(t)) return esp32LedBuiltinPin(boardType);
         const gpio = t.match(/^GPIO\s*(\d+)$/i);
@@ -35,6 +38,116 @@ export function resolvePinToken(token, boardType = "arduino_uno") {
     const m = t.match(/\bD?\s*(\d+)\b/i);
     if (m) return parseInt(m[1], 10);
     return null;
+}
+
+/** const int rowPins[] = { 2, 3, … A0 … } — tableaux de numéros de broches. */
+export function parseIntPinArrays(src, boardType = "arduino_uno") {
+    const arrays = {};
+    const globalPart = String(src || "").split(/\bvoid\s+setup\s*\(/i)[0];
+    const re = /\b(?:const\s+)?(?:unsigned\s+)?int\s+([A-Za-z_]\w*)\s*\[\s*\d+\s*\]\s*=\s*\{([^}]+)\}/g;
+    for (const m of globalPart.matchAll(re)) {
+        arrays[m[1]] = m[2].split(",").map((part) => {
+            const pin = resolvePinToken(part.trim(), boardType);
+            if (pin != null) return pin;
+            const n = parseInt(part.trim(), 10);
+            return Number.isFinite(n) ? n : null;
+        }).filter((n) => n != null);
+    }
+    return arrays;
+}
+
+export function resolvePinFromSketchToken(token, boardType = "arduino_uno", pinArrays = {}) {
+    const t = String(token || "").trim();
+    const sub = t.match(/^([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]$/);
+    if (sub && Array.isArray(pinArrays[sub[1]])) {
+        const pin = pinArrays[sub[1]][parseInt(sub[2], 10)];
+        return pin != null ? pin : null;
+    }
+    return resolvePinToken(t, boardType);
+}
+
+function expandArraySubscripts(expr, vars) {
+    return String(expr).replace(/([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]/g, (full, name, idx) => {
+        const arr = vars?.[name];
+        if (!Array.isArray(arr)) return full;
+        const v = arr[parseInt(idx, 10)];
+        return v != null ? String(v) : "0";
+    });
+}
+
+function expandDynamicSubscripts(expr, vars, floatVars = new Set(), regs = {}) {
+    let s = expandArraySubscripts(expr, vars);
+    for (let pass = 0; pass < 6; pass++) {
+        const next = s.replace(
+            /([A-Za-z_]\w*)\s*\[([^\[\]]+)\]\s*\[([^\[\]]+)\]/g,
+            (full, name, idx1, idx2) => {
+                const m = vars?.[name];
+                if (!Array.isArray(m)) return full;
+                const i1 = Math.trunc(evalExpr(idx1, vars, floatVars, regs));
+                const row = m[i1];
+                if (!Array.isArray(row)) return full;
+                const i2 = Math.trunc(evalExpr(idx2, vars, floatVars, regs));
+                const v = row[i2];
+                return v != null ? String(v) : "0";
+            }
+        );
+        if (next === s) break;
+        s = next;
+    }
+    for (let pass = 0; pass < 6; pass++) {
+        const next = s.replace(/([A-Za-z_]\w*)\s*\[([^\[\]]+)\]/g, (full, name, idx1) => {
+            const arr = vars?.[name];
+            if (!Array.isArray(arr) || (arr.length > 0 && Array.isArray(arr[0]))) return full;
+            const i1 = Math.trunc(evalExpr(idx1, vars, floatVars, regs));
+            const v = arr[i1];
+            return v != null ? String(v) : "0";
+        });
+        if (next === s) break;
+        s = next;
+    }
+    return s;
+}
+
+function expandTernaryExpr(expr, vars, floatVars = new Set(), regs = {}) {
+    let s = String(expr).trim();
+    for (let n = 0; n < 8; n++) {
+        const m = s.match(/^(.+?)\?\s*(.+?)\s*:\s*(.+)$/);
+        if (!m) return s;
+        const cond = evalExpr(m[1], vars, floatVars, regs);
+        s = cond ? m[2].trim() : m[3].trim();
+    }
+    return s;
+}
+
+/** const byte motif[8][8] = { {0,1,...}, ... } */
+export function parseByteMatrixDecls(src) {
+    const matrices = {};
+    const globalPart = String(src || "").split(/\bvoid\s+setup\s*\(/i)[0];
+    const re = /\b(?:const\s+)?byte\s+(\w+)\s*\[\s*(\d+)\s*\]\s*\[\s*(\d+)\s*\]\s*=\s*\{/g;
+    let m;
+    while ((m = re.exec(globalPart)) !== null) {
+        let i = re.lastIndex;
+        let depth = 1;
+        const start = i;
+        while (i < globalPart.length && depth > 0) {
+            if (globalPart[i] === "{") depth++;
+            else if (globalPart[i] === "}") depth--;
+            i++;
+        }
+        const body = globalPart.slice(start, i - 1);
+        const matrix = [];
+        for (const rowMatch of body.matchAll(/\{\s*([^}]+)\}/g)) {
+            matrix.push(
+                rowMatch[1].split(",").map((part) => {
+                    const n = parseInt(part.trim(), 10);
+                    return Number.isFinite(n) ? n : 0;
+                })
+            );
+        }
+        if (matrix.length > 0) matrices[m[1]] = matrix;
+        re.lastIndex = i;
+    }
+    return matrices;
 }
 
 function stripComments(src) {
@@ -171,7 +284,7 @@ const BIN_PREC = {
 };
 
 function evalExpr(expr, vars, floatVars = new Set(), regs = {}) {
-    const toks = tokenizeExpr(expr);
+    const toks = tokenizeExpr(expandArraySubscripts(expr, vars));
     if (!toks) return 0;
     const out = [];
     const ops = [];
@@ -281,9 +394,16 @@ function collectInitialVars(src) {
         floatVars.add(m[1]);
         if (!(m[1] in vars)) vars[m[1]] = 0;
     }
+    for (const [name, pins] of Object.entries(parseIntPinArrays(globalPart))) {
+        vars[name] = pins;
+    }
+    for (const [name, matrix] of Object.entries(parseByteMatrixDecls(globalPart))) {
+        vars[name] = matrix;
+    }
     DECL_RE.lastIndex = 0;
     while ((m = DECL_RE.exec(globalPart)) !== null) {
         const name = m[2];
+        if (Array.isArray(vars[name])) continue;
         vars[name] = evalExpr(m[3], vars, floatVars);
         if (/\b(?:float|double)\b/i.test(m[1])) floatVars.add(name);
     }
@@ -302,6 +422,52 @@ function parseParenCondition(s, startIdx) {
         else if (s[j] === ")") { depth--; if (depth === 0) break; }
     }
     return { cond: s.slice(i + 1, j), next: j + 1 };
+}
+
+function parseForHeader(s, startIdx) {
+    let i = startIdx;
+    const n = s.length;
+    while (i < n && /\s/.test(s[i])) i++;
+    if (s[i] !== "(") return null;
+    i++;
+    const parts = [];
+    let partStart = i;
+    let depth = 0;
+    for (; i < n; i++) {
+        const c = s[i];
+        if (c === "(") depth++;
+        else if (c === ")") {
+            if (depth === 0) {
+                parts.push(s.slice(partStart, i).trim());
+                i++;
+                break;
+            }
+            depth--;
+        } else if (c === ";" && depth === 0) {
+            parts.push(s.slice(partStart, i).trim());
+            partStart = i + 1;
+        }
+    }
+    if (parts.length !== 3) return null;
+    const bodyPart = parseStatementOrBlock(s, i);
+    return { init: parts[0], cond: parts[1], incr: parts[2], body: bodyPart.stmt, next: bodyPart.next };
+}
+
+function execForInit(init, state) {
+    if (!init) return;
+    const decl = init.match(
+        /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|char|short)\s+(\w+)\s*=\s*(.+)$/
+    );
+    if (decl) {
+        state.vars[decl[1]] = Math.trunc(evalExprState(decl[2], state));
+        return;
+    }
+    execExprStatement(init, state);
+}
+
+function execForIncr(incr, state) {
+    if (!incr) return;
+    execExprStatement(incr, state);
 }
 
 const MAX_WHILE_ITER = 10000;
@@ -338,6 +504,14 @@ function parseStatements(body) {
     while (i < n) {
         while (i < n && /\s/.test(s[i])) i++;
         if (i >= n) break;
+        if (s.slice(i, i + 3) === "for" && !/[A-Za-z0-9_]/.test(s[i + 3] || "")) {
+            const fp = parseForHeader(s, i + 3);
+            if (fp) {
+                stmts.push({ type: "for", init: fp.init, cond: fp.cond, incr: fp.incr, body: fp.body });
+                i = fp.next;
+                continue;
+            }
+        }
         if (s.slice(i, i + 5) === "while" && !/[A-Za-z0-9_]/.test(s[i + 5] || "")) {
             const condPart = parseParenCondition(s, i + 5);
             if (!condPart) { i++; continue; }
@@ -383,9 +557,14 @@ function resolvePinLabelFromExpr(expr, state) {
     const t = String(expr || "").trim();
     if (!t) return null;
     try {
-        return pinLabel(evalExprState(substituteCalls(t, state), state));
+        return pinLabel(evalExprState(substituteCalls(t, state), state), state.boardType);
     } catch {
-        return pinLabel(resolvePinToken(t));
+        const pin = resolvePinFromSketchToken(
+            t,
+            state.boardType,
+            parseIntPinArrays(state.sketchSrc || "", state.boardType)
+        );
+        return pinLabel(pin, state.boardType);
     }
 }
 
@@ -544,7 +723,10 @@ function extractFirstCallArg(text) {
 }
 
 function evalExprState(expr, state) {
-    return evalExpr(substituteCalls(expr, state), state.vars, state.floatVars, state.regs);
+    let s = substituteCalls(expr, state);
+    s = expandDynamicSubscripts(s, state.vars, state.floatVars, state.regs);
+    s = expandTernaryExpr(s, state.vars, state.floatVars, state.regs);
+    return evalExpr(s, state.vars, state.floatVars, state.regs);
 }
 
 function formatSerialNumber(n, state, exprText) {
@@ -597,7 +779,7 @@ function appendSerialTx(state, text, newline = false) {
 function execExprStatement(text, state, onDelay) {
     const delayM = text.match(/^delay\s*\(\s*(.+?)\s*\)$/i);
     if (delayM) {
-        const ms = Math.max(0, evalExprState(delayM[1], state));
+        const ms = Math.max(0, Math.trunc(evalExprState(delayM[1], state)));
         if (onDelay) onDelay(ms);
         return ms;
     }
@@ -624,12 +806,28 @@ function execExprStatement(text, state, onDelay) {
     if (/^digitalWrite\s*\(/i.test(text)) {
         const m = text.match(/^digitalWrite\s*\(\s*([^,]+)\s*,\s*(.+)\)$/i);
         if (m) {
-            const label = pinLabel(resolvePinToken(m[1], state.boardType), state.boardType);
-            if (label) state.pins[label] = evalExprState(m[2], state) ? 1 : 0;
+            const label = resolvePinLabelFromExpr(m[1], state);
+            if (label) {
+                const high = !!evalExprState(m[2], state);
+                state.pins[label] = high ? 1 : 0;
+                applyDigitalWriteToRegisters(state.regs, label, high);
+            }
         }
         return 0;
     }
-    if (/^pinMode\s*\(/i.test(text)) return 0;
+    if (/^pinMode\s*\(/i.test(text)) {
+        const m = text.match(/^pinMode\s*\(\s*([^,]+)\s*,\s*(OUTPUT|INPUT_PULLUP|INPUT)\s*\)$/i);
+        if (m) {
+            const label = resolvePinLabelFromExpr(m[1], state);
+            if (label) {
+                const mode = String(m[2]).toUpperCase();
+                if (mode === "OUTPUT") applyPinModeToRegisters(state.regs, label, "OUTPUT");
+                else if (mode === "INPUT_PULLUP") applyPinModeToRegisters(state.regs, label, "INPUT_PULLUP");
+                else applyPinModeToRegisters(state.regs, label, "INPUT");
+            }
+        }
+        return 0;
+    }
     if (/^\w+\.begin\s*\(\s*\)/i.test(text)) return 0;
 
     const localDecl = text.match(
@@ -710,6 +908,14 @@ function execStatements(stmts, state, onDelay) {
                 guard++;
                 execStatements(st.body, state, onDelay);
             }
+        } else if (st.type === "for") {
+            execForInit(st.init, state);
+            let guard = 0;
+            while (evalExprState(st.cond, state) && guard < MAX_WHILE_ITER) {
+                guard++;
+                execStatements(st.body, state, onDelay);
+                execForIncr(st.incr, state);
+            }
         }
     }
 }
@@ -731,6 +937,14 @@ function* runLoopGen(stmts, state) {
             while (evalExprState(st.cond, state) && guard < MAX_WHILE_ITER) {
                 guard++;
                 yield* runLoopGen(st.body, state);
+            }
+        } else if (st.type === "for") {
+            execForInit(st.init, state);
+            let guard = 0;
+            while (evalExprState(st.cond, state) && guard < MAX_WHILE_ITER) {
+                guard++;
+                yield* runLoopGen(st.body, state);
+                execForIncr(st.incr, state);
             }
         }
     }
@@ -791,6 +1005,7 @@ export function createArduinoRuntime(uno) {
     const init = collectInitialVars(src);
     const state = {
         boardType: uno?.type || "arduino_uno",
+        sketchSrc: src,
         vars: init.vars,
         floatVars: init.floatVars,
         regs: {},
@@ -972,6 +1187,45 @@ function interpretRegisterPhases(src, boardType = "arduino_uno") {
     return phases.length >= 2 ? phases : null;
 }
 
+/** Phases GPIO via exécution du loop (for, digitalWrite, delay) — matrice 8×8 multiplexée. */
+function interpretLoopPinPhases(src, boardType = "arduino_uno") {
+    const setupBody = bodyOf(src, "setup");
+    const loopBody = bodyOf(src, "loop");
+    if (!loopBody || !/\bdelay\s*\(/i.test(loopBody)) return null;
+    if (!/\bdigitalWrite\s*\(/i.test(loopBody)) return null;
+
+    const init = collectInitialVars(src);
+    const state = {
+        boardType,
+        sketchSrc: src,
+        vars: init.vars,
+        floatVars: init.floatVars,
+        regs: {},
+        pins: {},
+    };
+    execStatements(parseStatements(setupBody), state, () => {});
+
+    const loopStmts = parseStatements(loopBody);
+    const phases = [];
+    const MAX_PHASES = 128;
+    const seen = new Set();
+
+    for (let iter = 0; iter < 512 && phases.length < MAX_PHASES; iter++) {
+        let emitted = false;
+        execStatements(loopStmts, state, (ms) => {
+            if (ms <= 0) return;
+            phases.push({ durationMs: ms, levels: resolveOutputLevels(state) });
+            emitted = true;
+        });
+        if (!emitted) break;
+        const key = JSON.stringify(state.vars) + "|" + JSON.stringify(state.regs) + "|" + JSON.stringify(state.pins);
+        if (seen.has(key) && phases.length >= 2) break;
+        seen.add(key);
+    }
+
+    return phases.length >= 1 ? phases : null;
+}
+
 /**
  * Niveau logique d'une broche à l'instant tSec (phases / pulsations du sketch).
  * N'utilise pas liveLevels — adapté à l'oscilloscope et aux courbes idéales.
@@ -991,7 +1245,7 @@ export function resolveArduinoPinLevelAt(uno, pinLabel, tSec = 0) {
 function computeDynamicPinLevels(uno, tSec = 0) {
     const levels = {};
     const pinPhases = uno?.pinPhases;
-    if (Array.isArray(pinPhases) && pinPhases.length >= 2) {
+    if (Array.isArray(pinPhases) && pinPhases.length >= 1) {
         const totalMs = pinPhases.reduce((s, p) => s + (p.durationMs || 0), 0);
         if (totalMs > 0) {
             let rem = (((tSec * 1000) % totalMs) + totalMs) % totalMs;
@@ -1014,7 +1268,7 @@ function computeDynamicPinLevels(uno, tSec = 0) {
     return levels;
 }
 
-function parseLoopPhases(loopBody, boardType = "arduino_uno") {
+function parseLoopPhases(loopBody, boardType = "arduino_uno", pinArrays = {}) {
     const phases = [];
     let current = {};
     let hadWrite = false;
@@ -1023,7 +1277,7 @@ function parseLoopPhases(loopBody, boardType = "arduino_uno") {
     let m;
     while ((m = re.exec(loopBody)) !== null) {
         if (/digitalWrite/i.test(m[0])) {
-            const pin = resolvePinToken(m[1], boardType);
+            const pin = resolvePinFromSketchToken(m[1], boardType, pinArrays);
             const label = pinLabel(pin, boardType);
             if (!label) continue;
             current[label] = /HIGH|1/i.test(m[2]) ? 1 : 0;
@@ -1063,7 +1317,9 @@ function singlePinPulseFromPhases(phases) {
  */
 export function resolvePinLevelsAt(uno, tSec = 0) {
     if (uno && uno.liveLevels) return { ...uno.liveLevels };
-    const dynamic = computeDynamicPinLevels(uno, tSec);
+    const phaseSec =
+        uno?.simTimeMs != null && Number.isFinite(uno.simTimeMs) ? uno.simTimeMs / 1000 : tSec;
+    const dynamic = computeDynamicPinLevels(uno, phaseSec);
     const hasDynamic = Object.keys(dynamic).length > 0;
     if (isEsp32BoardType(uno?.type)) {
         const out = { ...(uno?.pinLevels || {}) };
@@ -1098,11 +1354,12 @@ export function arduinoGpioIsTimeVarying(uno) {
  */
 export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
     const src = stripComments(sketch);
+    const pinArrays = parseIntPinArrays(src, boardType);
     const pinModes = {};
     const pinLevels = {};
     const pinPulses = {};
     let pinPhases = [];
-    const pinNum = (token) => resolvePinToken(token, boardType);
+    const pinNum = (token) => resolvePinFromSketchToken(token, boardType, pinArrays);
     const labelOf = (pin) => pinLabel(pin, boardType);
 
     for (const m of src.matchAll(/pinMode\s*\(\s*([^,)]+)\s*,\s*(OUTPUT|INPUT_PULLUP|INPUT)\s*\)/gi)) {
@@ -1125,7 +1382,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
         writes.push({ label, level: /HIGH|1/i.test(m[2]) });
     }
 
-    const loopPhases = parseLoopPhases(loopBody, boardType);
+    const loopPhases = parseLoopPhases(loopBody, boardType, pinArrays);
     let blinkApplied = false;
 
     if (loopPhases.length >= 2) {
@@ -1201,6 +1458,25 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
         const regPhases = interpretRegisterPhases(src, boardType);
         if (regPhases && regPhases.length >= 2) {
             pinPhases = regPhases;
+            for (const ph of pinPhases) {
+                for (const label of Object.keys(ph.levels || {})) {
+                    pinModes[label] = "OUTPUT";
+                    delete pinLevels[label];
+                    delete pinPulses[label];
+                }
+            }
+        }
+    }
+    if (
+        pinPhases.length < 2 &&
+        !blinkApplied &&
+        loopPhases.length === 0 &&
+        /\bdigitalWrite\s*\(/i.test(loopBody) &&
+        /\bdelay\s*\(/i.test(loopBody)
+    ) {
+        const simPhases = interpretLoopPinPhases(src, boardType);
+        if (simPhases?.length >= 1) {
+            pinPhases = simPhases;
             for (const ph of pinPhases) {
                 for (const label of Object.keys(ph.levels || {})) {
                     pinModes[label] = "OUTPUT";

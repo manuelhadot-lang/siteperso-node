@@ -699,7 +699,11 @@ canvas.addEventListener('dblclick', async (e) => {
             return;
         }
         if (target.type === 'esp32_c3' || target.type === 'esp32_devkit') {
-            openEsp32DocModal(target);
+            if (e.shiftKey) {
+                openEsp32DocModal(target);
+            } else {
+                openArduinoEditor(target);
+            }
             return;
         }
         if (target.type === 'arduino_uno') {
@@ -1055,7 +1059,7 @@ function initApp() {
         e.preventDefault();
         e.stopPropagation();
         document.querySelectorAll('.navbar > .menu-item.open').forEach((m) => m.classList.remove('open'));
-        openArduinoEditorForCircuit('esp32_c3');
+        openArduinoEditorForCircuit('esp32');
     });
     document.getElementById('menu-arduino-editor')?.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;

@@ -173,6 +173,7 @@ function updateArduinoRuntimes() {
         applyArduinoSketchToComponent(comp);
         if (!sketchHasLoop(comp.sketch || '')) {
             comp.liveLevels = null;
+            comp.simTimeMs = null;
             continue;
         }
         seen.add(comp.label);
@@ -224,6 +225,7 @@ function updateArduinoRuntimes() {
             : null;
         stepArduinoRuntime(entry.rt, deltaMs, readUnoInputs(comp), analogInputs);
         comp.liveLevels = arduinoRuntimeLevels(entry.rt);
+        comp.simTimeMs = entry.rt.state.simTimeMs ?? 0;
         comp.serialLog = getRuntimeSerialTx(entry.rt);
         const serMeta = getRuntimeSerialMeta(entry.rt);
         comp.serialBegun = serMeta.begun;
@@ -244,6 +246,7 @@ function resetArduinoRuntimes() {
     for (const comp of circuit.components) {
         if (isMicroBoard(comp)) {
             comp.liveLevels = null;
+            comp.simTimeMs = null;
             comp.serialLog = '';
             comp.serialBegun = false;
             comp.serialBaud = 0;
@@ -529,7 +532,18 @@ export function getAnimatedJoyitTft18Display(label) {
 
 /** Temps écoulé depuis le début de la simulation animée (s). */
 export function getSimulationElapsedSec() {
-    return anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
+    if (anim.startMs <= 0) return 0;
+    let maxSimMs = 0;
+    let hasSim = false;
+    for (const comp of circuit.components) {
+        if (!isMicroBoard(comp)) continue;
+        if (comp.simTimeMs != null && Number.isFinite(comp.simTimeMs)) {
+            hasSim = true;
+            maxSimMs = Math.max(maxSimMs, comp.simTimeMs);
+        }
+    }
+    if (hasSim) return maxSimMs / 1000;
+    return (performance.now() - anim.startMs) / 1000;
 }
 
 /** Mesures DHT22 animées pendant la simulation. */
@@ -635,9 +649,7 @@ export function getIdealBargraphDisplay(label, tSec) {
 /** Matrice 8×8 pilotée directement par GPIO Arduino (sans attendre SPICE). */
 export function getIdealMatrix8x8Display(label, tSec) {
     syncArduinoSketchesFromEditor();
-    const elapsed =
-        tSec ??
-        (anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0);
+    const elapsed = tSec ?? getSimulationElapsedSec();
     return getIdealMatrix8x8FromArduino(
         label,
         circuit.components,
