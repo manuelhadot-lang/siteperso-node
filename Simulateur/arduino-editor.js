@@ -659,8 +659,8 @@ export async function compileActiveSketch() {
     const status = compileStatusEl();
     const btn = showErrorsBtn();
     const fqbn = resolveBoardFqbn(activeBoard);
+    const isEsp32 = String(fqbn).includes('esp32');
     if (status) {
-        const isEsp32 = String(fqbn).includes('esp32');
         status.textContent = isEsp32
             ? 'Compilation ESP32… (serveur Render : 1 à 3 min, soyez patient)'
             : 'Compilation…';
