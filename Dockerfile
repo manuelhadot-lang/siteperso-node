@@ -34,8 +34,7 @@ RUN /usr/local/bin/arduino-cli lib install \
     "Adafruit Unified Sensor" \
     "Adafruit ST7735 and ST7789 Library" \
     "Adafruit TSL2591 Library" \
-    "Adafruit BMP280 Library" \
-    || true
+    "Adafruit BMP280 Library"
 
 # 3. Définition du répertoire de travail dans le conteneur
 WORKDIR /app
@@ -48,6 +47,13 @@ RUN npm ci --only=production
 
 # 5. Copie de l'intégralité du code source du projet
 COPY . .
+
+# BMP280 : submodule git souvent vide après COPY — s'appuyer sur Library Manager
+RUN rm -rf arduino-libraries/libraries/Adafruit_BMP280_Library/.git \
+    && if [ ! -f arduino-libraries/libraries/Adafruit_BMP280_Library/library.properties ]; then \
+         rm -rf arduino-libraries/libraries/Adafruit_BMP280_Library; \
+       fi \
+    && /usr/local/bin/arduino-cli lib install "Adafruit BMP280 Library"
 
 # 6. ÉTAPE DE SÉCURISATION DU RECONSTRUISEUR XSPICE (Ton correctif d'erreur)
 # Recherche le fichier original 'digital.cm' installé par le paquet ngspice sur Linux,

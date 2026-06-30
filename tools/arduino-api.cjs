@@ -281,12 +281,40 @@ function addLibraryWithDeps(libDir, allByBase, selected) {
     }
 }
 
+/** Chemins des bibliothèques installées via arduino-cli (ARDUINO_DIRECTORIES_DATA/libraries). */
+function resolveDataDirLibraryPaths() {
+    const dataDir = process.env.ARDUINO_DIRECTORIES_DATA;
+    if (!dataDir) return [];
+    const libRoot = path.join(dataDir, "libraries");
+    if (!fs.existsSync(libRoot)) return [];
+    const paths = [];
+    for (const name of fs.readdirSync(libRoot)) {
+        const libDir = path.join(libRoot, name);
+        if (isArduinoLibraryDir(libDir)) paths.push(libDir);
+    }
+    return paths;
+}
+
+function mergeLibraryPathLists(...lists) {
+    const seen = new Set();
+    const out = [];
+    for (const list of lists) {
+        for (const p of list) {
+            const abs = path.resolve(p);
+            if (seen.has(abs)) continue;
+            seen.add(abs);
+            out.push(abs);
+        }
+    }
+    return out;
+}
+
 /**
- * Ne passe à arduino-cli que les bibliothèques locales réellement utiles au sketch.
+ * Ne passe à arduino-cli que les bibliothèques réellement utiles au sketch.
  * Évite de scanner 10+ libs à chaque compilation (lent sur Render).
  */
 function resolveLibrariesForSketch(sketch, fqbn) {
-    const allPaths = resolveUserLibraryPaths();
+    const allPaths = mergeLibraryPathLists(resolveUserLibraryPaths(), resolveDataDirLibraryPaths());
     const allByBase = new Map(allPaths.map((p) => [path.basename(p), p]));
     const selected = new Set();
     const headers = parseSketchIncludes(sketch);
@@ -370,9 +398,10 @@ function findLocalLibraryForHeader(header, libraryPaths) {
 async function ensureRegistryLibraries(headers, libraryPaths) {
     const installed = [];
     const skipped = [];
+    const searchPaths = mergeLibraryPathLists(libraryPaths, resolveDataDirLibraryPaths());
     const registryNames = await getInstalledRegistryLibNames();
     for (const header of headers) {
-        if (findLocalLibraryForHeader(header, libraryPaths)) {
+        if (findLocalLibraryForHeader(header, searchPaths)) {
             skipped.push(header);
             continue;
         }
