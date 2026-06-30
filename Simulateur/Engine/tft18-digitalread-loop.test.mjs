@@ -90,12 +90,49 @@ assert.ok(labelTexts(resolveTft18DisplayAt(parsedTimed, 1500, {
     ctx: { liveInput: true, boardType: "esp32_devkit", inputs: { GPIO4: 1 }, src: sketchTimed },
 })).includes("Station"), "setup Station avant loop");
 const duringBtn = resolveTft18DisplayAt(parsedTimed, parsedTimed.setupDurationMs + 500, {
-    ctx: { liveInput: true, boardType: "esp32_devkit", inputs: { GPIO4: 0 }, src: sketchTimed },
+    ctx: {
+        liveInput: true,
+        boardType: "esp32_devkit",
+        inputs: { GPIO4: 0 },
+        src: sketchTimed,
+        setupDone: true,
+        inputChangedAtMs: parsedTimed.setupDurationMs,
+    },
 });
 assert.ok(labelTexts(duringBtn).includes("2eme page"), "bouton pendant delay(3000)");
 const afterBtnDelay = resolveTft18DisplayAt(parsedTimed, parsedTimed.setupDurationMs + 3000, {
-    ctx: { liveInput: true, boardType: "esp32_devkit", inputs: { GPIO4: 0 }, src: sketchTimed },
+    ctx: {
+        liveInput: true,
+        boardType: "esp32_devkit",
+        inputs: { GPIO4: 0 },
+        src: sketchTimed,
+        setupDone: true,
+        inputChangedAtMs: parsedTimed.setupDurationMs,
+    },
 });
 assert.equal(labelTexts(afterBtnDelay), "", "fillScreen après delay efface le texte");
+
+const afterSetup = resolveTft18DisplayAt(parsedTimed, 1500, {
+    ctx: { liveInput: true, boardType: "esp32_devkit", inputs: { GPIO4: 0 }, src: sketchTimed, setupDone: false },
+});
+assert.ok(labelTexts(afterSetup).includes("Station"), "setup visible si pas encore terminé");
+
+const afterSetupDone = resolveTft18DisplayAt(parsedTimed, 1500, {
+    ctx: { liveInput: true, boardType: "esp32_devkit", inputs: { GPIO4: 0 }, src: sketchTimed, setupDone: true },
+});
+assert.ok(!labelTexts(afterSetupDone).includes("Station"), "setup ignoré après boot");
+
+const btnJustPressed = resolveTft18DisplayAt(parsedTimed, 8000, {
+    ctx: {
+        liveInput: true,
+        boardType: "esp32_devkit",
+        inputs: { GPIO4: 0 },
+        src: sketchTimed,
+        setupDone: true,
+        inputChangedAtMs: 8000,
+    },
+});
+assert.ok(labelTexts(btnJustPressed).includes("2eme page"), "bouton vient d'être appuyé");
+assert.ok(!labelTexts(btnJustPressed).includes("Station"), "pas de retour setup au bouton");
 
 console.log("tft18-digitalread-loop.test.mjs OK");

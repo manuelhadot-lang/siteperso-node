@@ -456,7 +456,7 @@ export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
     const setupDuration = parsed.setupDurationMs ?? 0;
     const setupPhaseCount = parsed.setupPhaseCount ?? 0;
 
-    if (setupDuration > 0 && elapsedMs < setupDuration && parsed.phases?.length) {
+    if (setupDuration > 0 && elapsedMs < setupDuration && !opts?.ctx?.setupDone && parsed.phases?.length) {
         const ph = pickTft18PhaseAt(
             parsed.phases,
             elapsedMs,
@@ -483,9 +483,10 @@ export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
             ...opts.ctx,
             varBindings: opts.ctx.collectVarBindings?.(loopBody) || {},
         };
-        const loopElapsed = Math.max(0, elapsedMs - setupDuration);
+        const inputChangedAt = opts.ctx.inputChangedAtMs ?? elapsedMs;
+        const sinceInputMs = Math.max(0, elapsedMs - inputChangedAt);
         const loopCycle = computeLiveLoopCycleMs(loopBody);
-        const loopTimeMs = loopCycle > 0 ? loopElapsed % loopCycle : loopElapsed;
+        const loopTimeMs = loopCycle > 0 ? sinceInputMs % loopCycle : sinceInputMs;
         executeBodyUpToTime(loopBody, st, ctx, loopTimeMs);
         return snapshotState(st);
     }

@@ -8,7 +8,7 @@ import { esp32C3JonctionToTerminalKey, ESP32_FQBN } from './esp32-c3-layout.js';
 import { esp32DevkitJonctionToTerminalKey, ESP32_DEVKIT_FQBN } from './esp32-devkit-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { draw } from './renderer.js';
-import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes } from './led-animation.js';
+import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes, resetTftLiveInputStateForCircuit } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
 import { shouldAnimateGsinScope } from './Engine/scope-gsin-ideal.mjs';
 import { openScopePanel, closeScopePanelFully, isScopePanelOpen, getActiveScope, refreshScopePanelFields } from './scope-panel.js';
@@ -421,6 +421,9 @@ export async function triggerSimulation(isSilentUpdate = false) {
     prepareArduinoForSimulation();
     flushSourcePanelFields();
     if (!isSilentUpdate) {
+        resetTftLiveInputStateForCircuit(circuit.components);
+    }
+    if (!isSilentUpdate) {
         primeSpeakerAudioContext().catch(() => {});
         refreshScopePanelFields();
     }
@@ -598,6 +601,7 @@ export function stopSimulation() {
     closeScopePanelFully();
     stopSpeakerAudio();
     flags.isSimulating = false;
+    resetTftLiveInputStateForCircuit(circuit.components);
     simulationResults.voltmeters = {}; simulationResults.ammeters = {}; simulationResults.ohmmeters = {}; simulationResults.leds = {}; simulationResults.scopePlots = {}; simulationResults.bodePlots = {}; simulationResults.seg7 = {}; simulationResults.bargraph = {}; simulationResults.logicValues = {};
     const btnSim = document.getElementById('btn-simulate'); const btnStop = document.getElementById('btn-stop');
     if (btnSim) { btnSim.innerText = "🚀 Lancer Simulation"; btnSim.style.background = "#00ca71"; }

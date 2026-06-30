@@ -204,6 +204,18 @@ function updateArduinoRuntimes() {
     onArduinoRuntimeTick();
 }
 
+function resetTftLiveInputState(components) {
+    for (const c of components) {
+        delete c._tftLastInputKey;
+        delete c._tftInputChangedAtMs;
+        delete c._tftSetupDone;
+    }
+}
+
+export function resetTftLiveInputStateForCircuit(components) {
+    resetTftLiveInputState(components);
+}
+
 function resetArduinoRuntimes() {
     arduinoRuntimes.clear();
     lastRuntimeStepMs = 0;
@@ -1077,7 +1089,9 @@ export function stopLedAnimation(preserveArduino = false) {
     anim.ledPersistence = {};
     anim.steadyCurrent = {};
     anim.arduinoLedDrive = {};
-    anim.startMs = 0;
-    if (!preserveArduino) resetArduinoRuntimes();
+    if (!preserveArduino) {
+        anim.startMs = 0;
+        resetArduinoRuntimes();
+    }
     stopBurntLedSmokeLoop();
 }

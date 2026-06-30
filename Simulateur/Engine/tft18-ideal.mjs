@@ -145,12 +145,27 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
         voltmeters: opts.voltmeters,
     });
 
+    const elapsedMs = Math.max(0, elapsedSec * 1000);
+    let inputs = {};
+    let inputChangedAtMs = 0;
+    let setupDone = false;
+    if (hasLiveInput) {
+        inputs = readMicroBoardDigitalInputs(board, components, wires, autoJunctions);
+        const inputKey = JSON.stringify(inputs);
+        if (board._tftLastInputKey !== inputKey) {
+            board._tftInputChangedAtMs = elapsedMs;
+            board._tftLastInputKey = inputKey;
+        }
+        inputChangedAtMs = board._tftInputChangedAtMs ?? elapsedMs;
+        if (board._tftSetupDone) setupDone = true;
+    }
+
     return {
         boardType: board.type,
         liveInput: hasLiveInput,
-        inputs: hasLiveInput
-            ? readMicroBoardDigitalInputs(board, components, wires, autoJunctions)
-            : {},
+        inputs,
+        inputChangedAtMs,
+        setupDone,
         resolveDht: hasDht
             ? (arg) => resolveDhtPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
@@ -272,6 +287,9 @@ export function getIdealJoyitTft18Display(tftLabel, components, wires, autoJunct
 
     const pickDisplay = (parsedOrCache) => {
         const elapsedMs = Math.max(0, elapsedSec * 1000);
+        if (printCtx?.liveInput && board && elapsedMs >= (parsedOrCache.setupDurationMs ?? 0)) {
+            board._tftSetupDone = true;
+        }
         const resolveOpts = needsRuntime ? { ctx: printCtx } : {};
         const phase = !printCtx?.liveInput && parsedOrCache.hasTiming && parsedOrCache.phases?.length
             ? pickTft18PhaseAt(
