@@ -34,7 +34,8 @@ RUN /usr/local/bin/arduino-cli lib install \
     "Adafruit Unified Sensor" \
     "Adafruit ST7735 and ST7789 Library" \
     "Adafruit TSL2591 Library" \
-    "Adafruit BMP280 Library"
+    "Adafruit BMP280 Library" \
+    || true
 
 # 3. Définition du répertoire de travail dans le conteneur
 WORKDIR /app
@@ -48,12 +49,19 @@ RUN npm ci --only=production
 # 5. Copie de l'intégralité du code source du projet
 COPY . .
 
-# BMP280 : submodule git souvent vide après COPY — s'appuyer sur Library Manager
-RUN rm -rf arduino-libraries/libraries/Adafruit_BMP280_Library/.git \
-    && if [ ! -f arduino-libraries/libraries/Adafruit_BMP280_Library/library.properties ]; then \
-         rm -rf arduino-libraries/libraries/Adafruit_BMP280_Library; \
+# BMP280 : lien vers Library Manager si absent du dépôt (.dockerignore exclut le submodule)
+RUN rm -rf arduino-libraries/libraries/Adafruit_BMP280_Library \
+    && mkdir -p arduino-libraries/libraries \
+    && BMP280_DATA=$(find "$ARDUINO_DIRECTORIES_DATA/libraries" -maxdepth 1 -type d -iname '*bmp280*' 2>/dev/null | head -n1) \
+    && if [ -z "$BMP280_DATA" ] || [ ! -f "$BMP280_DATA/Adafruit_BMP280.h" ]; then \
+         /usr/local/bin/arduino-cli lib install "Adafruit BMP280 Library" || true; \
+         BMP280_DATA=$(find "$ARDUINO_DIRECTORIES_DATA/libraries" -maxdepth 1 -type d -iname '*bmp280*' 2>/dev/null | head -n1); \
        fi \
-    && /usr/local/bin/arduino-cli lib install "Adafruit BMP280 Library"
+    && if [ -n "$BMP280_DATA" ] && [ -f "$BMP280_DATA/Adafruit_BMP280.h" ]; then \
+         ln -s "$BMP280_DATA" arduino-libraries/libraries/Adafruit_BMP280_Library; \
+       else \
+         echo "⚠ Adafruit BMP280 Library non installée — compilation BMP280 via Library Manager au runtime."; \
+       fi
 
 # 6. ÉTAPE DE SÉCURISATION DU RECONSTRUISEUR XSPICE (Ton correctif d'erreur)
 # Recherche le fichier original 'digital.cm' installé par le paquet ngspice sur Linux,

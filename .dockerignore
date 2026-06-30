@@ -9,3 +9,6 @@ Simulateur/lib
 .git
 .env
 .env.*
+
+# Submodule git souvent vide au clone Render — BMP280 vient de arduino-cli (ARDUINO_DIRECTORIES_DATA)
+arduino-libraries/libraries/Adafruit_BMP280_Library
