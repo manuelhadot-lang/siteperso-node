@@ -16,6 +16,7 @@ export const TFT18_TEXT_ROWS = 10;
 
 import { expandUserFunctionCalls } from "./sketch-functions.mjs";
 import { isEsp32BoardType } from "./micro-board-config.mjs";
+import { evalSketchExpression, parseSketchBodyStatements, runSketchForLoop } from "./arduino-sketch-parse.mjs";
 
 function stripComments(src) {
     return String(src || "")
@@ -223,19 +224,57 @@ function execTftCall(text, st, ctx) {
     return 0;
 }
 
-/** Exécute setup/loop une seule fois ; capture les phases aux delay(). */
-function executeBody(body, st, ctx) {
-    let delayMs = 0;
-    const phases = [];
-    const stmts = body.split(";").map((s) => s.trim()).filter(Boolean);
+const MAX_TFT_LOOP_GUARD = 5000;
+
+function createTftEvalState(ctx) {
+    return {
+        boardType: ctx.boardType || "arduino_uno",
+        sketchSrc: ctx.src || "",
+        vars: {},
+        floatVars: new Set(),
+        regs: {},
+        pins: {},
+        inputs: ctx.inputs || {},
+        analogInputs: {},
+        simTimeMs: 0,
+    };
+}
+
+function execTftStatements(stmts, st, ctx, phases, delayAcc) {
+    const evalState = createTftEvalState(ctx);
     for (const stmt of stmts) {
-        const d = execTftCall(stmt, st, ctx);
-        if (d > 0) {
-            delayMs += d;
-            phases.push({ durationMs: d, ...snapshotState(st) });
+        if (stmt.type === "expr") {
+            const d = execTftCall(stmt.text, st, ctx);
+            if (d > 0) {
+                delayAcc.val += d;
+                phases.push({ durationMs: d, ...snapshotState(st) });
+            }
+        } else if (stmt.type === "if") {
+            if (evalSketchExpression(stmt.cond, evalState)) {
+                execTftStatements(stmt.body, st, ctx, phases, delayAcc);
+            } else if (stmt.elseBody) {
+                execTftStatements(stmt.elseBody, st, ctx, phases, delayAcc);
+            }
+        } else if (stmt.type === "while") {
+            let guard = 0;
+            while (evalSketchExpression(stmt.cond, evalState) && guard < MAX_TFT_LOOP_GUARD) {
+                guard++;
+                execTftStatements(stmt.body, st, ctx, phases, delayAcc);
+            }
+        } else if (stmt.type === "for") {
+            runSketchForLoop(stmt, evalState, (body) => {
+                execTftStatements(body, st, ctx, phases, delayAcc);
+            });
         }
     }
-    return { delayMs, phases };
+}
+
+/** Exécute setup/loop ; capture les phases aux delay(). Gère if/else et digitalRead(). */
+function executeBody(body, st, ctx) {
+    const phases = [];
+    const delayAcc = { val: 0 };
+    execTftStatements(parseSketchBodyStatements(body), st, ctx, phases, delayAcc);
+    return { delayMs: delayAcc.val, phases };
 }
 
 export function sketchUsesTft18(sketch) {
@@ -369,7 +408,7 @@ export function pickTft18PhaseAt(phases, elapsedMs, loopCycleMs, setupDurationMs
 
 export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
     if (!parsed) return null;
-    if (parsed.hasTiming && parsed.phases?.length) {
+    if (parsed.hasTiming && parsed.phases?.length && !opts?.ctx?.liveInput) {
         const ph = pickTft18PhaseAt(
             parsed.phases,
             elapsedMs,

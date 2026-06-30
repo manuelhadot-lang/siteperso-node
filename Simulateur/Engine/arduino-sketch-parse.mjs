@@ -747,6 +747,27 @@ function evalExprState(expr, state) {
     return evalExpr(s, state.vars, state.floatVars, state.regs);
 }
 
+/** Parse le corps d'une fonction sketch (if/else, for, delay…). */
+export function parseSketchBodyStatements(body) {
+    return parseStatements(body);
+}
+
+/** Évalue une expression sketch (digitalRead, millis, variables…). */
+export function evalSketchExpression(expr, state) {
+    return evalExprState(expr, state);
+}
+
+/** Exécute une boucle for du sketch (init / cond / incr). */
+export function runSketchForLoop(stmt, state, runBody) {
+    execForInit(stmt.init, state);
+    let guard = 0;
+    while (evalExprState(stmt.cond, state) && guard < MAX_WHILE_ITER) {
+        guard++;
+        runBody(stmt.body);
+        execForIncr(stmt.incr, state);
+    }
+}
+
 function formatSerialNumber(n, state, exprText) {
     const name = String(exprText || "").trim();
     const isFloat =

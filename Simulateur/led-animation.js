@@ -34,6 +34,7 @@ import { readBoardAnalogInputs } from './Engine/arduino-analog-ideal.mjs';
 import { sketchUsesSerial } from './Engine/arduino-uart-wave.mjs';
 import { getVoltageAtJonction } from './geometry.js';
 import { reachableJonctions } from './Engine/hc90-cascade.mjs';
+import { readMicroBoardDigitalInputs } from './Engine/arduino-live-inputs.mjs';
 import { isMicroBoard, microBoardPinLabelFromJonction } from './micro-board.js';
 import { syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
 import {
@@ -114,51 +115,14 @@ export function bindArduinoRuntimeTick(fn) {
 const arduinoRuntimes = new Map();
 let lastRuntimeStepMs = 0;
 
-function junctionNetReachesGnd(net) {
-    for (const j of net) {
-        if (typeof j === 'string' && (j.startsWith('GND') || /^GND\d*_/.test(j))) return true;
-    }
-    return false;
-}
-
-function junctionNetReachesHigh(net) {
-    for (const j of net) {
-        if (typeof j !== 'string') continue;
-        if (j.startsWith('VCC')) return true;
-        if (/^VDC\d*_in$/.test(j)) return true;
-    }
-    return false;
-}
-
 /** Niveaux d'entrée live (boutons/interrupteurs vers une rampe) pour un UNO. */
 function readUnoInputs(uno) {
-    const inputs = {};
-    const modes = uno.pinModes || {};
-    const wires = circuit.wires;
-    const aj = circuit.autoJunctions;
-    for (const [label, mode] of Object.entries(modes)) {
-        if (mode !== 'INPUT' && mode !== 'INPUT_PULLUP') continue;
-        const net = reachableJonctions(`${uno.label}_${label}`, wires, aj);
-        let value = 1;
-        if (junctionNetReachesGnd(net)) value = 0;
-        else if (junctionNetReachesHigh(net)) value = 1;
-        for (const comp of circuit.components) {
-            if (comp.type !== 'push_button' && comp.type !== 'switch_spdt') continue;
-            const a = `${comp.label}_in`;
-            const b = `${comp.label}_out`;
-            const pinSide = net.has(a) ? a : net.has(b) ? b : null;
-            if (!pinSide && comp.type === 'switch_spdt') continue;
-            if (comp.type === 'push_button') {
-                if (!pinSide) continue;
-                const otherSide = pinSide === a ? b : a;
-                const other = reachableJonctions(otherSide, wires, aj);
-                if (junctionNetReachesGnd(other)) value = comp.state === 1 ? 0 : 1;
-                else if (junctionNetReachesHigh(other)) value = comp.state === 1 ? 1 : 0;
-            }
-        }
-        inputs[label] = value;
-    }
-    return inputs;
+    return readMicroBoardDigitalInputs(
+        uno,
+        circuit.components,
+        circuit.wires,
+        circuit.autoJunctions
+    );
 }
 
 /** Avance (une fois par frame) les runtimes des UNO dont le sketch a un loop(). */

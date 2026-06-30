@@ -2,7 +2,8 @@
  * Joy-it RB-TFT1.8 — câblage SPI vers Arduino UNO ou ESP32-C3.
  */
 
-import { applyArduinoSketchToComponent, evaluateLoopVarBindings, sketchUsesAnalogInput } from "./arduino-sketch-parse.mjs";
+import { applyArduinoSketchToComponent, evaluateLoopVarBindings, sketchUsesAnalogInput, sketchUsesLiveInput } from "./arduino-sketch-parse.mjs";
+import { readMicroBoardDigitalInputs } from "./arduino-live-inputs.mjs";
 import {
     parseTft18FromSketch,
     pickTft18PhaseAt,
@@ -132,7 +133,8 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
     const hasTsl = sketchUsesTsl2591(sketch);
     const hasBmp = sketchUsesBmp280(sketch);
     const hasAnalog = sketchUsesAnalogInput(sketch);
-    if (!hasDht && !hasTsl && !hasBmp && !hasAnalog) return null;
+    const hasLiveInput = sketchUsesLiveInput(sketch);
+    if (!hasDht && !hasTsl && !hasBmp && !hasAnalog && !hasLiveInput) return null;
 
     const analogInputs = () => readBoardAnalogInputs(board, {
         components,
@@ -144,6 +146,11 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
     });
 
     return {
+        boardType: board.type,
+        liveInput: hasLiveInput,
+        inputs: hasLiveInput
+            ? readMicroBoardDigitalInputs(board, components, wires, autoJunctions)
+            : {},
         resolveDht: hasDht
             ? (arg) => resolveDhtPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
@@ -180,7 +187,8 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
 
 function needsRuntimeTftCtx(board) {
     const sketch = board?.sketch || "";
-    return sketchUsesDht(sketch) || sketchUsesTsl2591(sketch) || sketchUsesBmp280(sketch) || sketchUsesAnalogInput(sketch);
+    return sketchUsesDht(sketch) || sketchUsesTsl2591(sketch) || sketchUsesBmp280(sketch)
+        || sketchUsesAnalogInput(sketch) || sketchUsesLiveInput(sketch);
 }
 
 function tftHasVisibleContent(parsed) {
@@ -265,7 +273,7 @@ export function getIdealJoyitTft18Display(tftLabel, components, wires, autoJunct
     const pickDisplay = (parsedOrCache) => {
         const elapsedMs = Math.max(0, elapsedSec * 1000);
         const resolveOpts = needsRuntime ? { ctx: printCtx } : {};
-        const phase = parsedOrCache.hasTiming && parsedOrCache.phases?.length
+        const phase = !printCtx?.liveInput && parsedOrCache.hasTiming && parsedOrCache.phases?.length
             ? pickTft18PhaseAt(
                 parsedOrCache.phases,
                 elapsedMs,
