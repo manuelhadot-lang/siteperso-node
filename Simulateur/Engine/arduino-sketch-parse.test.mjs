@@ -129,4 +129,19 @@ assert.ok(incParsed.pinPhases?.length >= 2, "PORTD+1 phases");
 assert.equal(incParsed.pinPhases[0].levels.D0, 1);
 assert.equal(incParsed.pinPhases[1].levels.D1, 1);
 
+const gpioRead = parseArduinoSketch(
+    `void setup(){} void loop(){ if (digitalRead(4)==0) { digitalWrite(2,HIGH); } delay(100); }`,
+    "esp32_devkit"
+);
+assert.equal(gpioRead.pinModes.GPIO4, "INPUT_PULLUP", "digitalRead(4) → GPIO4 entrée");
+
+const rtBtn = createArduinoRuntime({
+    type: "esp32_devkit",
+    sketch: `void setup(){} void loop(){ if (digitalRead(4)==0) { digitalWrite(2,HIGH); } else { digitalWrite(2,LOW); } delay(50); }`,
+});
+stepArduinoRuntime(rtBtn, 60, { GPIO4: 0 }, {});
+assert.equal(arduinoRuntimeLevels(rtBtn).GPIO2, 1, "GPIO2 HIGH si GPIO4 à 0");
+stepArduinoRuntime(rtBtn, 60, { GPIO4: 1 }, {});
+assert.equal(arduinoRuntimeLevels(rtBtn).GPIO2, 0, "GPIO2 LOW si GPIO4 relâché");
+
 console.log("arduino-sketch-parse.test.mjs OK");

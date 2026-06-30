@@ -185,6 +185,24 @@ function pinLabel(pin, boardType = "arduino_uno") {
     return null;
 }
 
+/** Broches lues via digitalRead() — entrée simulée même sans pinMode explicite. */
+function collectDigitalReadPinLabels(src, boardType, pinArrays) {
+    const labels = new Set();
+    for (const m of String(src).matchAll(/\bdigitalRead\s*\(\s*([^()]+?)\s*\)/gi)) {
+        const pin = resolvePinFromSketchToken(m[1].trim(), boardType, pinArrays);
+        const label = pinLabel(pin, boardType);
+        if (label) labels.add(label);
+    }
+    return labels;
+}
+
+function applyDigitalReadInputModes(pinModes, readLabels) {
+    for (const label of readLabels) {
+        if (pinModes[label] === "OUTPUT") continue;
+        if (!pinModes[label]) pinModes[label] = "INPUT_PULLUP";
+    }
+}
+
 /* ---------------------------------------------------------------------------
  * Mini-interpréteur de sketch : variables, delay, incréments, écritures PORTx.
  * Génère des phases temporelles (compteur, séquences) pour l'animation.
@@ -1361,6 +1379,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
     let pinPhases = [];
     const pinNum = (token) => resolvePinFromSketchToken(token, boardType, pinArrays);
     const labelOf = (pin) => pinLabel(pin, boardType);
+    const digitalReadLabels = collectDigitalReadPinLabels(src, boardType, pinArrays);
 
     for (const m of src.matchAll(/pinMode\s*\(\s*([^,)]+)\s*,\s*(OUTPUT|INPUT_PULLUP|INPUT)\s*\)/gi)) {
         const pin = pinNum(m[1]);
@@ -1523,11 +1542,13 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
                 pins: {},
             });
             for (const [label, lv] of Object.entries(levels)) {
+                if (digitalReadLabels.has(label)) continue;
                 pinModes[label] = "OUTPUT";
                 pinLevels[label] = lv ? 1 : 0;
                 delete pinPulses[label];
             }
         }
+        applyDigitalReadInputModes(pinModes, digitalReadLabels);
         return {
             pinModes,
             pinLevels,
@@ -1564,6 +1585,8 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
             delete syncedLevels[label];
         }
     }
+
+    applyDigitalReadInputModes(syncedModes, digitalReadLabels);
 
     return {
         pinModes: syncedModes,
