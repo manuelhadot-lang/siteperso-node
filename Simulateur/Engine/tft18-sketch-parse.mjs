@@ -269,6 +269,50 @@ function execTftStatements(stmts, st, ctx, phases, delayAcc) {
     }
 }
 
+/** Exécute le corps jusqu'à timeBudgetMs (delay() suspend les instructions suivantes). */
+function execTftStatementsUpToTime(stmts, st, ctx, timeBudgetMs, timeAcc) {
+    const evalState = createTftEvalState(ctx);
+    for (const stmt of stmts) {
+        if (timeAcc.val > timeBudgetMs) return;
+        if (stmt.type === "expr") {
+            const d = execTftCall(stmt.text, st, ctx);
+            if (d > 0) {
+                if (timeAcc.val + d > timeBudgetMs) return;
+                timeAcc.val += d;
+            }
+        } else if (stmt.type === "if") {
+            if (evalSketchExpression(stmt.cond, evalState)) {
+                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc);
+            } else if (stmt.elseBody) {
+                execTftStatementsUpToTime(stmt.elseBody, st, ctx, timeBudgetMs, timeAcc);
+            }
+        } else if (stmt.type === "while") {
+            let guard = 0;
+            while (evalSketchExpression(stmt.cond, evalState) && guard < MAX_TFT_LOOP_GUARD) {
+                if (timeAcc.val > timeBudgetMs) return;
+                guard++;
+                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc);
+            }
+        } else if (stmt.type === "for") {
+            runSketchForLoop(stmt, evalState, (body) => {
+                execTftStatementsUpToTime(body, st, ctx, timeBudgetMs, timeAcc);
+            });
+        }
+    }
+}
+
+function computeLiveLoopCycleMs(body) {
+    const delays = [...String(body).matchAll(/\bdelay\s*\(\s*(\d+)\s*\)/gi)];
+    if (!delays.length) return TFT18_DEFAULT_LOOP_MS;
+    const max = Math.max(...delays.map((m) => parseInt(m[1], 10)));
+    return max + 1;
+}
+
+function executeBodyUpToTime(body, st, ctx, timeBudgetMs) {
+    const timeAcc = { val: 0 };
+    execTftStatementsUpToTime(parseSketchBodyStatements(body), st, ctx, timeBudgetMs, timeAcc);
+}
+
 /** Exécute setup/loop ; capture les phases aux delay(). Gère if/else et digitalRead(). */
 function executeBody(body, st, ctx) {
     const phases = [];
@@ -408,7 +452,45 @@ export function pickTft18PhaseAt(phases, elapsedMs, loopCycleMs, setupDurationMs
 
 export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
     if (!parsed) return null;
-    if (parsed.hasTiming && parsed.phases?.length && !opts?.ctx?.liveInput) {
+
+    const setupDuration = parsed.setupDurationMs ?? 0;
+    const setupPhaseCount = parsed.setupPhaseCount ?? 0;
+
+    if (setupDuration > 0 && elapsedMs < setupDuration && parsed.phases?.length) {
+        const ph = pickTft18PhaseAt(
+            parsed.phases,
+            elapsedMs,
+            parsed.loopCycleMs ?? 0,
+            setupDuration,
+            setupPhaseCount
+        );
+        if (ph) return ph;
+    }
+
+    if (opts?.ctx?.liveInput && parsed.sketchSrc) {
+        const loopBody = expandUserFunctionCalls(extractFunctionBody(parsed.sketchSrc, "loop"), parsed.sketchSrc);
+        const st = parsed.setupEndState
+            ? cloneState(parsed.setupEndState)
+            : createState();
+        if (!parsed.setupEndState) {
+            st.bg = parsed.bg;
+            st.fg = parsed.fg;
+            st.textSize = parsed.textSize;
+            st.rotation = parsed.rotation || 0;
+        }
+        const ctx = {
+            src: parsed.sketchSrc,
+            ...opts.ctx,
+            varBindings: opts.ctx.collectVarBindings?.(loopBody) || {},
+        };
+        const loopElapsed = Math.max(0, elapsedMs - setupDuration);
+        const loopCycle = computeLiveLoopCycleMs(loopBody);
+        const loopTimeMs = loopCycle > 0 ? loopElapsed % loopCycle : loopElapsed;
+        executeBodyUpToTime(loopBody, st, ctx, loopTimeMs);
+        return snapshotState(st);
+    }
+
+    if (parsed.hasTiming && parsed.phases?.length) {
         const ph = pickTft18PhaseAt(
             parsed.phases,
             elapsedMs,
