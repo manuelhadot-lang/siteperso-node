@@ -30,6 +30,7 @@ float alt = bmp.readAltitude(1013.25);`;
 const bindings = buildBmpVarBindingsFromBody(body, "bmp", 22.5, 1018);
 assert.equal(bindings.t, "22.5");
 assert.equal(bindings.p, "1018");
+assert.equal(bindings.alt, "-39.5");
 
 const components = [
     { type: "arduino_uno", label: "UNO1", sketch, lastCompileOk: true },
@@ -49,6 +50,7 @@ assert.equal(readings?.pressurePa, 100820);
 const loopBindings = buildBmpVarBindings(body, sketch, "UNO1", components, wires, []);
 assert.equal(loopBindings.p, "1008.2");
 assert.equal(loopBindings.t, "21.3");
+assert.equal(loopBindings.alt, "42.1");
 
 assert.equal(
     resolveBmpPrintArg("bmp.readPressure()", sketch, "UNO1", components, wires, []),

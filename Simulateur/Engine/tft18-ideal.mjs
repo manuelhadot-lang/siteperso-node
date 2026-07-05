@@ -13,6 +13,7 @@ import {
 import { resolveDhtPrintArg, buildDhtVarBindings } from "./dht22-ideal.mjs";
 import { resolveTslPrintArg, buildTslVarBindings } from "./tsl2591-ideal.mjs";
 import { resolveBmpPrintArg, buildBmpVarBindings } from "./bmp280-ideal.mjs";
+import { collectUserFunctions } from "./sketch-functions.mjs";
 import { sketchUsesDht } from "./dht22-sketch-parse.mjs";
 import { sketchUsesTsl2591 } from "./tsl2591-sketch-parse.mjs";
 import { sketchUsesBmp280 } from "./bmp280-sketch-parse.mjs";
@@ -151,6 +152,7 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
     let setupDone = false;
     if (hasLiveInput) {
         inputs = readMicroBoardDigitalInputs(board, components, wires, autoJunctions);
+        board._tftLoopVars = board._tftLoopVars || {};
         const inputKey = JSON.stringify(inputs);
         if (board._tftLastInputKey !== inputKey) {
             board._tftInputChangedAtMs = elapsedMs;
@@ -166,6 +168,8 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
         inputs,
         inputChangedAtMs,
         setupDone,
+        persistedVars: board._tftLoopVars,
+        getAnalogInputs: analogInputs,
         resolveDht: hasDht
             ? (arg) => resolveDhtPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
@@ -176,23 +180,27 @@ function buildTftPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
             ? (arg) => resolveBmpPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
         collectVarBindings: (body) => {
-            let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs()) : {};
+            let scanBody = body || "";
+            for (const fn of collectUserFunctions(sketch).values()) {
+                scanBody += `\n${fn.body}`;
+            }
+            let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs(), board.type) : {};
             if (hasDht) {
                 bindings = {
                     ...bindings,
-                    ...buildDhtVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                    ...buildDhtVarBindings(scanBody, sketch, board.label, components, wires, autoJunctions),
                 };
             }
             if (hasTsl) {
                 bindings = {
                     ...bindings,
-                    ...buildTslVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                    ...buildTslVarBindings(scanBody, sketch, board.label, components, wires, autoJunctions),
                 };
             }
             if (hasBmp) {
                 bindings = {
                     ...bindings,
-                    ...buildBmpVarBindings(body, sketch, board.label, components, wires, autoJunctions),
+                    ...buildBmpVarBindings(scanBody, sketch, board.label, components, wires, autoJunctions),
                 };
             }
             return bindings;

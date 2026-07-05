@@ -13,6 +13,19 @@ import {
     appendLm386Netlist,
     isLm386Type,
 } from "./lm386.mjs";
+import {
+    appendLm7805Netlist,
+    isLm7805Type,
+} from "./lm7805.mjs";
+import {
+    appendIr2104Netlist,
+    isIr2104Type,
+} from "./ir2104.mjs";
+import {
+    appendL293dNetlist,
+    isL293dType,
+} from "./l293d.mjs";
+import { appendNmosNetlist } from "./nmos.mjs";
 
 import {
     logicVhi,
@@ -163,6 +176,8 @@ function isTwoTerminalType(t) {
         t === "ohmmeter" ||
         t === "bode_analyzer" ||
         t === "speaker" ||
+        t === "dc_motor" ||
+        t === "servo_motor" ||
         t === "push_button"
     );
 }
@@ -173,6 +188,18 @@ function isBodeAnalyzerType(t) {
 
 function isSpeakerType(t) {
     return t === "speaker";
+}
+
+function isDcMotorType(t) {
+    return t === "dc_motor";
+}
+
+function isServoMotorType(t) {
+    return t === "servo_motor";
+}
+
+function isResistiveLoadType(t) {
+    return isSpeakerType(t) || isDcMotorType(t) || isServoMotorType(t);
 }
 
 function isVoltmeterRmsType(t) {
@@ -215,8 +242,20 @@ function isLm386ComponentType(t) {
     return isLm386Type(t);
 }
 
+function isLm7805ComponentType(t) {
+    return isLm7805Type(t);
+}
+
+function isIr2104ComponentType(t) {
+    return isIr2104Type(t);
+}
+
+function isL293dComponentType(t) {
+    return isL293dType(t);
+}
+
 function isThreeTerminalType(t) {
-    return t === "npn" || t === "opamp" || t === "potentiometer" || t === "switch_spdt";
+    return t === "npn" || t === "nmos" || t === "opamp" || t === "potentiometer" || t === "switch_spdt";
 }
 
 function isSeg7Type(t) {
@@ -288,6 +327,19 @@ function terminalKeysForComponent(c) {
     if (isLm386ComponentType(c.type)) {
         const keys = [];
         for (let i = 0; i < 8; i++) keys.push(`${c.id}#${i}`);
+        return keys;
+    }
+    if (isLm7805ComponentType(c.type)) {
+        return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
+    }
+    if (isIr2104ComponentType(c.type)) {
+        const keys = [];
+        for (let i = 0; i < 8; i++) keys.push(`${c.id}#${i}`);
+        return keys;
+    }
+    if (isL293dComponentType(c.type)) {
+        const keys = [];
+        for (let i = 0; i < 16; i++) keys.push(`${c.id}#${i}`);
         return keys;
     }
     if (isThreeTerminalType(c.type)) return [`${c.id}#0`, `${c.id}#1`, `${c.id}#2`];
@@ -1681,6 +1733,7 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
 
     const declaredDiodeModels = new Set();
     const declaredBjtModels = new Set();
+    const declaredMosfetModels = new Set();
 
     let oscillatorCapKickDone = false;
     let oscillatorTankNode = null;
@@ -1736,22 +1789,33 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n1 = nodeFor(`${c.id}#1`);
             const henry = parseInductanceHenry(c.value);
             lines.push(`${spiceBranchName("L", c.id)} ${n0} ${n1} ${henry}`);
-        } else if (isSpeakerType(c.type)) {
+        } else if (isResistiveLoadType(c.type)) {
             const nMinus = nodeFor(`${c.id}#0`);
             const nPlus = nodeFor(`${c.id}#1`);
             const kp = `${c.id}#0`;
             const km = `${c.id}#1`;
+            const kind = isDcMotorType(c.type)
+                ? "Moteur DC"
+                : isServoMotorType(c.type)
+                    ? "Servo moteur"
+                    : "Haut-parleur";
             if ((terminalWireCount.get(kp) || 0) === 0 || (terminalWireCount.get(km) || 0) === 0) {
                 warnings.push(
-                    `Haut-parleur ${c.id} : reliez les deux bornes (+ et −) au circuit.`
+                    `${kind} ${c.id} : reliez les bornes d'alimentation (+ et −) au circuit.`
+                );
+            }
+            if ((terminalWireCount.get(`${c.id}#2`) || 0) === 0 && isServoMotorType(c.type)) {
+                warnings.push(
+                    `Servo moteur ${c.id} : reliez la broche signal (S) au circuit.`
                 );
             }
             if (nPlus === nMinus) {
                 warnings.push(
-                    `Haut-parleur ${c.id} : les deux bornes sont sur le même nœud (${nPlus}).`
+                    `${kind} ${c.id} : les deux bornes sont sur le même nœud (${nPlus}).`
                 );
             }
-            const ohms = parseResistanceOhm(c.value) > 0 ? parseResistanceOhm(c.value) : 8;
+            const defaultOhms = isDcMotorType(c.type) ? 50 : isServoMotorType(c.type) ? 100 : 8;
+            const ohms = parseResistanceOhm(c.value) > 0 ? parseResistanceOhm(c.value) : defaultOhms;
             lines.push(`${spiceBranchName("R", c.id)} ${nMinus} ${nPlus} ${ohms}`);
         } else if (c.type === "diode") {
             const n0 = nodeFor(`${c.id}#0`);
@@ -1830,6 +1894,13 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 }
             }
             lines.push(`${spiceBranchName("Q", c.id)} ${nc} ${nb} ${ne} ${model}`);
+        } else if (c.type === "nmos") {
+            appendNmosNetlist(c, {
+                nodeFor,
+                lines,
+                declaredMosfetModels,
+                spiceBranchName,
+            });
         } else if (c.type === "opamp") {
             const nPlus = nodeFor(`${c.id}#0`);
             const nMinus = nodeFor(`${c.id}#1`);
@@ -1864,6 +1935,30 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 terminalWireCount,
                 spiceBranchName,
                 spiceVoltageDiffExpr,
+            });
+        } else if (isLm7805ComponentType(c.type)) {
+            appendLm7805Netlist(c, {
+                nodeFor,
+                lines,
+                warnings,
+                terminalWireCount,
+                spiceBranchName,
+            });
+        } else if (isIr2104ComponentType(c.type)) {
+            appendIr2104Netlist(c, {
+                nodeFor,
+                lines,
+                warnings,
+                terminalWireCount,
+                spiceBranchName,
+            });
+        } else if (isL293dComponentType(c.type)) {
+            appendL293dNetlist(c, {
+                nodeFor,
+                lines,
+                warnings,
+                terminalWireCount,
+                spiceBranchName,
             });
         } else if (isLogicGateComponentType(c.type)) {
             const inKeys = logicGateInputNodeKeys(c);

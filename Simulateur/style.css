@@ -190,6 +190,38 @@ body.theme-light .menu-item:hover .menu-icon {
     min-width: 0;
 }
 
+.sim-visit-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #81c784;
+    border: 1px solid rgba(129, 199, 132, 0.45);
+    border-radius: 4px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.sim-visit-count {
+    font-size: 12px;
+    font-weight: 700;
+    color: #a5d6a7;
+    font-variant-numeric: tabular-nums;
+}
+
+body.theme-light .sim-visit-badge {
+    color: #2e7d32;
+    border-color: rgba(46, 125, 50, 0.35);
+}
+
+body.theme-light .sim-visit-count {
+    color: #1b5e20;
+}
+
 .ui-version-badge {
     font-size: 10px;
     font-weight: 700;
@@ -1397,4 +1429,81 @@ body.arduino-panel-resizing * {
 
 .panel-mini-btn:hover {
     background: #455a64;
+}
+
+/* Impression A4 paysage */
+.modal-content--print {
+    width: min(980px, 96vw);
+    max-height: 94vh;
+    margin: 2vh auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-content--print h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    flex-shrink: 0;
+}
+
+.print-preview-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.print-preview-frame {
+    width: 100%;
+    aspect-ratio: 297 / 210;
+    height: auto;
+    max-height: calc(94vh - 130px);
+    flex: 0 0 auto;
+    border: 1px solid var(--border-color);
+    background: #666;
+}
+
+.print-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.modal-content--cartouche h2 {
+    margin: 0 0 12px;
+    font-size: 17px;
+}
+
+.cartouche-form {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 8px 10px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.cartouche-form label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.cartouche-form input,
+.cartouche-form textarea {
+    width: 100%;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.cartouche-form textarea {
+    grid-column: 2;
+    resize: vertical;
+    min-height: 48px;
 }

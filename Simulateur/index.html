@@ -17,6 +17,7 @@
                 <div class="dropdown-item dropdown-item--icon" id="btn-open"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Ouvrir...</div>
                 <div class="dropdown-item dropdown-item--icon" id="btn-save"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>Enregistrer</div>
                 <div class="dropdown-item dropdown-item--icon" id="btn-save-as"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v3a2 2 0 0 0 2 2h5"/><path d="M18 8v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><path d="M7 18h7"/><path d="M7 13h10"/><path d="M7 8h3"/></svg>Enregistrer sous...</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-print"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Imprimer…</div>
             </div>
         </div>
 
@@ -24,6 +25,9 @@
             <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></span> Éditeur
             <div class="dropdown">
                 <div class="dropdown-item" id="btn-commands">Commandes</div>
+                <div class="dropdown-item" id="btn-toggle-grid">Grille ✓</div>
+                <div class="dropdown-item" id="btn-toggle-print-frame">Cadre A4 (masqué)</div>
+                <div class="dropdown-item" id="btn-edit-cartouche">Cartouche…</div>
                 <div class="dropdown-item" id="btn-theme-dark">Sombre</div>
                 <div class="dropdown-item" id="btn-theme-light">Clair</div>
             </div>
@@ -34,6 +38,7 @@
             <div class="dropdown">
                 <div class="dropdown-item" draggable="true" data-component="battery">Pile DC</div>
                 <div class="dropdown-item" draggable="true" data-component="vcc">Alimentation VCC</div>
+                <div class="dropdown-item" draggable="true" data-component="lm7805" title="Régulateur linéaire +5 V (TO-220) — double-clic pour la fiche">LM7805 (+5 V)</div>
                 <div class="dropdown-item" draggable="true" data-component="gnd">Masse (0 V)</div>
                 <div class="dropdown-item" draggable="true" data-component="gimp">GImp — horloge / impulsions</div>
                 <div class="dropdown-item" draggable="true" data-component="gsin">Générateur sinusoïdal</div>
@@ -56,6 +61,8 @@
                     <span class="dropdown-item submenu-title">Transistors</span>
                     <div class="submenu">
                         <div class="dropdown-item" draggable="true" data-component="npn">2N2222</div>
+                        <div class="dropdown-item" draggable="true" data-component="nmos" title="MOSFET N logique — double-clic pour retourner">IRLZ44N</div>
+                        <div class="dropdown-item" draggable="true" data-component="ir2104" title="Driver demi-pont MOSFET — double-clic pour la fiche broches">IR2104</div>
                     </div>
                 </div>
                 <div class="dropdown-submenu">
@@ -65,6 +72,15 @@
                         <div class="dropdown-item" draggable="true" data-component="lm386" title="Amplificateur audio mono 9 V — double-clic pour la fiche broches / gain">LM386</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="menu-item">
+            <span class="menu-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span> Mécanique
+            <div class="dropdown">
+                <div class="dropdown-item" draggable="true" data-component="dc_motor" title="Moteur DC — double-clic pour la fiche">Moteur DC</div>
+                <div class="dropdown-item" draggable="true" data-component="servo_motor" title="Servo moteur — palonnier 0–180° — double-clic pour la fiche">Servo moteur</div>
+                <div class="dropdown-item" draggable="true" data-component="l293d" title="Driver moteur double H — double-clic pour la fiche broches">L293D</div>
             </div>
         </div>
 
@@ -151,6 +167,10 @@
         </div>
 
         <div class="simulation-controls">
+            <span class="sim-visit-badge" id="sim-visit-badge" title="Nombre de visites du simulateur">
+                <span class="sim-visit-count" id="sim-visit-count">…</span>
+                <span class="sim-visit-label">visites</span>
+            </span>
             <span class="ui-version-badge" id="ui-version-badge" title="Version de l'interface">UI icons4</span>
             <span id="circuit-name" class="circuit-name" title="Nom du montage">Sans titre</span>
             <button id="btn-simulate" type="button"><span class="btn-icon" aria-hidden="true"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg></span>Lancer la simulation</button>
@@ -647,6 +667,324 @@
         </div>
     </div>
 
+    <div id="lm7805-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-lm7805-doc">&times;</span>
+            <h2 id="lm7805-doc-title">LM7805 — Régulateur +5 V</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>LM7805</strong> est un régulateur de tension <strong>fixe +5 V</strong>
+                    en boîtier <strong>TO-220</strong>. Il abaisse une tension d’entrée élevée (ex. 9 V, 12 V)
+                    vers <strong>5 V stabilisés</strong> pour alimenter une carte Arduino, des capteurs 5 V, etc.
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Symbole</th><th>Jonction</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>IN</td><td><code>…_IN</code></td><td>Entrée non régulée (Vin)</td></tr>
+                        <tr><td>2</td><td>GND</td><td><code>…_GND</code></td><td>Masse (0 V)</td></tr>
+                        <tr><td>3</td><td>OUT</td><td><code>…_OUT</code></td><td>Sortie régulée +5 V</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Vue dessus du TO-220 : broches numérotées <strong>1 → 3 de haut en bas</strong> côté gauche du symbole.
+                    L’ailette métallique est aussi reliée à la masse (non modélisée séparément).
+                </p>
+                <h3>Caractéristiques (typiques datasheet)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Paramètre</th><th>Valeur</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Tension de sortie</td><td><strong>+5 V</strong> ±2 %</td></tr>
+                        <tr><td>Tension d’entrée minimale</td><td><strong>≈ 7 V</strong> (Vin − Vout ≥ 2 V)</td></tr>
+                        <tr><td>Courant de sortie max.</td><td><strong>1 A</strong> (avec dissipateur thermique si besoin)</td></tr>
+                        <tr><td>Chute (dropout)</td><td><strong>≈ 2 V</strong> sous charge</td></tr>
+                    </tbody>
+                </table>
+                <h3>Montage type (9 V → 5 V)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Remarque</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Pile 9 V ou <code>VCC</code> 9 V</td><td><code>7805_1</code> <strong>IN</strong> (1)</td><td>Entrée du régulateur</td></tr>
+                        <tr><td><code>7805_1</code> <strong>GND</strong> (2)</td><td><code>GND_1</code></td><td>Masse commune</td></tr>
+                        <tr><td><code>7805_1</code> <strong>OUT</strong> (3)</td><td>Charge (UNO 5V, capteurs…)</td><td>Sortie stabilisée</td></tr>
+                        <tr><td>Condensateur 100 nF</td><td>entre <strong>OUT</strong> et <strong>GND</strong></td><td>Filtrage HF (recommandé)</td></tr>
+                        <tr><td>Condensateur 10–100 µF</td><td>entre <strong>IN</strong> et <strong>GND</strong></td><td>Stabilisation entrée</td></tr>
+                    </tbody>
+                </table>
+                <h3>Simulation</h3>
+                <p>
+                    Modèle idéal : si <strong>Vin ≥ 7 V</strong> (broche IN par rapport à GND), la sortie vaut
+                    <strong>5 V</strong>. En dessous, la sortie suit approximativement <strong>Vin − 2 V</strong>
+                    (régulation perdue). Compatible <strong>voltmètre</strong>, <strong>oscilloscope</strong>
+                    et lecture analogique Arduino/ESP32.
+                </p>
+                <h3>Précautions</h3>
+                <ul class="doc-list">
+                    <li><strong>Polarité</strong> : IN et OUT ne doivent pas être inversés — risque de destruction du CI.</li>
+                    <li><strong>ESP32 / capteurs 3,3 V</strong> : le LM7805 sort du <strong>5 V</strong> — n’alimentez pas directement un ESP32 (broches 3,3 V max.).</li>
+                    <li><strong>Dissipation</strong> : P ≈ (Vin − 5 V) × I ; à 12 V et 500 mA → 3,5 W — le CI chauffe.</li>
+                    <li><strong>Court-circuit OUT–GND</strong> : le régulateur limite le courant (~750 mA) mais chauffe fortement.</li>
+                </ul>
+                <p class="doc-hint">
+                    <strong>Double-clic</strong> sur le symbole pour rouvrir cette fiche.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="ir2104-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-ir2104-doc">&times;</span>
+            <h2 id="ir2104-doc-title">IR2104 — Driver demi-pont</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    L'<strong>IR2104</strong> est un <strong>driver de grille demi-pont</strong> (boîtier DIP-8)
+                    qui commande un MOSFET <strong>haut</strong> (HO) et un MOSFET <strong>bas</strong> (LO)
+                    à partir d'une entrée logique <strong>IN</strong>. Il intègre la logique anti-court-circuit
+                    et le bootstrap pour le côté haut.
+                </p>
+                <h3>Broches du symbole (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Symbole</th><th>Jonction</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>LO</td><td><code>…_LO</code></td><td>Sortie grille MOSFET bas (réf. COM)</td></tr>
+                        <tr><td>2</td><td>VS</td><td><code>…_VS</code></td><td>Retour flottant côté haut (source du NMOS haut)</td></tr>
+                        <tr><td>3</td><td>HO</td><td><code>…_HO</code></td><td>Sortie grille MOSFET haut (réf. VS)</td></tr>
+                        <tr><td>4</td><td>VB</td><td><code>…_VB</code></td><td>Alimentation bootstrap (condensateur vers VS)</td></tr>
+                        <tr><td>5</td><td>NC</td><td><code>…_NC</code></td><td>Non connectée</td></tr>
+                        <tr><td>6</td><td>VCC</td><td><code>…_VCC</code></td><td>Alimentation basse tension du driver (10–20 V typ.)</td></tr>
+                        <tr><td>7</td><td>COM</td><td><code>…_COM</code></td><td>Masse du CI</td></tr>
+                        <tr><td>8</td><td>IN</td><td><code>…_IN</code></td><td>Entrée logique de commande</td></tr>
+                    </tbody>
+                </table>
+                <h3>Logique (modèle idéal)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>IN</th><th>HO</th><th>LO</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Haut (&gt; Vth)</td><td>Actif → <strong>VB</strong></td><td>Inactif → <strong>COM</strong></td></tr>
+                        <tr><td>Bas (≤ Vth)</td><td>Inactif → <strong>VS</strong></td><td>Actif → <strong>VCC</strong></td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Seuil logique par défaut : <strong>2,5 V</strong> (réf. COM). Le bootstrap n'est pas modélisé
+                    dynamiquement — reliez <strong>VB</strong> à un condensateur chargé via diode depuis <strong>VCC</strong>,
+                    avec la borne − du condensateur sur <strong>VS</strong>.
+                </p>
+                <h3>Montage demi-pont type</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Remarque</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Alim. 12 V</td><td><strong>VCC</strong> (6) et rail moteur</td><td>Driver et charge</td></tr>
+                        <tr><td><strong>COM</strong> (7)</td><td>Masse</td><td>Référence logique</td></tr>
+                        <tr><td>GPIO / signal PWM</td><td><strong>IN</strong> (8)</td><td>Commande</td></tr>
+                        <tr><td><strong>LO</strong> (1)</td><td>Grille NMOS bas</td><td>MOSFET canal N (ex. IRLZ44N)</td></tr>
+                        <tr><td><strong>HO</strong> (3)</td><td>Grille NMOS haut</td><td>Même référence flottante</td></tr>
+                        <tr><td><strong>VS</strong> (2)</td><td>Source NMOS haut + borne − bootstrap</td><td>Point milieu du pont</td></tr>
+                        <tr><td>Condensateur bootstrap</td><td>entre <strong>VB</strong> (4) et <strong>VS</strong> (2)</td><td>Typ. 0,1–1 µF</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    <strong>Double-clic</strong> sur le symbole pour rouvrir cette fiche.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="l293d-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-l293d-doc">&times;</span>
+            <h2 id="l293d-doc-title">L293D — Driver moteur</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>L293D</strong> intègre <strong>deux ponts en H</strong> (4 canaux) pour piloter
+                    moteurs DC, pas à pas ou relais depuis une logique <strong>5 V</strong> (Arduino).
+                    Pas de bootstrap : alimentation moteur séparée sur <strong>Vs (16)</strong>.
+                </p>
+                <h3>Canal 1 — moteur DC (broches 1–8)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Broche</th><th>Symbole</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>EN12</td><td>Active les canaux 1 et 2 (HIGH = actif)</td></tr>
+                        <tr><td>2</td><td>A1</td><td>Entrée logique 1</td></tr>
+                        <tr><td>3</td><td>Y1</td><td>Sortie 1 → borne + moteur</td></tr>
+                        <tr><td>4–5</td><td>GND</td><td>Masse puissance (dissipation)</td></tr>
+                        <tr><td>6</td><td>Y2</td><td>Sortie 2 → borne − moteur</td></tr>
+                        <tr><td>7</td><td>A2</td><td>Entrée logique 2</td></tr>
+                        <tr><td>8</td><td>VSS</td><td>Alimentation logique (5 V)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Logique canal 1–2 (EN12 actif)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>A1</th><th>A2</th><th>Y1</th><th>Y2</th><th>Moteur</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>0</td><td>Vs</td><td>0</td><td>Avant</td></tr>
+                        <tr><td>0</td><td>1</td><td>0</td><td>Vs</td><td>Arrière</td></tr>
+                        <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>Arrêt</td></tr>
+                        <tr><td>1</td><td>1</td><td>0</td><td>0</td><td>Freinage</td></tr>
+                    </tbody>
+                </table>
+                <h3>Montage type Arduino + moteur 12 V</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Arduino <strong>5V</strong></td><td><strong>VSS</strong> (8) et <strong>EN12</strong> (1)</td></tr>
+                        <tr><td>Arduino <strong>GND</strong></td><td><strong>GND</strong> (4) + masse commune</td></tr>
+                        <tr><td>Arduino <strong>D9</strong> (PWM)</td><td><strong>A1</strong> (2)</td></tr>
+                        <tr><td>Arduino <strong>D10</strong></td><td><strong>A2</strong> (7) — LOW pour avancer</td></tr>
+                        <tr><td>Pile <strong>12 V</strong></td><td><strong>Vs</strong> (16)</td></tr>
+                        <tr><td>Moteur</td><td>entre <strong>Y1</strong> (3) et <strong>Y2</strong> (6)</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Courant max. ~600 mA par canal. Canaux 3–4 (broches 9–15) : même logique avec <strong>EN34</strong>.
+                    <strong>Double-clic</strong> sur le symbole pour rouvrir cette fiche.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="dc-motor-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-dc-motor-doc">&times;</span>
+            <h2 id="dc-motor-doc-title">Moteur DC</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>moteur DC</strong> modélise une charge rotative alimentée en courant continu.
+                    En simulation, le rotor <strong>tourne en continu</strong> dès qu’une tension suffisante
+                    est appliquée entre les broches <strong>+</strong> et <strong>−</strong> ; la vitesse
+                    visuelle est proportionnelle à cette tension.
+                </p>
+                <h3>Broches du symbole</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Symbole</th><th>Jonction</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>+</strong></td><td><code>…_plus</code></td><td>Pôle positif (rouge)</td></tr>
+                        <tr><td><strong>−</strong></td><td><code>…_minus</code></td><td>Pôle négatif / masse</td></tr>
+                    </tbody>
+                </table>
+                <h3>Montage type</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Remarque</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Pile ou <code>VCC</code></td><td><code>M1</code> <strong>+</strong></td><td>Alimentation</td></tr>
+                        <tr><td><code>M1</code> <strong>−</strong></td><td><code>GND_1</code></td><td>Retour courant</td></tr>
+                        <tr><td>Masse pile</td><td><code>GND_1</code></td><td>Masse commune</td></tr>
+                    </tbody>
+                </table>
+                <h3>Simulation</h3>
+                <ul class="doc-list">
+                    <li>Modèle SPICE : résistance interne (défaut <strong>50 Ω</strong>) entre <strong>+</strong> et <strong>−</strong>.</li>
+                    <li>Seuil de rotation : tension &gt; <strong>≈ 0,35 V</strong>.</li>
+                    <li>Vitesse d’animation : jusqu’à <strong>720°/s</strong> à pleine tension.</li>
+                    <li>Sens de rotation : dépend de la polarité (+ vers −).</li>
+                    <li>Le symbole est <strong>rotatable</strong> (touche <strong>R</strong>).</li>
+                </ul>
+                <h3>Raccourcis</h3>
+                <p class="doc-hint">
+                    <strong>Double-clic</strong> : cette fiche.<br>
+                    <strong>Maj + double-clic</strong> : modifier la résistance interne (Ω).
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div id="servo-motor-doc-modal" class="modal hidden">
+        <div class="modal-content modal-content--doc">
+            <span class="close-modal" id="close-servo-motor-doc">&times;</span>
+            <h2 id="servo-motor-doc-title">Servo moteur</h2>
+            <div class="modal-body modal-body--doc">
+                <p>
+                    Le <strong>servo moteur</strong> (type hobby SG90 / MG90S) possède un <strong>palonnier</strong>
+                    qui se place entre <strong>0°</strong> et <strong>180°</strong> selon la tension de la broche
+                    <strong>signal (S)</strong>, lorsque l’alimentation <strong>+ / −</strong> est correcte.
+                </p>
+                <h3>Broches du symbole</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Symbole</th><th>Jonction</th><th>Rôle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>+</strong></td><td><code>…_plus</code></td><td>Alimentation (4,8–6 V typ.)</td></tr>
+                        <tr><td><strong>−</strong></td><td><code>…_minus</code></td><td>Masse (0 V)</td></tr>
+                        <tr><td><strong>S</strong></td><td><code>…_signal</code></td><td>Commande (tension 0 → V<sub>cc</sub>)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Position du palonnier (simulateur)</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>Tension sur S (vs masse)</th><th>Angle</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>0 V</strong></td><td>0° (extrémité gauche)</td></tr>
+                        <tr><td><strong>V<sub>cc</sub> / 2</strong> (ex. 2,5 V sur 5 V)</td><td>90° (centre)</td></tr>
+                        <tr><td><strong>V<sub>cc</sub></strong> (ex. 5 V)</td><td>180° (extrémité droite)</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    Modèle simplifié en <strong>tension continue</strong> sur S (pas de PWM 1–2 ms).
+                    Le palonnier se déplace progressivement (~360°/s) vers la consigne.
+                </p>
+                <h3>Montage type (5 V) — potentiomètre</h3>
+                <table class="doc-pin-table">
+                    <thead>
+                        <tr><th>De</th><th>Vers</th><th>Remarque</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>VCC</code> 5 V</td><td><code>POT1</code> borne <strong>1</strong> (entrée)</td><td>Extrémité haute du pot</td></tr>
+                        <tr><td><code>GND_1</code></td><td><code>POT1</code> borne <strong>3</strong> (sortie)</td><td>Extrémité basse du pot</td></tr>
+                        <tr><td><code>POT1</code> <strong>curseur</strong></td><td><code>SV1</code> <strong>S</strong></td><td>Consigne 0–5 V (pas une borne fixe)</td></tr>
+                        <tr><td><code>VCC</code> 5 V</td><td><code>SV1</code> <strong>+</strong></td><td>Alimentation servo</td></tr>
+                        <tr><td><code>GND_1</code></td><td><code>SV1</code> <strong>−</strong></td><td>Masse</td></tr>
+                    </tbody>
+                </table>
+                <p class="doc-hint">
+                    <strong>Important :</strong> ne placez pas de pile ou de source fixe sur le <strong>curseur</strong> du pot
+                    (conflit de tension → palonnier bloqué au centre). La broche <strong>S</strong> doit recevoir
+                    la tension du curseur, pas une borne extrémité du pot.
+                </p>
+                <h3>Autres commandes</h3>
+                <ul class="doc-list">
+                    <li><strong>Borne Numérique</strong> 0/1 → 0 V / 5 V sur S.</li>
+                    <li><strong>Diviseur résistif</strong> ou sortie Arduino/ESP32 (0–5 V).</li>
+                </ul>
+                <h3>Simulation</h3>
+                <ul class="doc-list">
+                    <li>Modèle SPICE : résistance interne (défaut <strong>100 Ω</strong>) entre <strong>+</strong> et <strong>−</strong> uniquement.</li>
+                    <li>Broche <strong>S</strong> : entrée haute impédance (non modélisée en SPICE).</li>
+                    <li>Alimentation minimale : <strong>V<sub>cc</sub> ≥ 3 V</strong> entre + et − pour activer le servo.</li>
+                    <li>Symbole <strong>rotatable</strong> (touche <strong>R</strong>).</li>
+                </ul>
+                <h3>Raccourcis</h3>
+                <p class="doc-hint">
+                    <strong>Double-clic</strong> : cette fiche.<br>
+                    <strong>Maj + double-clic</strong> : modifier la résistance interne (Ω).
+                </p>
+            </div>
+        </div>
+    </div>
+
     <div id="hc90-doc-modal" class="modal hidden">
         <div class="modal-content modal-content--doc">
             <span class="close-modal" id="close-hc90-doc">&times;</span>
@@ -904,6 +1242,45 @@ void loop() {
         </div>
     </div>
 
+    <div id="print-preview-modal" class="modal hidden">
+        <div class="modal-content modal-content--print">
+            <span class="close-modal" id="close-print-preview">&times;</span>
+            <h2>Aperçu avant impression — A4 paysage</h2>
+            <p class="print-preview-hint">La page A4 entière est affichée sans défilement. Vérifiez le rendu puis cliquez sur « Imprimer » (format paysage).</p>
+            <iframe id="print-preview-frame" class="print-preview-frame" title="Aperçu impression"></iframe>
+            <div class="print-preview-actions">
+                <button type="button" id="print-preview-print" class="value-prompt-btn value-prompt-btn--ok">Imprimer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cartouche-modal" class="modal hidden">
+        <div class="modal-content modal-content--prompt modal-content--cartouche">
+            <span class="close-modal" id="close-cartouche">&times;</span>
+            <h2>Cartouche du schéma</h2>
+            <div class="cartouche-form">
+                <label for="cartouche-title">Titre</label>
+                <input type="text" id="cartouche-title" autocomplete="off">
+                <label for="cartouche-project">Projet</label>
+                <input type="text" id="cartouche-project" autocomplete="off">
+                <label for="cartouche-author">Auteur</label>
+                <input type="text" id="cartouche-author" autocomplete="off">
+                <label for="cartouche-date">Date</label>
+                <input type="text" id="cartouche-date" autocomplete="off">
+                <label for="cartouche-scale">Échelle</label>
+                <input type="text" id="cartouche-scale" autocomplete="off" placeholder="ex. 1:1">
+                <label for="cartouche-revision">Révision</label>
+                <input type="text" id="cartouche-revision" autocomplete="off">
+                <label for="cartouche-notes">Notes</label>
+                <textarea id="cartouche-notes" rows="2"></textarea>
+            </div>
+            <div class="value-prompt-actions">
+                <button type="button" id="cartouche-save" class="value-prompt-btn value-prompt-btn--ok">Enregistrer</button>
+                <button type="button" id="cartouche-cancel" class="value-prompt-btn">Annuler</button>
+            </div>
+        </div>
+    </div>
+
     <div id="value-prompt-modal" class="modal hidden">
         <div class="modal-content modal-content--prompt">
             <span class="close-modal" id="close-value-prompt">&times;</span>
@@ -931,6 +1308,8 @@ void loop() {
                 <p><strong>[Suppr] ou [Backspace] :</strong> Supprimer la sélection (Composants ou fil choisi)</p>
                 <p><strong>[Espace] :</strong> Ajouter un point d'ancrage intermédiaire sur un fil en cours de tracé</p>
                 <p><strong>[Ctrl] + [Z] / [Ctrl] + [Y] :</strong> Annuler / Rétablir</p>
+                <p><strong>Éditeur → Cadre A4 :</strong> Afficher la feuille A4 paysage ; glisser le cadre à la souris pour le repositionner ; <strong>Cartouche…</strong> pour renseigner le cartouche</p>
+                <p><strong>Fichier → Imprimer… :</strong> Aperçu avant impression (format A4 paysage uniquement)</p>
             </div>
         </div>
     </div>

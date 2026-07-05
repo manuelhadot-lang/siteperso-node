@@ -1,0 +1,348 @@
+{
+    "name": "Demi-pont IR2104 — moteur DC",
+    "components": [
+        {
+            "type": "battery",
+            "label": "VDC1",
+            "x": 100,
+            "y": 140,
+            "rotation": 0,
+            "value": 12
+        },
+        {
+            "type": "gnd",
+            "label": "GND1",
+            "x": 100,
+            "y": 600,
+            "rotation": 0
+        },
+        {
+            "type": "arduino_uno",
+            "label": "UNO1",
+            "x": 80,
+            "y": 380,
+            "rotation": 0,
+            "sketch": "void setup() {\n  pinMode(9, OUTPUT);\n}\n\nvoid loop() {\n  analogWrite(9, 200);\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {},
+            "pinLevels": {},
+            "avrRegisters": null,
+            "lastCompileOk": null,
+            "lastCompileLog": ""
+        },
+        {
+            "type": "ir2104",
+            "label": "IR21041",
+            "x": 280,
+            "y": 380,
+            "rotation": 0,
+            "value": "IR2104",
+            "vcc": 12,
+            "vth": 2.5
+        },
+        {
+            "type": "nmos",
+            "label": "M1",
+            "x": 540,
+            "y": 240,
+            "rotation": 0,
+            "value": "IRLZ44N",
+            "flipX": false
+        },
+        {
+            "type": "nmos",
+            "label": "M2",
+            "x": 540,
+            "y": 360,
+            "rotation": 0,
+            "value": "IRLZ44N",
+            "flipX": false
+        },
+        {
+            "type": "dc_motor",
+            "label": "MOT1",
+            "x": 760,
+            "y": 400,
+            "rotation": 0,
+            "value": "50"
+        },
+        {
+            "type": "diode",
+            "label": "D1",
+            "x": 200,
+            "y": 460,
+            "rotation": 0,
+            "value": "1N4148"
+        },
+        {
+            "type": "capacitor",
+            "label": "C1",
+            "x": 300,
+            "y": 500,
+            "rotation": 0,
+            "value": "470n"
+        },
+        {
+            "type": "voltmeter",
+            "label": "V1",
+            "x": 700,
+            "y": 400,
+            "rotation": 0,
+            "value": ""
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "VDC1_out",
+            "toJonctionId": "__t#400#140",
+            "points": [
+                { "x": 140, "y": 140 },
+                { "x": 400, "y": 140 }
+            ]
+        },
+        {
+            "fromJonctionId": "VDC1_in",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 60, "y": 140 },
+                { "x": 60, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 120, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#400#140",
+            "toJonctionId": "M1_D",
+            "points": [
+                { "x": 400, "y": 140 },
+                { "x": 560, "y": 140 },
+                { "x": 560, "y": 180 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#400#140",
+            "toJonctionId": "IR21041_VCC",
+            "points": [
+                { "x": 400, "y": 140 },
+                { "x": 400, "y": 400 },
+                { "x": 330, "y": 400 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#400#140",
+            "toJonctionId": "D1_in",
+            "points": [
+                { "x": 400, "y": 140 },
+                { "x": 160, "y": 140 },
+                { "x": 160, "y": 460 }
+            ]
+        },
+        {
+            "fromJonctionId": "IR21041_COM",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 330, "y": 360 },
+                { "x": 330, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "M2_S",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 560, "y": 420 },
+                { "x": 560, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_GND",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": -20, "y": 340 },
+                { "x": -20, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_D9",
+            "toJonctionId": "IR21041_IN",
+            "points": [
+                { "x": 200, "y": 340 },
+                { "x": 330, "y": 340 }
+            ]
+        },
+        {
+            "fromJonctionId": "IR21041_HO",
+            "toJonctionId": "M1_G",
+            "points": [
+                { "x": 230, "y": 400 },
+                { "x": 230, "y": 240 },
+                { "x": 500, "y": 240 }
+            ]
+        },
+        {
+            "fromJonctionId": "IR21041_LO",
+            "toJonctionId": "M2_G",
+            "points": [
+                { "x": 230, "y": 340 },
+                { "x": 500, "y": 340 },
+                { "x": 500, "y": 360 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#560#300",
+            "toJonctionId": "M1_S",
+            "points": [
+                { "x": 560, "y": 300 },
+                { "x": 560, "y": 300 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#560#300",
+            "toJonctionId": "M2_D",
+            "points": [
+                { "x": 560, "y": 300 },
+                { "x": 560, "y": 300 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#560#300",
+            "toJonctionId": "IR21041_VS",
+            "points": [
+                { "x": 560, "y": 300 },
+                { "x": 560, "y": 360 },
+                { "x": 230, "y": 360 }
+            ]
+        },
+        {
+            "fromJonctionId": "__t#560#300",
+            "toJonctionId": "MOT1_plus",
+            "points": [
+                { "x": 560, "y": 300 },
+                { "x": 800, "y": 300 },
+                { "x": 800, "y": 400 }
+            ]
+        },
+        {
+            "fromJonctionId": "MOT1_minus",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 720, "y": 400 },
+                { "x": 720, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        },
+        {
+            "fromJonctionId": "D1_out",
+            "toJonctionId": "IR21041_VB",
+            "points": [
+                { "x": 240, "y": 460 },
+                { "x": 240, "y": 420 },
+                { "x": 230, "y": 420 }
+            ]
+        },
+        {
+            "fromJonctionId": "IR21041_VB",
+            "toJonctionId": "C1_in",
+            "points": [
+                { "x": 230, "y": 420 },
+                { "x": 260, "y": 420 },
+                { "x": 260, "y": 500 }
+            ]
+        },
+        {
+            "fromJonctionId": "C1_out",
+            "toJonctionId": "__t#560#300",
+            "points": [
+                { "x": 340, "y": 500 },
+                { "x": 560, "y": 500 },
+                { "x": 560, "y": 300 }
+            ]
+        },
+        {
+            "fromJonctionId": "V1_in",
+            "toJonctionId": "__t#560#300",
+            "points": [
+                { "x": 660, "y": 400 },
+                { "x": 560, "y": 400 },
+                { "x": 560, "y": 300 }
+            ]
+        },
+        {
+            "fromJonctionId": "V1_out",
+            "toJonctionId": "__t#400#600",
+            "points": [
+                { "x": 740, "y": 400 },
+                { "x": 740, "y": 600 },
+                { "x": 400, "y": 600 }
+            ]
+        }
+    ],
+    "autoJunctions": [
+        { "id": "__t#400#140", "x": 400, "y": 140 },
+        { "id": "__t#400#600", "x": 400, "y": 600 },
+        { "id": "__t#560#300", "x": 560, "y": 300 }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 1,
+        "npn": 0,
+        "nmos": 2,
+        "opamp": 0,
+        "lm386": 0,
+        "lm7805": 0,
+        "ir2104": 1,
+        "dc_motor": 1,
+        "servo_motor": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 1,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

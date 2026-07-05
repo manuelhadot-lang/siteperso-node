@@ -1,0 +1,245 @@
+{
+    "name": "L293D — moteur DC + Arduino",
+    "components": [
+        {
+            "type": "battery",
+            "label": "VDC1",
+            "x": 120,
+            "y": 200,
+            "rotation": 0,
+            "value": 12
+        },
+        {
+            "type": "gnd",
+            "label": "GND1",
+            "x": 400,
+            "y": 560,
+            "rotation": 0
+        },
+        {
+            "type": "arduino_uno",
+            "label": "UNO1",
+            "x": 120,
+            "y": 400,
+            "rotation": 0,
+            "sketch": "void setup() {\n  pinMode(9, OUTPUT);\n  pinMode(10, OUTPUT);\n}\n\nvoid loop() {\n  analogWrite(9, 200);\n  digitalWrite(10, LOW);\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {},
+            "pinLevels": {},
+            "avrRegisters": null,
+            "lastCompileOk": null,
+            "lastCompileLog": ""
+        },
+        {
+            "type": "l293d",
+            "label": "L293D1",
+            "x": 400,
+            "y": 400,
+            "rotation": 0,
+            "value": "L293D",
+            "vmot": 12,
+            "vth": 1.5
+        },
+        {
+            "type": "dc_motor",
+            "label": "MOT1",
+            "x": 680,
+            "y": 400,
+            "rotation": 0,
+            "value": "50"
+        },
+        {
+            "type": "voltmeter",
+            "label": "V1",
+            "x": 680,
+            "y": 280,
+            "rotation": 90,
+            "value": ""
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "VDC1_in",
+            "toJonctionId": "L293D1_VMOT",
+            "points": [
+                { "x": 160, "y": 200 },
+                { "x": 460, "y": 200 },
+                { "x": 460, "y": 330 }
+            ]
+        },
+        {
+            "fromJonctionId": "VDC1_out",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 80, "y": 200 },
+                { "x": 80, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 420, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_5V",
+            "toJonctionId": "L293D1_VSS",
+            "points": [
+                { "x": 20, "y": 340 },
+                { "x": 20, "y": 470 },
+                { "x": 340, "y": 470 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_5V",
+            "toJonctionId": "L293D1_EN12",
+            "points": [
+                { "x": 20, "y": 340 },
+                { "x": 20, "y": 330 },
+                { "x": 340, "y": 330 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_GND",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 20, "y": 360 },
+                { "x": 20, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "UNO1_D9",
+            "toJonctionId": "L293D1_A1",
+            "points": [
+                { "x": 240, "y": 360 },
+                { "x": 340, "y": 360 },
+                { "x": 340, "y": 350 }
+            ]
+        },
+        {
+            "fromJonctionId": "L293D1_A2",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 340, "y": 450 },
+                { "x": 340, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "L293D1_GND1",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 340, "y": 390 },
+                { "x": 340, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "L293D1_GND2",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 340, "y": 410 },
+                { "x": 360, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        },
+        {
+            "fromJonctionId": "L293D1_Y1",
+            "toJonctionId": "MOT1_plus",
+            "points": [
+                { "x": 340, "y": 370 },
+                { "x": 600, "y": 370 },
+                { "x": 720, "y": 400 }
+            ]
+        },
+        {
+            "fromJonctionId": "L293D1_Y2",
+            "toJonctionId": "MOT1_minus",
+            "points": [
+                { "x": 340, "y": 430 },
+                { "x": 600, "y": 430 },
+                { "x": 640, "y": 400 }
+            ]
+        },
+        {
+            "fromJonctionId": "V1_in",
+            "toJonctionId": "L293D1_Y1",
+            "points": [
+                { "x": 680, "y": 320 },
+                { "x": 680, "y": 370 },
+                { "x": 340, "y": 370 }
+            ]
+        },
+        {
+            "fromJonctionId": "V1_out",
+            "toJonctionId": "__t#400#560",
+            "points": [
+                { "x": 680, "y": 480 },
+                { "x": 680, "y": 560 },
+                { "x": 400, "y": 560 }
+            ]
+        }
+    ],
+    "autoJunctions": [
+        { "id": "__t#400#560", "x": 400, "y": 560 }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "nmos": 0,
+        "opamp": 0,
+        "lm386": 0,
+        "lm7805": 0,
+        "ir2104": 0,
+        "l293d": 1,
+        "dc_motor": 1,
+        "servo_motor": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 1,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

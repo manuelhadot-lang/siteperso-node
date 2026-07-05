@@ -595,6 +595,9 @@ app.post("/api/simulate", async (req, res) => {
     const { mountArduinoRoutes } = require(path.join(repoRoot, "tools", "arduino-routes.cjs"));
     mountArduinoRoutes(app);
 
+    const { mountSimulatorVisitRoutes } = require(path.join(repoRoot, "tools", "simulator-visit-counter.cjs"));
+    mountSimulatorVisitRoutes(app, repoRoot);
+
     app.get("/favicon.ico", (req, res) => {
         res.type("image/svg+xml");
         res.sendFile(path.join(dirSimulateur, "favicon.svg"));

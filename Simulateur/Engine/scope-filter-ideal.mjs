@@ -71,7 +71,7 @@ function sameNet(a, b, wires, autoJunctions) {
     return reachableJonctions(a, wires, autoJunctions).has(b);
 }
 
-const PASSIVE_UI_TYPES = new Set(["capacitor", "resistor", "inductor", "speaker", "led"]);
+const PASSIVE_UI_TYPES = new Set(["capacitor", "resistor", "inductor", "speaker", "dc_motor", "servo_motor", "led"]);
 
 /** Graphe fils + passifs (C/R/L/HP) + AOP / LM386. */
 function reachableWithOpamps(startId, components, wires, autoJunctions) {

@@ -19,6 +19,10 @@ Thumbs.db
 
 # Données runtime (pas le code source)
 visits.json
+simulator-visits.json
+
+# BMP280 : fourni par arduino-cli au build Docker (voir Dockerfile)
+arduino-libraries/libraries/Adafruit_BMP280_Library/
 
 dist/
 dist-out/

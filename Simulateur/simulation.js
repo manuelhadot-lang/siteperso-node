@@ -3,12 +3,17 @@ import { circuit, flags, simulationResults, GRID_SIZE, snapToGrid } from './stat
 import { cd4511JonctionToTerminalKey } from './cd4511-layout.js';
 import { ic74hc90JonctionToTerminalKey } from './ic74hc90-layout.js';
 import { lm386JonctionToTerminalKey } from './lm386-layout.js';
+import { lm7805JonctionToTerminalKey } from './lm7805-layout.js';
+import { ir2104JonctionToTerminalKey } from './ir2104-layout.js';
+import { l293dJonctionToTerminalKey } from './l293d-layout.js';
+import { dcMotorJonctionToTerminalKey } from './dc-motor-layout.js';
+import { servoMotorJonctionToTerminalKey } from './servo-motor-layout.js';
 import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
 import { esp32C3JonctionToTerminalKey, ESP32_FQBN } from './esp32-c3-layout.js';
 import { esp32DevkitJonctionToTerminalKey, ESP32_DEVKIT_FQBN } from './esp32-devkit-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { draw } from './renderer.js';
-import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes, resetTftLiveInputStateForCircuit } from './led-animation.js';
+import { startLedAnimation, stopLedAnimation, startBurntLedSmokeLoop, isLedOvercurrent, hasLedAnimation, hasVoltmeterAnimation, ensureArduinoLedAnimation, hasArduinoStaticIdealDisplay, resetArduinoRuntimes, resetTftLiveInputStateForCircuit, ensureDcMotorAnimationLoop } from './led-animation.js';
 import { startScopeAnimation, stopScopeAnimation } from './scope-animation.js';
 import { shouldAnimateGsinScope } from './Engine/scope-gsin-ideal.mjs';
 import { openScopePanel, closeScopePanelFully, isScopePanelOpen, getActiveScope, refreshScopePanelFields } from './scope-panel.js';
@@ -128,6 +133,10 @@ function jonctionIdToTerminalKey(jonctionId) {
             if (jonctionId === `${id}_B`) return `${id}#0`;
             if (jonctionId === `${id}_C`) return `${id}#1`;
             if (jonctionId === `${id}_E`) return `${id}#2`;
+        } else if (comp.type === 'nmos') {
+            if (jonctionId === `${id}_G`) return `${id}#0`;
+            if (jonctionId === `${id}_D`) return `${id}#1`;
+            if (jonctionId === `${id}_S`) return `${id}#2`;
         } else if (comp.type === 'opamp') {
             if (jonctionId === `${id}_plus`) return `${id}#0`;
             if (jonctionId === `${id}_minus`) return `${id}#1`;
@@ -184,6 +193,21 @@ function jonctionIdToTerminalKey(jonctionId) {
         } else if (comp.type === 'lm386') {
             const key = lm386JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
+        } else if (comp.type === 'lm7805') {
+            const key = lm7805JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'ir2104') {
+            const key = ir2104JonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'l293d') {
+            const key = l293dJonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'dc_motor') {
+            const key = dcMotorJonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
+        } else if (comp.type === 'servo_motor') {
+            const key = servoMotorJonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
         } else if (comp.type === 'esp32_c3') {
             const key = esp32C3JonctionToTerminalKey(id, jonctionId);
             if (key) return key;
@@ -239,7 +263,10 @@ function buildSimulationState() {
         if (comp.type === 'inductor') out.value = comp.value || '1m';
         if (comp.type === 'diode') out.value = comp.value || '1N4148';
         if (comp.type === 'speaker') out.value = comp.value || '8';
+        if (comp.type === 'dc_motor') out.value = comp.value || '50';
+        if (comp.type === 'servo_motor') out.value = comp.value || '100';
         if (comp.type === 'npn') out.value = comp.value || '2N2222';
+        if (comp.type === 'nmos') out.value = comp.value || 'IRLZ44N';
         if (comp.type === 'opamp') {
             out.value = comp.value || 'uA741';
             out.vp = comp.vp ?? 15;
@@ -248,6 +275,22 @@ function buildSimulationState() {
         if (comp.type === 'lm386') {
             out.value = comp.value || 'LM386N-1';
             out.vplus = comp.vplus ?? 9;
+        }
+        if (comp.type === 'lm7805') {
+            out.value = comp.value || 'LM7805';
+            out.vout = comp.vout ?? 5;
+            out.vinMin = comp.vinMin ?? 7;
+            out.dropout = comp.dropout ?? 2;
+        }
+        if (comp.type === 'ir2104') {
+            out.value = comp.value || 'IR2104';
+            out.vcc = comp.vcc ?? 12;
+            out.vth = comp.vth ?? 2.5;
+        }
+        if (comp.type === 'l293d') {
+            out.value = comp.value || 'L293D';
+            out.vmot = comp.vmot ?? 12;
+            out.vth = comp.vth ?? 1.5;
         }
         if (comp.type === 'oscilloscope') {
             out.timeDivSec = comp.timeDivSec ?? 0.001;
@@ -565,6 +608,7 @@ export async function triggerSimulation(isSilentUpdate = false) {
             flags.isSimulating = true;
             resetArduinoRuntimes();
             ensureArduinoLedAnimation();
+            ensureDcMotorAnimationLoop();
             if (btnSim) { btnSim.innerText = "▶️ Simulation Live"; btnSim.style.background = "#00bcd4"; }
             if (btnStop) btnStop.classList.remove('disabled');
             draw();

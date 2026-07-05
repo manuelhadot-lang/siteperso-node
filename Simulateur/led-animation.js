@@ -2,6 +2,7 @@
 import { circuit, flags, simulationResults } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
 import { quantizeVoltmeterReading } from './Engine/voltmeter-display.mjs';
+import { resolveNetVoltage } from './Engine/arduino-analog-ideal.mjs';
 
 export { quantizeVoltmeterReading };
 import {
@@ -96,6 +97,13 @@ let anim = {
     /** @type {ReturnType<typeof detectHc90Cascade>|null} */
     /** @type {Record<string, { pulse?: { highSec: number, lowSec: number }, level?: number }>} */
     arduinoLedDrive: {},
+    /** @type {Record<string, number>} angle (deg) moteur DC */
+    motorAngles: {},
+    /** @type {Record<string, number>} angle palonnier servo (0–180°) */
+    servoAngles: {},
+    /** @type {Record<string, number>} consigne lissée servo */
+    servoTargets: {},
+    motorLastMs: 0,
 };
 
 export function bindLedAnimationRedraw(fn) {
@@ -209,6 +217,7 @@ function resetTftLiveInputState(components) {
         delete c._tftLastInputKey;
         delete c._tftInputChangedAtMs;
         delete c._tftSetupDone;
+        delete c._tftLoopVars;
     }
 }
 
@@ -1014,6 +1023,161 @@ export function getAnimatedMatrix8x8Cells(label) {
     return ideal?.cells ? { cells: ideal.cells } : null;
 }
 
+function motorPlotVoltage(label) {
+    const plot = anim.plots[label] || anim.vmPlots?.[label];
+    if (!plot?.time?.length || !plot.voltage?.length) return null;
+    const elapsed = (performance.now() - anim.startMs) / 1000;
+    const period = anim.ledPeriods[label] ?? anim.vmPeriods?.[label] ?? detectLedPeriodSec(plot) ?? 1;
+    const tSample = sampleTimeSec(elapsed, period);
+    return interpolateVoltagePlot(plot, tSample);
+}
+
+function motorIdealVoltage(label) {
+    const ctx = {
+        components: circuit.components,
+        wires: circuit.wires,
+        autoJunctions: circuit.autoJunctions || [],
+    };
+    const vp = resolveNetVoltage(`${label}_plus`, ctx);
+    const vm = resolveNetVoltage(`${label}_minus`, ctx);
+    if (!Number.isFinite(vp) && !Number.isFinite(vm)) return 0;
+    return (Number.isFinite(vp) ? vp : 0) - (Number.isFinite(vm) ? vm : 0);
+}
+
+function servoVoltageCtx() {
+    return {
+        components: circuit.components,
+        wires: circuit.wires,
+        autoJunctions: circuit.autoJunctions || [],
+        getVoltageAtJonction,
+        voltmeters: simulationResults.voltmeters,
+    };
+}
+
+function servoSignalNet(label) {
+    return reachableJonctions(`${label}_signal`, circuit.wires, circuit.autoJunctions || []);
+}
+
+function findPotForServoSignal(label) {
+    const sigNet = servoSignalNet(label);
+    for (const pot of circuit.components) {
+        if (pot.type !== 'potentiometer' || !pot.label) continue;
+        for (const t of ['wip', 'in', 'out']) {
+            if (sigNet.has(`${pot.label}_${t}`)) return pot;
+        }
+    }
+    return null;
+}
+
+function servoSignalHasAcSource(label) {
+    const sigNet = servoSignalNet(label);
+    for (const comp of circuit.components) {
+        if (!comp.label || !['gsin', 'gimp', 'gsqr'].includes(comp.type)) continue;
+        if (sigNet.has(`${comp.label}_out`)) return true;
+    }
+    return false;
+}
+
+/** Angle depuis un potentiomètre lié à S (curseur ou borne — rails IN/OUT exclus de la boucle signal). */
+function servoAngleFromPot(servoLabel, vcc) {
+    const pot = findPotForServoSignal(servoLabel);
+    if (!pot || !Number.isFinite(vcc) || vcc < 0.5) return null;
+    const ctx = servoVoltageCtx();
+    const loopGuard = new Set([`${servoLabel}_signal`]);
+    const vi = resolveNetVoltage(`${pot.label}_in`, ctx, new Set(loopGuard));
+    const vo = resolveNetVoltage(`${pot.label}_out`, ctx, new Set(loopGuard));
+    const viN = Number.isFinite(vi) ? vi : vcc;
+    const voN = Number.isFinite(vo) ? vo : 0;
+    const pos = Math.min(100, Math.max(0, Number(pot.position) ?? 50)) / 100;
+    const vsig = viN * (1 - pos) + voN * pos;
+    return Math.max(0, Math.min(180, (vsig / vcc) * 180));
+}
+
+function servoNetVoltages(label) {
+    const ctx = servoVoltageCtx();
+    const vPlus = resolveNetVoltage(`${label}_plus`, ctx);
+    const vMinus = resolveNetVoltage(`${label}_minus`, ctx);
+    const vSignal = resolveNetVoltage(`${label}_signal`, ctx);
+    const vcc = (Number.isFinite(vPlus) ? vPlus : 0) - (Number.isFinite(vMinus) ? vMinus : 0);
+    const vsig = (Number.isFinite(vSignal) ? vSignal : 0) - (Number.isFinite(vMinus) ? vMinus : 0);
+    return { vcc, vsig };
+}
+
+function servoPlotSignal(label) {
+    if (!servoSignalHasAcSource(label)) return null;
+    const plot = anim.plots[label] || anim.vmPlots?.[label];
+    if (!plot?.time?.length || !plot.voltage?.length) return null;
+    const elapsed = (performance.now() - anim.startMs) / 1000;
+    const period = anim.ledPeriods[label] ?? anim.vmPeriods?.[label] ?? detectLedPeriodSec(plot) ?? 1;
+    const tSample = sampleTimeSec(elapsed, period);
+    return interpolateVoltagePlot(plot, tSample);
+}
+
+function servoTargetAngle(label) {
+    const { vcc, vsig } = servoNetVoltages(label);
+    if (!Number.isFinite(vcc) || vcc < 3) return anim.servoTargets[label] ?? 90;
+
+    const fromPot = servoAngleFromPot(label, vcc);
+    if (fromPot != null) return fromPot;
+
+    const plotSig = servoPlotSignal(label);
+    const sig = plotSig != null ? plotSig : vsig;
+    const ratio = Math.max(0, Math.min(1, sig / vcc));
+    return ratio * 180;
+}
+
+function updateMotorRotations() {
+    if (!flags.isSimulating) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - (anim.motorLastMs || now)) / 1000);
+    anim.motorLastMs = now;
+    for (const comp of circuit.components) {
+        if (comp.type !== 'dc_motor') continue;
+        const label = comp.label;
+        const plotV = motorPlotVoltage(label);
+        const v = plotV != null ? plotV : motorIdealVoltage(label);
+        if (Math.abs(v) < 0.35) continue;
+        const dir = v >= 0 ? 1 : -1;
+        const speed = Math.min(720, Math.abs(v) * 100);
+        anim.motorAngles[label] = ((anim.motorAngles[label] ?? 0) + dir * speed * dt) % 360;
+    }
+    for (const comp of circuit.components) {
+        if (comp.type !== 'servo_motor') continue;
+        const label = comp.label;
+        const target = servoTargetAngle(label);
+        anim.servoTargets[label] = target;
+        const current = anim.servoAngles[label] ?? target;
+        const alpha = Math.min(1, dt * 12);
+        anim.servoAngles[label] = current + (target - current) * alpha;
+    }
+}
+
+export function getMotorRotationDeg(label) {
+    return anim.motorAngles[label] ?? 0;
+}
+
+export function getServoAngleDeg(label) {
+    return anim.servoAngles[label] ?? 90;
+}
+
+function hasMechanicalComponents() {
+    return circuit.components.some((c) => c.type === 'dc_motor' || c.type === 'servo_motor');
+}
+
+/** Boucle d'animation pour moteurs DC / servos (circuits DC sans courbes .tran). */
+export function ensureDcMotorAnimationLoop() {
+    if (!flags.isSimulating) return;
+    if (!hasMechanicalComponents()) return;
+    if (anim.rafId != null) return;
+    anim.motorLastMs = performance.now();
+    const tick = () => {
+        updateMotorRotations();
+        redraw();
+        anim.rafId = requestAnimationFrame(tick);
+    };
+    anim.rafId = requestAnimationFrame(tick);
+}
+
 export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGateTranPlots = {}, opts = {}) {
     const mrActive = isHc90MasterResetActive(circuit.components, circuit.wires, circuit.autoJunctions);
     const mrReleased = anim.hc90MrActive && !mrActive;
@@ -1028,7 +1192,8 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
     anim.hc90Cascade = detectHc90Cascade(circuit.components, circuit.wires, circuit.autoJunctions);
     anim.hc90MrActive = mrActive;
     const hasHc90Anim = Object.keys(anim.hc90QPlots).length > 0;
-    if (!hasLeds && !hasVm && !hasSeg7 && !hasBargraph && !hasHc90Anim) return;
+    const hasMotors = hasMechanicalComponents();
+    if (!hasLeds && !hasVm && !hasSeg7 && !hasBargraph && !hasHc90Anim && !hasMotors) return;
 
     anim.plots = plots || {};
     anim.vmPlots = vmPlots || {};
@@ -1043,13 +1208,16 @@ export function startLedAnimation(plots, vmPlots = {}, seg7Plots = {}, logicGate
         hasVm ||
         hasSeg7 ||
         hasBargraph ||
-        hasHc90Anim;
+        hasHc90Anim ||
+        hasMotors;
     if (!needsFrameLoop) {
         redraw();
         return;
     }
 
+    anim.motorLastMs = performance.now();
     const tick = () => {
+        updateMotorRotations();
         updateArduinoRuntimes();
         redraw();
         anim.rafId = requestAnimationFrame(tick);
@@ -1089,6 +1257,10 @@ export function stopLedAnimation(preserveArduino = false) {
     anim.ledPersistence = {};
     anim.steadyCurrent = {};
     anim.arduinoLedDrive = {};
+    anim.motorAngles = {};
+    anim.servoAngles = {};
+    anim.servoTargets = {};
+    anim.motorLastMs = 0;
     if (!preserveArduino) {
         anim.startMs = 0;
         resetArduinoRuntimes();

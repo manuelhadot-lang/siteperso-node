@@ -13,7 +13,10 @@ import { bindLedAnimationRedraw, onCircuitLoaded } from './led-animation.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { bindSpeakerAudioRedraw, primeSpeakerAudioContext } from './speaker-audio.js';
 import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animation.js';
-import { initEditorTheme, setEditorTheme } from './theme.js';
+import { initEditorTheme, setEditorTheme, initEditorGrid, setShowGrid, showGrid as editorShowGrid, refreshEditorMenuMarks } from './theme.js';
+import { initPrintUi, editCartouche } from './print-ui.js';
+import { initSimulatorVisitCounter } from './visit-counter.js';
+import { loadPrintFrameFromData, refreshPrintFrameMenuMark, serializePrintFrame, isPointInPrintFrame, isPointInCartouche, movePrintFrameBy, printFrame } from './print-frame.js';
 import { initValuePrompt, showValuePrompt } from './value-prompt.js';
 import {
     initArduinoEditor,
@@ -42,12 +45,12 @@ const APP_PRODUCT_NAME =
 
 const COMPONENT_PREFIX = {
     battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', push_button: 'BP', capacitor: 'C', inductor: 'L', diode: 'D',
-    npn: 'Q', opamp: 'AOP', lm386: 'LM386',
+    npn: 'Q', nmos: 'M', opamp: 'AOP', lm386: 'LM386', lm7805: '7805', ir2104: 'IR2104', l293d: 'L293D',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
     d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', esp32_devkit: 'ESP32', led: 'LED', seg7: 'SEG', bargraph_dc10h: 'BAR', matrix_8x8: 'MX8', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', grove_bmp280: 'BMP', joyit_tft18: 'TFT',
-    voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
+    voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', dc_motor: 'M', servo_motor: 'SV', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'opamp', 'lm386', 'seg7', 'bargraph_dc10h', 'matrix_8x8', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'nmos', 'opamp', 'lm386', 'ir2104', 'l293d', 'seg7', 'bargraph_dc10h', 'matrix_8x8', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
@@ -117,6 +120,7 @@ function getCircuitDataJSON() {
             wires: circuit.wires,
             autoJunctions: circuit.autoJunctions,
             counters,
+            printFrame: serializePrintFrame(),
         },
         null,
         4
@@ -213,6 +217,7 @@ function loadCircuitFromJSON(jsonText) {
         ensureAllCounters();
         syncCountersFromLabels(circuit.components);
         syncWireEndpointsToJonctions();
+        loadPrintFrameFromData(data.printFrame);
         interaction.selectedComponents = [];
         interaction.selectedAutoJunctions = [];
         interaction.selectedWire = null;
@@ -254,7 +259,7 @@ window.addEventListener('keydown', (e) => {
     if (key === 'x' && !interaction.activeWire && interaction.selectedComponents.length > 0) {
         if (flags.isSimulating) { alert("Arrêtez la simulation avant de retourner."); return; }
         const flippable = interaction.selectedComponents.filter(comp =>
-            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'opamp' || comp.type === 'lm386' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18' || comp.type === 'bargraph_dc10h' || comp.type === 'matrix_8x8');
+            comp.type === 'gimp' || comp.type === 'npn' || comp.type === 'nmos' || comp.type === 'opamp' || comp.type === 'lm386' || comp.type === 'lm7805' || comp.type === 'ir2104' || comp.type === 'l293d' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18' || comp.type === 'bargraph_dc10h' || comp.type === 'matrix_8x8');
         if (flippable.length === 0) return;
         saveState(); flippable.forEach(comp => { comp.flipX = !comp.flipX; }); draw(); return;
     }
@@ -318,7 +323,7 @@ window.addEventListener('keyup', (e) => { if (e.key === 'Shift') flags.isShiftPr
 function updateMouseState(e) {
     const mousePos = toGridCoords(e.clientX, e.clientY);
     interaction.hoverJonction = null; interaction.hoveredComponent = null; interaction.hoveredWire = null;
-    if (flags.isPanning || flags.isSelectingZone) return;
+    if (flags.isPanning || flags.isSelectingZone || flags.isDraggingPrintFrame) return;
 
     interaction.hoveredComponent = circuit.components.find(comp => componentHitTest(comp, mousePos.x, mousePos.y));
     for (let comp of circuit.components) {
@@ -336,7 +341,7 @@ function updateMouseState(e) {
             if (interaction.hoveredWire) break;
         }
     }
-    canvas.style.cursor = flags.isShiftPressed ? 'cell' : (interaction.activeWire || interaction.hoverJonction ? 'crosshair' : (flags.isDraggingComponent ? 'grabbing' : (interaction.hoveredComponent ? 'pointer' : (interaction.hoveredWire ? 'help' : 'grab'))));
+    canvas.style.cursor = flags.isShiftPressed ? 'cell' : (interaction.activeWire || interaction.hoverJonction ? 'crosshair' : (flags.isDraggingPrintFrame || flags.isDraggingComponent ? 'grabbing' : (interaction.hoveredComponent ? 'pointer' : (interaction.hoveredWire ? 'help' : (printFrame.enabled && !flags.isSimulating && isPointInPrintFrame(mousePos.x, mousePos.y) ? 'move' : 'grab')))));
 }
 
 canvas.addEventListener('mousedown', (e) => {
@@ -436,6 +441,15 @@ canvas.addEventListener('mousedown', (e) => {
         else if (hc.type === 'oscilloscope') { openScopePanel(hc); }
         else { closeSourcePanel(); closeScopePanelFully(); }
         flags.isDraggingComponent = true; saveState();
+    } else if (e.button === 0 && printFrame.enabled && isPointInPrintFrame(mousePos.x, mousePos.y)) {
+        if (flags.isSimulating) {
+            alert("Arrêtez la simulation avant de déplacer le cadre A4.");
+        } else {
+            interaction.selectedComponents = [];
+            interaction.selectedAutoJunctions = [];
+            interaction.selectedWire = null;
+            flags.isDraggingPrintFrame = true;
+        }
     } else { interaction.selectedComponents = []; interaction.selectedAutoJunctions = []; if (!flags.isSimulating) { closeSourcePanel(); closeScopePanelFully(); } flags.isPanning = true; flags.startX = e.clientX - pan.x; flags.startY = e.clientY - pan.y; }
     draw();
 });
@@ -453,7 +467,16 @@ canvas.addEventListener('mousemove', (e) => {
     if (flags.isSelectingZone) { zone.end = { x: mousePos.x, y: mousePos.y }; draw(); return; }
     updateMouseState(e);
     if (interaction.activeWire) { interaction.activeWire.points[interaction.activeWire.points.length - 1] = { x: snapToGrid(mousePos.x), y: snapToGrid(mousePos.y) }; draw(); } 
-    else if (flags.isPanning) { pan.x = e.clientX - flags.startX; pan.y = e.clientY - flags.startY; draw(); } 
+    else if (flags.isPanning) { pan.x = e.clientX - flags.startX; pan.y = e.clientY - flags.startY; draw(); }
+    else if (flags.isDraggingPrintFrame) {
+        const sX = snapToGrid(mousePos.x), sY = snapToGrid(mousePos.y);
+        const dX = sX - lastMouseGridPos.x, dY = sY - lastMouseGridPos.y;
+        if (dX !== 0 || dY !== 0) {
+            movePrintFrameBy(dX, dY);
+            lastMouseGridPos = { x: sX, y: sY };
+        }
+        draw();
+    }
     else if (flags.isDraggingComponent && (interaction.selectedComponents.length > 0 || interaction.selectedAutoJunctions.length > 0)) {
         const sX = snapToGrid(mousePos.x), sY = snapToGrid(mousePos.y), dX = sX - lastMouseGridPos.x, dY = sY - lastMouseGridPos.y;
         if (dX !== 0 || dY !== 0) {
@@ -481,7 +504,7 @@ canvas.addEventListener('mouseup', () => {
         interaction.selectedComponents = circuit.components.filter(c => c.x >= xMi && c.x <= xMa && c.y >= yMi && c.y <= yMa); interaction.selectedAutoJunctions = circuit.autoJunctions.filter(aj => aj.x >= xMi && aj.x <= xMa && aj.y >= yMi && aj.y <= yMa);
     }
     const wasDragging = flags.isDraggingComponent;
-    flags.isPanning = false; flags.isDraggingComponent = false;
+    flags.isPanning = false; flags.isDraggingComponent = false; flags.isDraggingPrintFrame = false;
     if (wasDragging && flags.isSimulating && liveDragMoved) {
         requestLiveSimulation();
     }
@@ -534,6 +557,86 @@ function openLm386DocModal(componentLabel) {
 
 function closeLm386DocModal() {
     hideModal(document.getElementById('lm386-doc-modal'));
+}
+
+function openLm7805DocModal(componentLabel) {
+    const modal = document.getElementById('lm7805-doc-modal');
+    const title = document.getElementById('lm7805-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `LM7805 — ${componentLabel}`
+            : 'LM7805 — Régulateur +5 V';
+    }
+    showModal(modal);
+}
+
+function closeLm7805DocModal() {
+    hideModal(document.getElementById('lm7805-doc-modal'));
+}
+
+function openIr2104DocModal(componentLabel) {
+    const modal = document.getElementById('ir2104-doc-modal');
+    const title = document.getElementById('ir2104-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `IR2104 — ${componentLabel}`
+            : 'IR2104 — Driver demi-pont';
+    }
+    showModal(modal);
+}
+
+function closeIr2104DocModal() {
+    hideModal(document.getElementById('ir2104-doc-modal'));
+}
+
+function openL293dDocModal(componentLabel) {
+    const modal = document.getElementById('l293d-doc-modal');
+    const title = document.getElementById('l293d-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `L293D — ${componentLabel}`
+            : 'L293D — Driver moteur';
+    }
+    showModal(modal);
+}
+
+function closeL293dDocModal() {
+    hideModal(document.getElementById('l293d-doc-modal'));
+}
+
+function openDcMotorDocModal(componentLabel) {
+    const modal = document.getElementById('dc-motor-doc-modal');
+    const title = document.getElementById('dc-motor-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `Moteur DC — ${componentLabel}`
+            : 'Moteur DC';
+    }
+    showModal(modal);
+}
+
+function closeDcMotorDocModal() {
+    hideModal(document.getElementById('dc-motor-doc-modal'));
+}
+
+function openServoMotorDocModal(componentLabel) {
+    const modal = document.getElementById('servo-motor-doc-modal');
+    const title = document.getElementById('servo-motor-doc-title');
+    if (!modal) return;
+    if (title) {
+        title.textContent = componentLabel
+            ? `Servo moteur — ${componentLabel}`
+            : 'Servo moteur';
+    }
+    showModal(modal);
+}
+
+function closeServoMotorDocModal() {
+    hideModal(document.getElementById('servo-motor-doc-modal'));
 }
 
 function openUnoDocModal(componentLabel) {
@@ -671,7 +774,12 @@ function closeMatrixDocModal() {
 }
 
 canvas.addEventListener('dblclick', async (e) => {
-    const mousePos = toGridCoords(e.clientX, e.clientY); const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
+    const mousePos = toGridCoords(e.clientX, e.clientY);
+    if (printFrame.enabled && isPointInCartouche(mousePos.x, mousePos.y)) {
+        editCartouche(circuitDisplayName.replace(/\.json$/i, ''));
+        return;
+    }
+    const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
     if (target) {
         if (target.type === 'cd4511') {
             openCd4511DocModal(target.label);
@@ -700,6 +808,38 @@ canvas.addEventListener('dblclick', async (e) => {
                 if (live) requestLiveSimulation();
             } else {
                 openLm386DocModal(target.label);
+            }
+            return;
+        }
+        if (target.type === 'lm7805') {
+            openLm7805DocModal(target.label);
+            return;
+        }
+        if (target.type === 'ir2104') {
+            openIr2104DocModal(target.label);
+            return;
+        }
+        if (target.type === 'l293d') {
+            openL293dDocModal(target.label);
+            return;
+        }
+        if (target.type === 'dc_motor') {
+            if (e.shiftKey) {
+                const live = flags.isSimulating;
+                let v = await showValuePrompt(`Résistance du moteur ${target.label} (Ω, ex. 50) :`, target.value || '50');
+                if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+            } else {
+                openDcMotorDocModal(target.label);
+            }
+            return;
+        }
+        if (target.type === 'servo_motor') {
+            if (e.shiftKey) {
+                const live = flags.isSimulating;
+                let v = await showValuePrompt(`Résistance interne du servo ${target.label} (Ω, ex. 100) :`, target.value || '100');
+                if (v) { if (!live) saveState(); target.value = v.trim(); draw(); if (live) requestLiveSimulation(); }
+            } else {
+                openServoMotorDocModal(target.label);
             }
             return;
         }
@@ -887,6 +1027,10 @@ function applyNewComponentDefaults(nc, type) {
         nc.maintained = false;
     } else if (type === 'speaker') {
         nc.value = '8';
+    } else if (type === 'dc_motor') {
+        nc.value = '50';
+    } else if (type === 'servo_motor') {
+        nc.value = '100';
     } else if (type === 'gsin') {
         nc.peakAmplitude = 5;
         nc.frequency = 440;
@@ -904,6 +1048,9 @@ function applyNewComponentDefaults(nc, type) {
     } else if (type === 'npn') {
         nc.value = '2N2222';
         nc.flipX = false;
+    } else if (type === 'nmos') {
+        nc.value = 'IRLZ44N';
+        nc.flipX = false;
     } else if (type === 'opamp') {
         nc.value = 'uA741';
         nc.vp = 15;
@@ -913,6 +1060,19 @@ function applyNewComponentDefaults(nc, type) {
     } else if (type === 'lm386') {
         nc.value = 'LM386N-1';
         nc.vplus = 9;
+    } else if (type === 'lm7805') {
+        nc.value = 'LM7805';
+        nc.vout = 5;
+        nc.vinMin = 7;
+        nc.dropout = 2;
+    } else if (type === 'ir2104') {
+        nc.value = 'IR2104';
+        nc.vcc = 12;
+        nc.vth = 2.5;
+    } else if (type === 'l293d') {
+        nc.value = 'L293D';
+        nc.vmot = 12;
+        nc.vth = 1.5;
     } else if (type === 'oscilloscope') {
         nc.timeDivSec = 0.001;
         nc.ch1VoltsPerDiv = 1;
@@ -1033,11 +1193,20 @@ function normalizeSubmenuLabels() {
 function initApp() {
     initModalUi();
     initEditorTheme();
+    initEditorGrid();
+    initPrintUi(() => circuitDisplayName.replace(/\.json$/i, ''));
     document.getElementById('btn-theme-dark')?.addEventListener('click', () => { setEditorTheme('dark'); draw(); });
     document.getElementById('btn-theme-light')?.addEventListener('click', () => { setEditorTheme('light'); draw(); });
+    document.getElementById('btn-toggle-grid')?.addEventListener('click', () => {
+        setShowGrid(!editorShowGrid);
+        draw();
+    });
     normalizeSubmenuLabels();
+    refreshEditorMenuMarks();
+    refreshPrintFrameMenuMark();
     ensureAllCounters();
     setCircuitDisplayName('Sans titre');
+    initSimulatorVisitCounter();
     resizeCanvas(); window.addEventListener('resize', resizeCanvas);
     document.querySelectorAll('.dropdown-item[draggable=true]').forEach(item => {
         item.addEventListener('dragstart', (e) => {
@@ -1112,9 +1281,11 @@ function initApp() {
             circuit.wires = [];
             circuit.autoJunctions = [];
             Object.keys(counters).forEach(k => counters[k] = 0);
+            loadPrintFrameFromData(null);
             fileHandle = null;
             setCircuitDisplayName('Sans titre');
             stopSimulation();
+            draw();
         }
     });
     document.getElementById('btn-open').addEventListener('click', () => {
@@ -1161,6 +1332,21 @@ function initApp() {
     const lm386Doc = document.getElementById('lm386-doc-modal');
     document.getElementById('close-lm386-doc')?.addEventListener('click', closeLm386DocModal);
     window.addEventListener('click', (e) => { if (e.target === lm386Doc) closeLm386DocModal(); });
+    const lm7805Doc = document.getElementById('lm7805-doc-modal');
+    document.getElementById('close-lm7805-doc')?.addEventListener('click', closeLm7805DocModal);
+    window.addEventListener('click', (e) => { if (e.target === lm7805Doc) closeLm7805DocModal(); });
+    const ir2104Doc = document.getElementById('ir2104-doc-modal');
+    document.getElementById('close-ir2104-doc')?.addEventListener('click', closeIr2104DocModal);
+    window.addEventListener('click', (e) => { if (e.target === ir2104Doc) closeIr2104DocModal(); });
+    const l293dDoc = document.getElementById('l293d-doc-modal');
+    document.getElementById('close-l293d-doc')?.addEventListener('click', closeL293dDocModal);
+    window.addEventListener('click', (e) => { if (e.target === l293dDoc) closeL293dDocModal(); });
+    const dcMotorDoc = document.getElementById('dc-motor-doc-modal');
+    document.getElementById('close-dc-motor-doc')?.addEventListener('click', closeDcMotorDocModal);
+    window.addEventListener('click', (e) => { if (e.target === dcMotorDoc) closeDcMotorDocModal(); });
+    const servoMotorDoc = document.getElementById('servo-motor-doc-modal');
+    document.getElementById('close-servo-motor-doc')?.addEventListener('click', closeServoMotorDocModal);
+    window.addEventListener('click', (e) => { if (e.target === servoMotorDoc) closeServoMotorDocModal(); });
     const unoDoc = document.getElementById('uno-doc-modal');
     document.getElementById('close-uno-doc')?.addEventListener('click', closeUnoDocModal);
     window.addEventListener('click', (e) => { if (e.target === unoDoc) closeUnoDocModal(); });

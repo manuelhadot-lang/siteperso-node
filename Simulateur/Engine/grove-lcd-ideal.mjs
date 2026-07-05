@@ -135,7 +135,7 @@ function buildLcdPrintCtx(board, components, wires, autoJunctions, elapsedSec = 
             ? (arg) => resolveBmpPrintArg(arg, sketch, board.label, components, wires, autoJunctions)
             : undefined,
         collectVarBindings: (body) => {
-            let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs()) : {};
+            let bindings = hasAnalog ? evaluateLoopVarBindings(sketch, analogInputs(), board.type) : {};
             if (hasDht) {
                 bindings = {
                     ...bindings,

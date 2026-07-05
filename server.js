@@ -1039,6 +1039,9 @@ app.post("/api/simulate", async (req, res) => {
 
 mountArduinoRoutes(app);
 
+const { mountSimulatorVisitRoutes } = require("./tools/simulator-visit-counter.cjs");
+mountSimulatorVisitRoutes(app, __dirname);
+
 // --- 5. COMPTEUR ---
 let visitCount = readJsonFileSafe("./visits.json", { count: 0 }).count || 0;
 app.get('/api/counter', (req, res) => {
@@ -1383,7 +1386,7 @@ app.get('/admin/backup-zip', authentificationProf, (req, res) => {
     archive.pipe(res);
 
     // Ajouter les fichiers JSON de données
-    const files = ['eleves.json', 'quizzes.json', 'planning_projets.json', 'planning_docs.json', 'chat_messages.json', 'visits.json'];
+    const files = ['eleves.json', 'quizzes.json', 'planning_projets.json', 'planning_docs.json', 'chat_messages.json', 'visits.json', 'simulator-visits.json'];
     files.forEach(file => {
         if (fs.existsSync(file)) archive.file(file, { name: file });
     });

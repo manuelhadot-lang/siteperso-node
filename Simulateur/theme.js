@@ -45,6 +45,8 @@ const PALETTES = {
 
 export const COLORS = { ...PALETTES.dark };
 export let editorTheme = 'dark';
+/** Affichage de la grille de l’éditeur de schéma. */
+export let showGrid = true;
 
 function applyCssTheme() {
     document.body.classList.toggle('theme-light', editorTheme === 'light');
@@ -57,6 +59,32 @@ function updateThemeMenuMarks() {
     const lightBtn = document.getElementById('btn-theme-light');
     if (darkBtn) darkBtn.textContent = editorTheme === 'dark' ? 'Sombre ✓' : 'Sombre';
     if (lightBtn) lightBtn.textContent = editorTheme === 'light' ? 'Clair ✓' : 'Clair';
+}
+
+function updateGridMenuMark() {
+    const btn = document.getElementById('btn-toggle-grid');
+    if (btn) btn.textContent = showGrid ? 'Grille ✓' : 'Grille (masquée)';
+}
+
+export function setShowGrid(visible) {
+    showGrid = visible !== false;
+    try { localStorage.setItem('sim-editor-grid', showGrid ? '1' : '0'); } catch (_) { /* ignore */ }
+    updateGridMenuMark();
+}
+
+export function initEditorGrid() {
+    let saved = true;
+    try {
+        const v = localStorage.getItem('sim-editor-grid');
+        if (v === '0') saved = false;
+    } catch (_) { /* ignore */ }
+    setShowGrid(saved);
+}
+
+/** Réapplique les coches menu après normalisation des libellés. */
+export function refreshEditorMenuMarks() {
+    updateThemeMenuMarks();
+    updateGridMenuMark();
 }
 
 export function setEditorTheme(theme) {

@@ -135,4 +135,46 @@ const btnJustPressed = resolveTft18DisplayAt(parsedTimed, 8000, {
 assert.ok(labelTexts(btnJustPressed).includes("2eme page"), "bouton vient d'être appuyé");
 assert.ok(!labelTexts(btnJustPressed).includes("Station"), "pas de retour setup au bouton");
 
+const sketchAppui = `#include <Adafruit_ST7735.h>
+#define ST77XX_GREEN 0x07E0
+boolean appui = true;
+Adafruit_ST7735 tft(10, 8, 9);
+void setup() {
+  pinMode(4, INPUT_PULLUP);
+  tft.initR(INITR_BLACKTAB);
+}
+void loop() {
+  if ((digitalRead(4) == 0) && (appui == true)) {
+    tft.fillScreen(ST77XX_GREEN);
+    tft.setCursor(25, 50);
+    tft.print("2eme page");
+  } else {
+    tft.setCursor(10, 10);
+    tft.print("Meteo");
+    delay(2000);
+  }
+}
+`;
+const parsedAppui = parseTft18FromSketch(sketchAppui);
+const pageAppuiBtn = resolveTft18DisplayAt(parsedAppui, 500, {
+    ctx: {
+        liveInput: true,
+        boardType: "esp32_devkit",
+        inputs: { GPIO4: 0 },
+        src: sketchAppui,
+        setupDone: true,
+    },
+});
+assert.ok(labelTexts(pageAppuiBtn).includes("2eme page"), "appui=true + GPIO4=0 → 2eme page");
+const pageAppuiElse = resolveTft18DisplayAt(parsedAppui, 500, {
+    ctx: {
+        liveInput: true,
+        boardType: "esp32_devkit",
+        inputs: { GPIO4: 1 },
+        src: sketchAppui,
+        setupDone: true,
+    },
+});
+assert.ok(labelTexts(pageAppuiElse).includes("Meteo"), "GPIO4 relâché → else Meteo");
+
 console.log("tft18-digitalread-loop.test.mjs OK");

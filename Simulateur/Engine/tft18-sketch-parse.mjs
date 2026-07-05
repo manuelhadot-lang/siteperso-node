@@ -16,7 +16,7 @@ export const TFT18_TEXT_ROWS = 10;
 
 import { expandUserFunctionCalls } from "./sketch-functions.mjs";
 import { isEsp32BoardType } from "./micro-board-config.mjs";
-import { evalSketchExpression, parseSketchBodyStatements, runSketchForLoop } from "./arduino-sketch-parse.mjs";
+import { evalSketchExpression, parseSketchBodyStatements, runSketchForLoop, createSketchEvalState, execSketchExprStatement } from "./arduino-sketch-parse.mjs";
 
 function stripComments(src) {
     return String(src || "")
@@ -145,8 +145,30 @@ function charFromByte(code) {
     return String.fromCharCode(code);
 }
 
+/** Premier argument d'un appel print/println (ignore les décimales : print(v, 1)). */
+function firstPrintCallArg(argStr) {
+    const s = String(argStr || "").trim();
+    let depth = 0;
+    let inStr = null;
+    for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (inStr) {
+            if (c === inStr && s[i - 1] !== "\\") inStr = null;
+            continue;
+        }
+        if (c === '"' || c === "'") {
+            inStr = c;
+            continue;
+        }
+        if (c === "(") depth++;
+        else if (c === ")") depth--;
+        else if (c === "," && depth === 0) return s.slice(0, i).trim();
+    }
+    return s;
+}
+
 function parsePrintArg(arg, ctx) {
-    const t = String(arg || "").trim();
+    const t = firstPrintCallArg(arg);
     if (!t) return "";
     if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
         return t.slice(1, -1);
@@ -227,24 +249,37 @@ function execTftCall(text, st, ctx) {
 const MAX_TFT_LOOP_GUARD = 5000;
 
 function createTftEvalState(ctx) {
-    return {
+    return createSketchEvalState({
         boardType: ctx.boardType || "arduino_uno",
-        sketchSrc: ctx.src || "",
-        vars: {},
-        floatVars: new Set(),
-        regs: {},
-        pins: {},
+        src: ctx.src || "",
         inputs: ctx.inputs || {},
-        analogInputs: {},
-        simTimeMs: 0,
-    };
+        analogInputs: ctx.analogInputs || {},
+        simTimeMs: ctx.simTimeMs || 0,
+        persistedVars: ctx.persistedVars,
+    });
+}
+
+function isTftDisplayExpr(text) {
+    const t = String(text || "").trim();
+    return /^tft\./i.test(t) || /^delay\s*\(/i.test(t);
+}
+
+function execTftExprStatement(stmt, st, ctx, evalState, onDelay) {
+    if (isTftDisplayExpr(stmt.text)) {
+        return execTftCall(stmt.text, st, ctx);
+    }
+    execSketchExprStatement(stmt.text, evalState, onDelay);
+    return 0;
 }
 
 function execTftStatements(stmts, st, ctx, phases, delayAcc) {
     const evalState = createTftEvalState(ctx);
     for (const stmt of stmts) {
         if (stmt.type === "expr") {
-            const d = execTftCall(stmt.text, st, ctx);
+            const d = execTftExprStatement(stmt, st, ctx, evalState, (ms) => {
+                delayAcc.val += ms;
+                phases.push({ durationMs: ms, ...snapshotState(st) });
+            });
             if (d > 0) {
                 delayAcc.val += d;
                 phases.push({ durationMs: d, ...snapshotState(st) });
@@ -270,32 +305,39 @@ function execTftStatements(stmts, st, ctx, phases, delayAcc) {
 }
 
 /** Exécute le corps jusqu'à timeBudgetMs (delay() suspend les instructions suivantes). */
-function execTftStatementsUpToTime(stmts, st, ctx, timeBudgetMs, timeAcc) {
-    const evalState = createTftEvalState(ctx);
+function execTftStatementsUpToTime(stmts, st, ctx, timeBudgetMs, timeAcc, evalState) {
+    if (!evalState) evalState = createTftEvalState(ctx);
     for (const stmt of stmts) {
         if (timeAcc.val > timeBudgetMs) return;
         if (stmt.type === "expr") {
-            const d = execTftCall(stmt.text, st, ctx);
-            if (d > 0) {
-                if (timeAcc.val + d > timeBudgetMs) return;
-                timeAcc.val += d;
+            const t = String(stmt.text || "").trim();
+            if (/^delay\s*\(\s*(\d+)\s*\)/i.test(t)) {
+                const d = execTftCall(t, st, ctx);
+                if (d > 0) {
+                    if (timeAcc.val + d > timeBudgetMs) return;
+                    timeAcc.val += d;
+                }
+            } else if (/^tft\./i.test(t)) {
+                execTftCall(t, st, ctx);
+            } else {
+                execSketchExprStatement(stmt.text, evalState);
             }
         } else if (stmt.type === "if") {
             if (evalSketchExpression(stmt.cond, evalState)) {
-                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc);
+                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc, evalState);
             } else if (stmt.elseBody) {
-                execTftStatementsUpToTime(stmt.elseBody, st, ctx, timeBudgetMs, timeAcc);
+                execTftStatementsUpToTime(stmt.elseBody, st, ctx, timeBudgetMs, timeAcc, evalState);
             }
         } else if (stmt.type === "while") {
             let guard = 0;
             while (evalSketchExpression(stmt.cond, evalState) && guard < MAX_TFT_LOOP_GUARD) {
                 if (timeAcc.val > timeBudgetMs) return;
                 guard++;
-                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc);
+                execTftStatementsUpToTime(stmt.body, st, ctx, timeBudgetMs, timeAcc, evalState);
             }
         } else if (stmt.type === "for") {
             runSketchForLoop(stmt, evalState, (body) => {
-                execTftStatementsUpToTime(body, st, ctx, timeBudgetMs, timeAcc);
+                execTftStatementsUpToTime(body, st, ctx, timeBudgetMs, timeAcc, evalState);
             });
         }
     }
@@ -308,9 +350,31 @@ function computeLiveLoopCycleMs(body) {
     return max + 1;
 }
 
+function persistLoopVars(ctx, evalState) {
+    if (!ctx?.persistedVars || !evalState?.vars) return;
+    const initKeys = Object.keys(
+        createSketchEvalState({ src: ctx.src || ctx.sketchSrc || "", boardType: ctx.boardType }).vars
+    );
+    for (const k of initKeys) {
+        if (typeof evalState.vars[k] === "number" && Number.isFinite(evalState.vars[k])) {
+            ctx.persistedVars[k] = evalState.vars[k];
+        }
+    }
+}
+
 function executeBodyUpToTime(body, st, ctx, timeBudgetMs) {
     const timeAcc = { val: 0 };
-    execTftStatementsUpToTime(parseSketchBodyStatements(body), st, ctx, timeBudgetMs, timeAcc);
+    const evalState = createTftEvalState(ctx);
+    execTftStatementsUpToTime(parseSketchBodyStatements(body), st, ctx, timeBudgetMs, timeAcc, evalState);
+    persistLoopVars(ctx, evalState);
+    return evalState;
+}
+
+/** Exécution loop() live jusqu'à timeBudgetMs (tests / persistance variables). */
+export function runTftLoopUpToTime(body, ctx, timeBudgetMs) {
+    const st = createState();
+    const evalState = executeBodyUpToTime(body, st, ctx, timeBudgetMs);
+    return { display: snapshotState(st), vars: { ...ctx.persistedVars }, evalState: evalState?.vars };
 }
 
 /** Exécute setup/loop ; capture les phases aux delay(). Gère if/else et digitalRead(). */
@@ -481,6 +545,7 @@ export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
         const ctx = {
             src: parsed.sketchSrc,
             ...opts.ctx,
+            analogInputs: opts.ctx.getAnalogInputs?.() ?? opts.ctx.analogInputs ?? {},
             varBindings: opts.ctx.collectVarBindings?.(loopBody) || {},
         };
         const inputChangedAt = opts.ctx.inputChangedAtMs ?? elapsedMs;
@@ -515,6 +580,7 @@ export function resolveTft18DisplayAt(parsed, elapsedMs, opts = {}) {
         const ctx = {
             src: parsed.sketchSrc,
             ...opts.ctx,
+            analogInputs: opts.ctx.getAnalogInputs?.() ?? opts.ctx.analogInputs ?? {},
             varBindings: opts.ctx.collectVarBindings?.(loopBody) || {},
         };
         executeBody(loopBody, st, ctx);

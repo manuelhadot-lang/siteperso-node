@@ -4,6 +4,9 @@
 
 import { reachableJonctions } from "./hc90-cascade.mjs";
 import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
+import { tryLm7805OutputVoltage } from "./lm7805.mjs";
+import { tryIr2104GateVoltage } from "./ir2104.mjs";
+import { tryL293dOutputVoltage } from "./l293d.mjs";
 
 const ADC_MAX = 1023;
 
@@ -115,6 +118,15 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
 
     const { components, wires, autoJunctions = [], tSec = 0, getVoltageAtJonction, voltmeters } = ctx;
     const net = reachableJonctions(jonctionId, wires, autoJunctions);
+
+    const regV = tryLm7805OutputVoltage(jonctionId, ctx, resolveNetVoltage, visiting);
+    if (Number.isFinite(regV)) return regV;
+
+    const gateV = tryIr2104GateVoltage(jonctionId, ctx, resolveNetVoltage, visiting);
+    if (Number.isFinite(gateV)) return gateV;
+
+    const l293V = tryL293dOutputVoltage(jonctionId, ctx, resolveNetVoltage, visiting);
+    if (Number.isFinite(l293V)) return l293V;
 
     for (const j of net) {
         const fixed = fixedVoltageAtJunction(j);

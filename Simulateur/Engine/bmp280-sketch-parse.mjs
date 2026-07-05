@@ -79,8 +79,6 @@ export function buildBmpVarBindingsFromBody(body, bmpVarName, temperature, press
     const pressurePa = hpa * 100;
     const tempStr = String(Math.round(temperature * 10) / 10);
     const pressStr = String(Math.round(hpa * 10) / 10);
-    const alt = pressureToAltitude(seaLevelHpa, pressurePa);
-    const altStr = String(Math.round(alt * 10) / 10);
 
     const tempRe = new RegExp(
         `(?:float|double)\\s+(\\w+)\\s*=\\s*${bmpVarName}\\.readTemperature\\s*\\(\\s*\\)\\s*;`,
@@ -103,7 +101,15 @@ export function buildBmpVarBindingsFromBody(body, bmpVarName, temperature, press
     while ((m = tempRe.exec(body)) !== null) bindings[m[1]] = tempStr;
     while ((m = pressRe.exec(body)) !== null) bindings[m[1]] = pressStr;
     while ((m = pressDivRe.exec(body)) !== null) bindings[m[1]] = pressStr;
-    while ((m = altRe.exec(body)) !== null) bindings[m[1]] = altStr;
+    while ((m = altRe.exec(body)) !== null) {
+        const seaM = m[0].match(/readAltitude\s*\(\s*([^)]*)\s*\)/i);
+        let sea = seaLevelHpa;
+        if (seaM?.[1]?.trim()) {
+            const n = parseFloat(seaM[1]);
+            if (Number.isFinite(n)) sea = n;
+        }
+        bindings[m[1]] = String(Math.round(pressureToAltitude(sea, pressurePa) * 10) / 10);
+    }
 
     return bindings;
 }

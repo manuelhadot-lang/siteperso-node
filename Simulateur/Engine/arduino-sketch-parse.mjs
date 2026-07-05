@@ -12,7 +12,7 @@ import {
     registersToPinLevels,
     registersToPinModes,
 } from "./arduino-avr-registers.mjs";
-import { expandUserFunctionCalls } from "./sketch-functions.mjs";
+import { collectUserFunctions, expandUserFunctionCalls } from "./sketch-functions.mjs";
 import {
     isEsp32BoardType,
     isMicroBoardType,
@@ -399,7 +399,7 @@ function evalExpr(expr, vars, floatVars = new Set(), regs = {}) {
     return evFloat(r) ? evVal(r) : Math.trunc(evVal(r));
 }
 
-const DECL_RE = /\b((?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|char|short|float|double|uint8_t|uint16_t|volatile\s+int|volatile\s+byte))\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;,]+)/g;
+const DECL_RE = /\b(?:(?:static|volatile)\s+)*(?:const\s+)?(?:unsigned\s+)?(?:boolean|bool|int|long|byte|char|short|float|double|uint8_t|uint16_t)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;,]+)/g;
 const FLOAT_DECL_RE = /\b(?:const\s+)?(?:float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g;
 
 function collectInitialVars(src) {
@@ -420,12 +420,36 @@ function collectInitialVars(src) {
     }
     DECL_RE.lastIndex = 0;
     while ((m = DECL_RE.exec(globalPart)) !== null) {
-        const name = m[2];
+        const name = m[1];
         if (Array.isArray(vars[name])) continue;
-        vars[name] = evalExpr(m[3], vars, floatVars);
-        if (/\b(?:float|double)\b/i.test(m[1])) floatVars.add(name);
+        vars[name] = evalExpr(m[2], vars, floatVars);
+        const declStart = Math.max(0, m.index - 24);
+        const declPrefix = globalPart.slice(declStart, m.index + 1);
+        if (/\b(?:float|double)\b/i.test(declPrefix)) floatVars.add(name);
     }
     return { vars, floatVars };
+}
+
+/** État d'évaluation sketch (variables globales, digitalRead, Serial…). */
+export function createSketchEvalState(ctx = {}) {
+    const src = stripComments(ctx.sketchSrc || ctx.src || "");
+    const init = collectInitialVars(src);
+    const persisted = ctx.persistedVars && typeof ctx.persistedVars === "object" ? ctx.persistedVars : {};
+    return {
+        boardType: ctx.boardType || "arduino_uno",
+        sketchSrc: src,
+        vars: { ...init.vars, ...persisted },
+        floatVars: new Set(init.floatVars),
+        regs: ctx.regs || {},
+        pins: ctx.pins || {},
+        inputs: ctx.inputs || {},
+        analogInputs: ctx.analogInputs || {},
+        simTimeMs: ctx.simTimeMs || 0,
+        serial: ctx.serial,
+        dhtReadings: ctx.dhtReadings,
+        tslReadings: ctx.tslReadings,
+        bmpReadings: ctx.bmpReadings,
+    };
 }
 
 function parseParenCondition(s, startIdx) {
@@ -474,7 +498,7 @@ function parseForHeader(s, startIdx) {
 function execForInit(init, state) {
     if (!init) return;
     const decl = init.match(
-        /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|char|short)\s+(\w+)\s*=\s*(.+)$/
+        /^(?:(?:static|volatile)\s+)*(?:const\s+)?(?:unsigned\s+)?(?:boolean|bool|int|long|byte|char|short)\s+(\w+)\s*=\s*(.+)$/
     );
     if (decl) {
         state.vars[decl[1]] = Math.trunc(evalExprState(decl[2], state));
@@ -752,6 +776,11 @@ export function parseSketchBodyStatements(body) {
     return parseStatements(body);
 }
 
+/** Exécute une instruction simple (variables, delay, Serial, pinMode…). */
+export function execSketchExprStatement(text, state, onDelay) {
+    return execExprStatement(text, state, onDelay);
+}
+
 /** Évalue une expression sketch (digitalRead, millis, variables…). */
 export function evalSketchExpression(expr, state) {
     return evalExprState(expr, state);
@@ -870,17 +899,19 @@ function execExprStatement(text, state, onDelay) {
     if (/^\w+\.begin\s*\(\s*\)/i.test(text)) return 0;
 
     const localDecl = text.match(
-        /^(?:const\s+)?(?:unsigned\s+)?(int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([\s\S]+)$/i
+        /^(?:(?:static|volatile)\s+)*(?:const\s+)?(?:unsigned\s+)?(?:boolean|bool|int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([\s\S]+)$/i
     );
     if (localDecl) {
-        const type = localDecl[1];
-        const name = localDecl[2];
-        const isFloat = /^(?:float|double)$/i.test(type);
+        const typeToken = text.match(
+            /^(?:(?:static|volatile)\s+)*(?:const\s+)?(?:unsigned\s+)?((?:boolean|bool|int|long|byte|short|float|double))/i
+        )?.[1] ?? "int";
+        const name = localDecl[1];
+        const isFloat = /^(?:float|double)$/i.test(typeToken);
         if (isFloat) {
             state.floatVars = state.floatVars || new Set();
             state.floatVars.add(name);
         }
-        const val = evalExprState(localDecl[3], state);
+        const val = evalExprState(localDecl[2], state);
         state.vars[name] = isFloat ? val : Math.trunc(val);
         return 0;
     }
@@ -1031,10 +1062,9 @@ export function sketchUsesLiveInput(sketch) {
     return /\bdigitalRead\s*\(/i.test(loop);
 }
 
-/** Le loop() utilise-t-il analogRead ? */
+/** Le sketch utilise-t-il analogRead (loop ou fonctions utilitaires) ? */
 export function sketchUsesAnalogInput(sketch) {
-    const loop = bodyOf(stripComments(sketch || ""), "loop");
-    return /\banalogRead\s*\(/i.test(loop);
+    return /\banalogRead\s*\(/i.test(stripComments(sketch || ""));
 }
 
 export function createArduinoRuntime(uno) {
@@ -1144,14 +1174,21 @@ function formatBindingValue(name, value, floatVars) {
  * Évalue les variables locales du loop() (analogRead, calculs float…) pour lcd.print(var).
  * @param {string} sketch
  * @param {Record<string, number>} [analogInputs] ex. { A0: 512 }
+ * @param {string} [boardType]
  * @returns {Record<string, string>}
  */
-export function evaluateLoopVarBindings(sketch, analogInputs = {}) {
+export function evaluateLoopVarBindings(sketch, analogInputs = {}, boardType = "arduino_uno") {
     const src = stripComments(sketch || "");
     const loopBody = bodyOf(src, "loop");
-    if (!loopBody.trim()) return {};
+    let scanBody = expandUserFunctionCalls(loopBody, src);
+    for (const fn of collectUserFunctions(src).values()) {
+        scanBody += `\n${fn.body}`;
+    }
+    if (!scanBody.trim()) return {};
     const init = collectInitialVars(src);
     const state = {
+        boardType,
+        sketchSrc: src,
         vars: { ...init.vars },
         floatVars: new Set(init.floatVars),
         regs: {},
@@ -1161,14 +1198,14 @@ export function evaluateLoopVarBindings(sketch, analogInputs = {}) {
         simTimeMs: 0,
     };
     const bindings = {};
-    for (const st of parseStatements(loopBody)) {
+    for (const st of parseStatements(scanBody)) {
         if (st.type !== "expr") continue;
         const text = st.text.trim();
-        const isLocalDecl = /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|short|float|double)\s+[A-Za-z_]\w*\s*=/i.test(text);
+        const isLocalDecl = /^(?:const\s+)?(?:unsigned\s+)?(?:boolean|bool|int|long|byte|short|float|double)\s+[A-Za-z_]\w*\s*=/i.test(text);
         if (!isLocalDecl) continue;
         execExprStatement(text, state, null);
         const m = text.match(
-            /^(?:const\s+)?(?:unsigned\s+)?(?:int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/i
+            /^(?:const\s+)?(?:unsigned\s+)?(?:boolean|bool|int|long|byte|short|float|double)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/i
         );
         if (m && Object.prototype.hasOwnProperty.call(state.vars, m[1])) {
             bindings[m[1]] = formatBindingValue(m[1], state.vars[m[1]], state.floatVars);

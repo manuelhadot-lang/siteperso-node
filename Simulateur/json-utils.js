@@ -45,6 +45,10 @@ export function normalizeCircuitPayload(data) {
             data.counters && typeof data.counters === 'object' && !Array.isArray(data.counters)
                 ? data.counters
                 : {},
+        printFrame:
+            data.printFrame && typeof data.printFrame === 'object' && !Array.isArray(data.printFrame)
+                ? data.printFrame
+                : null,
     };
 }
 
