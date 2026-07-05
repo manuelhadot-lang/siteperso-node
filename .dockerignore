@@ -2,13 +2,24 @@
 node_modules
 **/node_modules
 
+# App Electron Windows — hors scope du conteneur web
+SimulateurH/
+
 # Bundle ngspice Windows / portable : dans Docker on utilise apt + digital.cm copié au build (Dockerfile).
 Simulateur/bin
 Simulateur/lib
+Simulateur/share
+
+# Cache Arduino local (arduino-cli dans l’image Docker)
+Simulateur/arduino-data/
 
 .git
 .env
 .env.*
+
+# Assets lourds non utilisés en production
+public/st_peters_square_night_4k.exr
+docs/Simulateur-Source-Complet.pdf
 
 # Submodule git souvent vide au clone Render — BMP280 vient de arduino-cli (ARDUINO_DIRECTORIES_DATA)
 arduino-libraries/libraries/Adafruit_BMP280_Library

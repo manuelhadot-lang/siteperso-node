@@ -44,3 +44,10 @@ Simulateur/bin/arduino-cli/arduino-cli.exe
 Simulateur/bin/arduino-cli/*.zip
 SimulateurH/dist-out/
 SimulateurH/node_modules/
+SimulateurH/dist/
+
+# HDR 4K non référencé dans le site
+public/*.exr
+
+# Cache Arduino local complet
+Simulateur/arduino-data/
