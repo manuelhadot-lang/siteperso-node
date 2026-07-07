@@ -1,0 +1,182 @@
+{
+    "components": [
+        {
+            "type": "capacitor",
+            "x": 880,
+            "y": 320,
+            "label": "C1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "1u"
+        },
+        {
+            "type": "resistor",
+            "x": 720,
+            "y": 240,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gsin",
+            "x": 460,
+            "y": 240,
+            "label": "Sin_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "peakAmplitude": 5,
+            "frequency": 1000,
+            "offset": 0
+        },
+        {
+            "type": "bode_analyzer",
+            "x": 1140,
+            "y": 300,
+            "label": "Bode_1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 760,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "C1_in"
+        },
+        {
+            "fromJonctionId": "Sin_1_out",
+            "points": [
+                {
+                    "x": 500,
+                    "y": 240
+                },
+                {
+                    "x": 680,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "R1_in"
+        },
+        {
+            "fromJonctionId": "Sin_1_in",
+            "points": [
+                {
+                    "x": 460,
+                    "y": 280
+                },
+                {
+                    "x": 460,
+                    "y": 440
+                },
+                {
+                    "x": 880,
+                    "y": 440
+                },
+                {
+                    "x": 880,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "C1_out"
+        },
+        {
+            "fromJonctionId": "Bode_1_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 260
+                },
+                {
+                    "x": 1140,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "auto_junc_6"
+        },
+        {
+            "fromJonctionId": "Bode_1_in",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 340
+                },
+                {
+                    "x": 1140,
+                    "y": 440
+                },
+                {
+                    "x": 880,
+                    "y": 440
+                }
+            ],
+            "toJonctionId": "auto_junc_7"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_6",
+            "x": 880,
+            "y": 240
+        },
+        {
+            "id": "auto_junc_7",
+            "x": 880,
+            "y": 440
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "bode_analyzer": 2,
+        "junction": 7,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 1
+    }
+}

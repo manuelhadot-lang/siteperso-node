@@ -1,0 +1,147 @@
+{
+    "components": [
+        {
+            "type": "battery",
+            "x": 680,
+            "y": 300,
+            "label": "VDC1",
+            "rotation": 90
+        },
+        {
+            "type": "resistor",
+            "x": 800,
+            "y": 200,
+            "label": "R1",
+            "rotation": 0
+        },
+        {
+            "type": "resistor",
+            "x": 920,
+            "y": 300,
+            "label": "R2",
+            "rotation": 90
+        },
+        {
+            "type": "voltmeter",
+            "x": 1100,
+            "y": 280,
+            "label": "V1",
+            "rotation": 90
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "R1_in",
+            "points": [
+                {
+                    "x": 760,
+                    "y": 200
+                },
+                {
+                    "x": 680,
+                    "y": 200
+                },
+                {
+                    "x": 680,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "VDC1_in"
+        },
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 200
+                },
+                {
+                    "x": 920,
+                    "y": 200
+                },
+                {
+                    "x": 920,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "R2_in"
+        },
+        {
+            "fromJonctionId": "R2_out",
+            "points": [
+                {
+                    "x": 920,
+                    "y": 340
+                },
+                {
+                    "x": 920,
+                    "y": 420
+                },
+                {
+                    "x": 680,
+                    "y": 420
+                },
+                {
+                    "x": 680,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "VDC1_out"
+        },
+        {
+            "fromJonctionId": "V1_in",
+            "points": [
+                {
+                    "x": 1100,
+                    "y": 240
+                },
+                {
+                    "x": 1100,
+                    "y": 200
+                },
+                {
+                    "x": 920,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "V1_out",
+            "points": [
+                {
+                    "x": 1100,
+                    "y": 320
+                },
+                {
+                    "x": 1100,
+                    "y": 380
+                },
+                {
+                    "x": 920,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 920,
+            "y": 200
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 920,
+            "y": 380
+        }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 2,
+        "nand": 0,
+        "voltmeter": 1,
+        "junction": 2
+    }
+}

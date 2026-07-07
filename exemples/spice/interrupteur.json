@@ -1,0 +1,240 @@
+{
+    "components": [
+        {
+            "type": "switch_spdt",
+            "x": 1000,
+            "y": 220,
+            "label": "SW_1",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "battery",
+            "x": 720,
+            "y": 260,
+            "label": "VDC_1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 720,
+            "y": 360,
+            "label": "GND_1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1020,
+            "y": 300,
+            "label": "R_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1140,
+            "y": 380,
+            "label": "R_2",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1140,
+            "y": 500,
+            "label": "GND_2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "voltmeter",
+            "x": 1260,
+            "y": 380,
+            "label": "V_1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "SW_1_a",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 200
+                },
+                {
+                    "x": 720,
+                    "y": 200
+                },
+                {
+                    "x": 720,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "VDC_1_in"
+        },
+        {
+            "fromJonctionId": "VDC_1_out",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 300
+                },
+                {
+                    "x": 720,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "GND_1_out"
+        },
+        {
+            "fromJonctionId": "SW_1_com",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 220
+                },
+                {
+                    "x": 920,
+                    "y": 220
+                },
+                {
+                    "x": 920,
+                    "y": 300
+                },
+                {
+                    "x": 980,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "R_1_in"
+        },
+        {
+            "fromJonctionId": "R_1_out",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 300
+                },
+                {
+                    "x": 1140,
+                    "y": 300
+                },
+                {
+                    "x": 1140,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "R_2_in"
+        },
+        {
+            "fromJonctionId": "R_2_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 420
+                },
+                {
+                    "x": 1140,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "GND_2_out"
+        },
+        {
+            "fromJonctionId": "V_1_out",
+            "points": [
+                {
+                    "x": 1260,
+                    "y": 340
+                },
+                {
+                    "x": 1260,
+                    "y": 300
+                },
+                {
+                    "x": 1140,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "V_1_in",
+            "points": [
+                {
+                    "x": 1260,
+                    "y": 420
+                },
+                {
+                    "x": 1260,
+                    "y": 460
+                },
+                {
+                    "x": 1140,
+                    "y": 460
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 1140,
+            "y": 300
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 1140,
+            "y": 460
+        }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 2,
+        "potentiometer": 0,
+        "switch_spdt": 1,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 1,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 2,
+        "gnd": 2,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

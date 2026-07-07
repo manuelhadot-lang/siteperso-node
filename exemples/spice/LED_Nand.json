@@ -1,0 +1,222 @@
+{
+    "components": [
+        {
+            "type": "logic_terminal",
+            "x": 680,
+            "y": 220,
+            "label": "LOGIC1",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5,
+            "isBlown": false
+        },
+        {
+            "type": "nand",
+            "x": 880,
+            "y": 220,
+            "label": "Nand1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "isBlown": false
+        },
+        {
+            "type": "resistor",
+            "x": 1020,
+            "y": 220,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "isBlown": false,
+            "value": "150"
+        },
+        {
+            "type": "led",
+            "x": 1160,
+            "y": 300,
+            "label": "LED1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "isBlown": false
+        },
+        {
+            "type": "gnd",
+            "x": 1160,
+            "y": 460,
+            "label": "GND1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5,
+            "isBlown": false
+        },
+        {
+            "type": "voltmeter",
+            "x": 1320,
+            "y": 300,
+            "label": "V2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LOGIC1_out",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 220
+                },
+                {
+                    "x": 780,
+                    "y": 220
+                },
+                {
+                    "x": 780,
+                    "y": 240
+                },
+                {
+                    "x": 840,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "Nand1_inB"
+        },
+        {
+            "fromJonctionId": "Nand1_inA",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 200
+                },
+                {
+                    "x": 780,
+                    "y": 200
+                },
+                {
+                    "x": 780,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "Nand1_out",
+            "points": [
+                {
+                    "x": 920,
+                    "y": 220
+                },
+                {
+                    "x": 980,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "R1_in"
+        },
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 220
+                },
+                {
+                    "x": 1160,
+                    "y": 220
+                },
+                {
+                    "x": 1160,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "LED1_in"
+        },
+        {
+            "fromJonctionId": "LED1_out",
+            "points": [
+                {
+                    "x": 1160,
+                    "y": 340
+                },
+                {
+                    "x": 1160,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "V2_out",
+            "points": [
+                {
+                    "x": 1320,
+                    "y": 260
+                },
+                {
+                    "x": 1320,
+                    "y": 220
+                },
+                {
+                    "x": 1160,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "auto_junc_4"
+        },
+        {
+            "fromJonctionId": "V2_in",
+            "points": [
+                {
+                    "x": 1320,
+                    "y": 340
+                },
+                {
+                    "x": 1320,
+                    "y": 400
+                },
+                {
+                    "x": 1160,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "auto_junc_5"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 780,
+            "y": 220
+        },
+        {
+            "id": "auto_junc_4",
+            "x": 1160,
+            "y": 220
+        },
+        {
+            "id": "auto_junc_5",
+            "x": 1160,
+            "y": 400
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "nand": 1,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "led": 1,
+        "voltmeter": 2,
+        "ammeter": 1,
+        "ohmmeter": 1,
+        "junction": 5,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 1,
+        "gimp": 1,
+        "gsin": 0
+    }
+}

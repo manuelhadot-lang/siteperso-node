@@ -1,0 +1,375 @@
+{
+    "name": "voltmetre",
+    "components": [
+        {
+            "type": "arduino_uno",
+            "x": 600,
+            "y": 400,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "// Définition de la broche analogique utilisée\n#include <rgb_lcd.h>\n\nconst int brocheAnalogique = A0;\nrgb_lcd LCD;\n\nvoid setup() {\n  // Initialisation de la communication série à 9600 bauds\n  Serial.begin(9600);\n  LCD.begin(16,2);  \n}\n\nvoid loop() {\n  // 1. Lecture de la valeur brute (entre 0 et 1023)\n  int valeurBrute = analogRead(brocheAnalogique);\n  \n  // 2. Conversion de la valeur brute en tension (0.0V à 5.0V)\n  // Le CAN (Convertisseur Analogique-Numérique) de l'Arduino Uno a une résolution de 10 bits (2^10 = 1024 valeurs)\n  float tension = valeurBrute * (5.0 / 1023.0);\n  \n  // 3. Affichage des résultats dans le Moniteur Série\n  Serial.print(\"Valeur brute (0-1023) : \");\n  Serial.print(valeurBrute);\n  Serial.print(\"  |  Tension : \");\n  LCD.setCursor(5,0);\n  Serial.print(tension);\n  LCD.print(tension);\n  LCD.print(\" V\");\n  Serial.println(\" V\");\n  \n  // Pause de 500 millisecondes entre chaque mesure pour faciliter la lecture\n  delay(500);\n}",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "INPUT_PULLUP",
+                "D1": "OUTPUT",
+                "D2": "INPUT",
+                "D3": "INPUT",
+                "D4": "INPUT",
+                "D5": "INPUT",
+                "D6": "INPUT",
+                "D7": "INPUT",
+                "D8": "INPUT",
+                "D9": "INPUT",
+                "D10": "INPUT",
+                "D11": "INPUT",
+                "D12": "INPUT",
+                "D13": "INPUT",
+                "A0": "INPUT",
+                "A1": "INPUT",
+                "A2": "INPUT",
+                "A3": "INPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {
+                "D1": 1
+            },
+            "avrRegisters": {
+                "DDRB": 0,
+                "DDRC": 0,
+                "DDRD": 2,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 3
+            },
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 6250 octets (19%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 485 octets (23%) de mémoire dynamique, ce qui laisse 1563 octets pour les variables locales. Le maximum est de 2048 octets.",
+            "pinPulses": {},
+            "pinPhases": [],
+            "usesLiveInput": false,
+            "liveLevels": {
+                "D1": 1
+            },
+            "serialLog": "Valeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\nValeur brute (0-1023) : 921  |  Tension : 4.50 V\n",
+            "serialBegun": true,
+            "serialBaud": 9600,
+            "i2cBus": {
+                "active": true,
+                "address": 62,
+                "lcdId": "LCD1"
+            }
+        },
+        {
+            "type": "potentiometer",
+            "x": 380,
+            "y": 420,
+            "label": "POT1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10k",
+            "position": 10
+        },
+        {
+            "type": "gnd",
+            "x": 380,
+            "y": 540,
+            "label": "GND1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "vcc",
+            "x": 380,
+            "y": 320,
+            "label": "VCC1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "grove_lcd16x2",
+            "x": 1080,
+            "y": 220,
+            "label": "LCD1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "i2cAddress": 62,
+            "flipX": false,
+            "lcdDisplayCache": {
+                "lines": [
+                    " V              ",
+                    "                "
+                ],
+                "phases": [
+                    {
+                        "atMs": 0,
+                        "lines": [
+                            "                ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 255,
+                            "b": 255
+                        }
+                    },
+                    {
+                        "atMs": 0,
+                        "lines": [
+                            " V              ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 255,
+                            "b": 255
+                        }
+                    }
+                ],
+                "hasTiming": true,
+                "setupDurationMs": 0,
+                "loopCycleMs": 500,
+                "effectiveLoopCycleMs": 500,
+                "setupEndState": {
+                    "ddram": [
+                        "                                        ",
+                        "                                        "
+                    ],
+                    "displayShift": 0,
+                    "cursorCol": 0,
+                    "cursorRow": 0,
+                    "backlight": true,
+                    "rgb": {
+                        "r": 255,
+                        "g": 255,
+                        "b": 255
+                    },
+                    "supportsRgb": true,
+                    "cols": 16,
+                    "rows": 2
+                },
+                "loopEvents": [
+                    {
+                        "type": "lcd",
+                        "index": 227,
+                        "fn": "setcursor",
+                        "args": "0,0"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 274,
+                        "fn": "print",
+                        "args": "tension"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 296,
+                        "fn": "print",
+                        "args": "\" V\""
+                    },
+                    {
+                        "type": "delay",
+                        "index": 345,
+                        "ms": 500
+                    }
+                ],
+                "sketchSrc": "\n#include <rgb_lcd.h>\n\nconst int brocheAnalogique = A0;\nrgb_lcd LCD;\n\nvoid setup() {\n  \n  Serial.begin(9600);\n  LCD.begin(16,2);  \n}\n\nvoid loop() {\n  \n  int valeurBrute = analogRead(brocheAnalogique);\n  \n  \n  \n  float tension = valeurBrute * (5.0 / 1023.0);\n  \n  \n  Serial.print(\"Valeur brute (0-1023) : \");\n  Serial.print(valeurBrute);\n  Serial.print(\"  |  Tension : \");\n  LCD.setCursor(0,0);\n  Serial.print(tension);\n  LCD.print(tension);\n  LCD.print(\" V\");\n  Serial.println(\" V\");\n  \n  \n  delay(500);\n}",
+                "backlight": true,
+                "rgb": {
+                    "r": 255,
+                    "g": 255,
+                    "b": 255
+                },
+                "address": 62,
+                "blank": false
+            }
+        },
+        {
+            "type": "gnd",
+            "x": 800,
+            "y": 260,
+            "label": "GND2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "vcc",
+            "x": 840,
+            "y": 120,
+            "label": "VCC2",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "POT1_wip",
+            "points": [
+                {
+                    "x": 400,
+                    "y": 420
+                },
+                {
+                    "x": 500,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "UNO1_A0"
+        },
+        {
+            "fromJonctionId": "POT1_out",
+            "points": [
+                {
+                    "x": 380,
+                    "y": 460
+                },
+                {
+                    "x": 380,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "VCC1_out",
+            "points": [
+                {
+                    "x": 380,
+                    "y": 340
+                },
+                {
+                    "x": 380,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "POT1_in"
+        },
+        {
+            "fromJonctionId": "LCD1_SDA",
+            "points": [
+                {
+                    "x": 880,
+                    "y": 200
+                },
+                {
+                    "x": 460,
+                    "y": 200
+                },
+                {
+                    "x": 460,
+                    "y": 500
+                },
+                {
+                    "x": 500,
+                    "y": 500
+                }
+            ],
+            "toJonctionId": "UNO1_A4"
+        },
+        {
+            "fromJonctionId": "LCD1_SCL",
+            "points": [
+                {
+                    "x": 880,
+                    "y": 220
+                },
+                {
+                    "x": 440,
+                    "y": 220
+                },
+                {
+                    "x": 440,
+                    "y": 520
+                },
+                {
+                    "x": 500,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "UNO1_A5"
+        },
+        {
+            "fromJonctionId": "GND2_out",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 260
+                },
+                {
+                    "x": 880,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "LCD1_GND"
+        },
+        {
+            "fromJonctionId": "VCC2_out",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 140
+                },
+                {
+                    "x": 840,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "LCD1_VCC"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "potentiometer": 1,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 0,
+        "seg7": 0,
+        "grove_lcd16x2": 1,
+        "grove_dht22": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 2,
+        "vcc": 2,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

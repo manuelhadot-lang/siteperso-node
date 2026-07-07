@@ -598,6 +598,9 @@ app.post("/api/simulate", async (req, res) => {
     const { mountSimulatorVisitRoutes } = require(path.join(repoRoot, "tools", "simulator-visit-counter.cjs"));
     mountSimulatorVisitRoutes(app, repoRoot);
 
+    const { mountSimulatorExamplesRoutes } = require(path.join(repoRoot, "tools", "simulator-examples-api.cjs"));
+    mountSimulatorExamplesRoutes(app, repoRoot);
+
     app.get("/favicon.ico", (req, res) => {
         res.type("image/svg+xml");
         res.sendFile(path.join(dirSimulateur, "favicon.svg"));

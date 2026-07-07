@@ -1042,6 +1042,19 @@ mountArduinoRoutes(app);
 const { mountSimulatorVisitRoutes } = require("./tools/simulator-visit-counter.cjs");
 mountSimulatorVisitRoutes(app, __dirname);
 
+const { mountSimulatorExamplesRoutes } = require("./tools/simulator-examples-api.cjs");
+mountSimulatorExamplesRoutes(app, __dirname);
+
+const fichePresentationPdf = path.join(__dirname, "docs", "Simulateur-fiche-presentation.pdf");
+app.get("/Simulateur/fiche-presentation.pdf", (req, res) => {
+    if (!fs.existsSync(fichePresentationPdf)) {
+        return res.status(404).type("text/plain; charset=utf-8").send(
+            "PDF non généré. Exécutez : npm run docs:simulateur-presentation-pdf"
+        );
+    }
+    res.download(fichePresentationPdf, "Simulateur-fiche-presentation.pdf");
+});
+
 // --- 5. COMPTEUR ---
 let visitCount = readJsonFileSafe("./visits.json", { count: 0 }).count || 0;
 app.get('/api/counter', (req, res) => {

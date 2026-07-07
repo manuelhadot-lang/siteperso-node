@@ -1,0 +1,475 @@
+{
+    "name": "DDR",
+    "components": [
+        {
+            "type": "arduino_uno",
+            "x": 560,
+            "y": 60,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "// Arduino UNO — sketch minimal\nint x=9;\n\nvoid setup() {\n  DDRD=0b00001111;\n}\n\nvoid loop() \n{\n  if(x>-1)\n    {\n     PORTD=x;\n     delay(200);\n     x=x-1;\n    }\n  else\n    x=0;\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "OUTPUT",
+                "D1": "OUTPUT",
+                "D2": "OUTPUT",
+                "D3": "OUTPUT",
+                "D4": "INPUT",
+                "D5": "INPUT",
+                "D6": "INPUT",
+                "D7": "INPUT",
+                "D8": "INPUT",
+                "D9": "INPUT",
+                "D10": "INPUT",
+                "D11": "INPUT",
+                "D12": "INPUT",
+                "D13": "INPUT",
+                "A0": "INPUT",
+                "A1": "INPUT",
+                "A2": "INPUT",
+                "A3": "INPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {},
+            "lastCompileOk": false,
+            "lastCompileLog": "\u001b[92mUsed platform\u001b[0m \u001b[92mVersion\u001b[0m \u001b[90mPath\u001b[0m\n\u001b[93marduino:avr\u001b[0m   1.8.8   \u001b[90mC:\\Users\\mhado\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\avr\\1.8.8\u001b[0m\n\nC:\\Users\\mhado\\AppData\\Local\\Temp\\sim-arduino-Vb97P2\\UNO1\\UNO1.ino: In function 'void loop()':\r\nC:\\Users\\mhado\\AppData\\Local\\Temp\\sim-arduino-Vb97P2\\UNO1\\UNO1.ino:13:15: error: expected ')' before ';' token\r\n      delay(200;\r\n               ^\r\nError during build: exit status 1",
+            "pinPulses": {},
+            "pinPhases": [
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 0,
+                        "D2": 0,
+                        "D3": 1
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 0,
+                        "D1": 0,
+                        "D2": 0,
+                        "D3": 1
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 0,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 0,
+                        "D2": 1,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 0,
+                        "D1": 0,
+                        "D2": 1,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 0,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 0,
+                        "D1": 1,
+                        "D2": 0,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 0,
+                        "D2": 0,
+                        "D3": 0
+                    }
+                },
+                {
+                    "durationMs": 200,
+                    "levels": {
+                        "D0": 0,
+                        "D1": 0,
+                        "D2": 0,
+                        "D3": 0
+                    }
+                }
+            ],
+            "avrRegisters": {
+                "DDRB": 0,
+                "DDRC": 0,
+                "DDRD": 15,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 9
+            }
+        },
+        {
+            "type": "cd4511",
+            "x": 1060,
+            "y": 260,
+            "label": "CD45111",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 940,
+            "y": 280,
+            "label": "LOGIC1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 940,
+            "y": 300,
+            "label": "LOGIC2",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 940,
+            "y": 320,
+            "label": "LOGIC3",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "seg7",
+            "x": 1240,
+            "y": 260,
+            "label": "SEG1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1220,
+            "y": 420,
+            "label": "GND2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LOGIC1_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "CD45111_LE"
+        },
+        {
+            "fromJonctionId": "LOGIC2_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 300
+                },
+                {
+                    "x": 1000,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "CD45111_BI"
+        },
+        {
+            "fromJonctionId": "LOGIC3_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 320
+                },
+                {
+                    "x": 1000,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "CD45111_LT"
+        },
+        {
+            "fromJonctionId": "CD45111_a",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 200
+                },
+                {
+                    "x": 1200,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "SEG1_a"
+        },
+        {
+            "fromJonctionId": "CD45111_b",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 220
+                },
+                {
+                    "x": 1200,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "SEG1_b"
+        },
+        {
+            "fromJonctionId": "CD45111_c",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 240
+                },
+                {
+                    "x": 1200,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "SEG1_c"
+        },
+        {
+            "fromJonctionId": "CD45111_d",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 260
+                },
+                {
+                    "x": 1200,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "SEG1_d"
+        },
+        {
+            "fromJonctionId": "CD45111_e",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 280
+                },
+                {
+                    "x": 1200,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "SEG1_e"
+        },
+        {
+            "fromJonctionId": "CD45111_f",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 300
+                },
+                {
+                    "x": 1200,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "SEG1_f"
+        },
+        {
+            "fromJonctionId": "CD45111_g",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 320
+                },
+                {
+                    "x": 1200,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "SEG1_g"
+        },
+        {
+            "fromJonctionId": "GND2_out",
+            "points": [
+                {
+                    "x": 1240,
+                    "y": 420
+                },
+                {
+                    "x": 1260,
+                    "y": 420
+                },
+                {
+                    "x": 1260,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "SEG1_COM"
+        },
+        {
+            "fromJonctionId": "CD45111_A",
+            "points": [
+                {
+                    "x": 1000,
+                    "y": 200
+                },
+                {
+                    "x": 680,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "UNO1_D0"
+        },
+        {
+            "fromJonctionId": "CD45111_B",
+            "points": [
+                {
+                    "x": 1000,
+                    "y": 220
+                },
+                {
+                    "x": 860,
+                    "y": 220
+                },
+                {
+                    "x": 860,
+                    "y": 180
+                },
+                {
+                    "x": 680,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "UNO1_D1"
+        },
+        {
+            "fromJonctionId": "CD45111_C",
+            "points": [
+                {
+                    "x": 1000,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 240
+                },
+                {
+                    "x": 880,
+                    "y": 160
+                },
+                {
+                    "x": 680,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "UNO1_D2"
+        },
+        {
+            "fromJonctionId": "CD45111_D",
+            "points": [
+                {
+                    "x": 1000,
+                    "y": 260
+                },
+                {
+                    "x": 900,
+                    "y": 260
+                },
+                {
+                    "x": 900,
+                    "y": 140
+                },
+                {
+                    "x": 680,
+                    "y": 140
+                }
+            ],
+            "toJonctionId": "UNO1_D3"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 1,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 1,
+        "seg7": 1,
+        "voltmeter": 1,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 1,
+        "gnd": 3,
+        "vcc": 0,
+        "logic_terminal": 10,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

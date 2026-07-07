@@ -1,0 +1,238 @@
+{
+    "components": [
+        {
+            "type": "battery",
+            "x": 960,
+            "y": 360,
+            "label": "VDC1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1100,
+            "y": 280,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "100"
+        },
+        {
+            "type": "ammeter",
+            "x": 1260,
+            "y": 280,
+            "label": "A1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "led",
+            "x": 1400,
+            "y": 360,
+            "label": "LED1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "ohmmeter",
+            "x": 1100,
+            "y": 180,
+            "label": "OHM1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1100,
+            "y": 340,
+            "label": "R2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "100"
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "VDC1_in",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 320
+                },
+                {
+                    "x": 960,
+                    "y": 280
+                },
+                {
+                    "x": 1060,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "R1_in"
+        },
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 280
+                },
+                {
+                    "x": 1220,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "A1_in"
+        },
+        {
+            "fromJonctionId": "A1_out",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 280
+                },
+                {
+                    "x": 1380,
+                    "y": 280
+                },
+                {
+                    "x": 1400,
+                    "y": 280
+                },
+                {
+                    "x": 1400,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "LED1_in"
+        },
+        {
+            "fromJonctionId": "VDC1_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 400
+                },
+                {
+                    "x": 960,
+                    "y": 480
+                },
+                {
+                    "x": 1400,
+                    "y": 480
+                },
+                {
+                    "x": 1400,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "LED1_out"
+        },
+        {
+            "fromJonctionId": "OHM1_in",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 180
+                },
+                {
+                    "x": 1020,
+                    "y": 180
+                },
+                {
+                    "x": 1020,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "OHM1_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 180
+                },
+                {
+                    "x": 1180,
+                    "y": 180
+                },
+                {
+                    "x": 1180,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        },
+        {
+            "fromJonctionId": "R2_in",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 340
+                },
+                {
+                    "x": 1020,
+                    "y": 340
+                },
+                {
+                    "x": 1020,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "R2_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 340
+                },
+                {
+                    "x": 1180,
+                    "y": 340
+                },
+                {
+                    "x": 1180,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 1020,
+            "y": 280
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 1180,
+            "y": 280
+        }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 2,
+        "nand": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "led": 1,
+        "voltmeter": 1,
+        "ammeter": 1,
+        "ohmmeter": 1,
+        "junction": 2,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0
+    }
+}

@@ -1,0 +1,610 @@
+{
+    "components": [
+        {
+            "type": "ic_74hc90",
+            "x": 840,
+            "y": 320,
+            "label": "HC90_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 720,
+            "y": 360,
+            "label": "LOGIC_8",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 720,
+            "y": 380,
+            "label": "LOGIC_9",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "vcc",
+            "x": 720,
+            "y": 340,
+            "label": "VCC_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 860,
+            "y": 540,
+            "label": "GND_3",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 720,
+            "y": 280,
+            "label": "LOGIC_17",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 720,
+            "y": 300,
+            "label": "LOGIC_18",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gimp",
+            "x": 820,
+            "y": 440,
+            "label": "GImp_3",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "frequency": 1,
+            "dutyCycle": 50,
+            "voltageRail": 5,
+            "flipX": false
+        },
+        {
+            "type": "led",
+            "x": 1280,
+            "y": 420,
+            "label": "LED_1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1180,
+            "y": 260,
+            "label": "R_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1460,
+            "y": 440,
+            "label": "LED_2",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1360,
+            "y": 280,
+            "label": "R_2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1640,
+            "y": 480,
+            "label": "LED_3",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1540,
+            "y": 300,
+            "label": "R_3",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1840,
+            "y": 520,
+            "label": "LED_4",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1740,
+            "y": 320,
+            "label": "R_4",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "gnd",
+            "x": 1220,
+            "y": 560,
+            "label": "GND_6",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1400,
+            "y": 560,
+            "label": "GND_7",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1600,
+            "y": 560,
+            "label": "GND_8",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1800,
+            "y": 600,
+            "label": "GND_9",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LOGIC_8_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 360
+                },
+                {
+                    "x": 780,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "HC90_1_MS1"
+        },
+        {
+            "fromJonctionId": "LOGIC_9_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 380
+                },
+                {
+                    "x": 780,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "HC90_1_MS2"
+        },
+        {
+            "fromJonctionId": "VCC_1_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 340
+                },
+                {
+                    "x": 780,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "HC90_1_VCC"
+        },
+        {
+            "fromJonctionId": "HC90_1_GND",
+            "points": [
+                {
+                    "x": 900,
+                    "y": 360
+                },
+                {
+                    "x": 960,
+                    "y": 360
+                },
+                {
+                    "x": 960,
+                    "y": 500
+                },
+                {
+                    "x": 860,
+                    "y": 500
+                },
+                {
+                    "x": 860,
+                    "y": 520
+                },
+                {
+                    "x": 860,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "GND_3_out"
+        },
+        {
+            "fromJonctionId": "HC90_1_Q0",
+            "points": [
+                {
+                    "x": 900,
+                    "y": 260
+                },
+                {
+                    "x": 940,
+                    "y": 260
+                },
+                {
+                    "x": 940,
+                    "y": 200
+                },
+                {
+                    "x": 760,
+                    "y": 200
+                },
+                {
+                    "x": 760,
+                    "y": 260
+                },
+                {
+                    "x": 780,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "HC90_1_CP1"
+        },
+        {
+            "fromJonctionId": "LOGIC_17_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 280
+                },
+                {
+                    "x": 780,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "HC90_1_MR1"
+        },
+        {
+            "fromJonctionId": "LOGIC_18_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 300
+                },
+                {
+                    "x": 780,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "HC90_1_MR2"
+        },
+        {
+            "fromJonctionId": "GImp_3_out",
+            "points": [
+                {
+                    "x": 860,
+                    "y": 440
+                },
+                {
+                    "x": 920,
+                    "y": 440
+                },
+                {
+                    "x": 920,
+                    "y": 380
+                },
+                {
+                    "x": 900,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "HC90_1_CP0"
+        },
+        {
+            "fromJonctionId": "GImp_3_in",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 480
+                },
+                {
+                    "x": 820,
+                    "y": 500
+                },
+                {
+                    "x": 860,
+                    "y": 500
+                }
+            ],
+            "toJonctionId": "auto_junc_13"
+        },
+        {
+            "fromJonctionId": "R_1_in",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 260
+                },
+                {
+                    "x": 940,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "auto_junc_14"
+        },
+        {
+            "fromJonctionId": "R_2_in",
+            "points": [
+                {
+                    "x": 1320,
+                    "y": 280
+                },
+                {
+                    "x": 900,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "HC90_1_Q1"
+        },
+        {
+            "fromJonctionId": "R_3_in",
+            "points": [
+                {
+                    "x": 1500,
+                    "y": 300
+                },
+                {
+                    "x": 900,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "HC90_1_Q2"
+        },
+        {
+            "fromJonctionId": "R_4_in",
+            "points": [
+                {
+                    "x": 1700,
+                    "y": 320
+                },
+                {
+                    "x": 900,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "HC90_1_Q3"
+        },
+        {
+            "fromJonctionId": "R_1_out",
+            "points": [
+                {
+                    "x": 1220,
+                    "y": 260
+                },
+                {
+                    "x": 1280,
+                    "y": 260
+                },
+                {
+                    "x": 1280,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "LED_1_in"
+        },
+        {
+            "fromJonctionId": "R_2_out",
+            "points": [
+                {
+                    "x": 1400,
+                    "y": 280
+                },
+                {
+                    "x": 1460,
+                    "y": 280
+                },
+                {
+                    "x": 1460,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "LED_2_in"
+        },
+        {
+            "fromJonctionId": "R_3_out",
+            "points": [
+                {
+                    "x": 1580,
+                    "y": 300
+                },
+                {
+                    "x": 1640,
+                    "y": 300
+                },
+                {
+                    "x": 1640,
+                    "y": 440
+                }
+            ],
+            "toJonctionId": "LED_3_in"
+        },
+        {
+            "fromJonctionId": "R_4_out",
+            "points": [
+                {
+                    "x": 1780,
+                    "y": 320
+                },
+                {
+                    "x": 1840,
+                    "y": 320
+                },
+                {
+                    "x": 1840,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "LED_4_in"
+        },
+        {
+            "fromJonctionId": "GND_6_out",
+            "points": [
+                {
+                    "x": 1240,
+                    "y": 560
+                },
+                {
+                    "x": 1280,
+                    "y": 560
+                },
+                {
+                    "x": 1280,
+                    "y": 460
+                }
+            ],
+            "toJonctionId": "LED_1_out"
+        },
+        {
+            "fromJonctionId": "GND_7_out",
+            "points": [
+                {
+                    "x": 1420,
+                    "y": 560
+                },
+                {
+                    "x": 1460,
+                    "y": 560
+                },
+                {
+                    "x": 1460,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "LED_2_out"
+        },
+        {
+            "fromJonctionId": "GND_8_out",
+            "points": [
+                {
+                    "x": 1620,
+                    "y": 560
+                },
+                {
+                    "x": 1640,
+                    "y": 560
+                },
+                {
+                    "x": 1640,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "LED_3_out"
+        },
+        {
+            "fromJonctionId": "GND_9_out",
+            "points": [
+                {
+                    "x": 1820,
+                    "y": 600
+                },
+                {
+                    "x": 1840,
+                    "y": 600
+                },
+                {
+                    "x": 1840,
+                    "y": 560
+                }
+            ],
+            "toJonctionId": "LED_4_out"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_13",
+            "x": 860,
+            "y": 500
+        },
+        {
+            "id": "auto_junc_14",
+            "x": 940,
+            "y": 260
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 4,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 3,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 2,
+        "ic_74hc90": 2,
+        "led": 4,
+        "seg7": 2,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "junction": 14,
+        "gnd": 9,
+        "vcc": 2,
+        "logic_terminal": 18,
+        "gimp": 3,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

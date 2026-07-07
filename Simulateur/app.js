@@ -16,6 +16,8 @@ import { bindScopeAnimationRedraw, bindScopePopupRedraw } from './scope-animatio
 import { initEditorTheme, setEditorTheme, initEditorGrid, setShowGrid, showGrid as editorShowGrid, refreshEditorMenuMarks } from './theme.js';
 import { initPrintUi, editCartouche } from './print-ui.js';
 import { initSimulatorVisitCounter } from './visit-counter.js';
+import { initExamplesPanel, loadExampleFromQueryParam } from './examples-panel.js';
+import { initWelcomeBanner } from './welcome-banner.js';
 import { loadPrintFrameFromData, refreshPrintFrameMenuMark, serializePrintFrame, isPointInPrintFrame, isPointInCartouche, movePrintFrameBy, printFrame } from './print-frame.js';
 import { initValuePrompt, showValuePrompt } from './value-prompt.js';
 import {
@@ -1207,6 +1209,9 @@ function initApp() {
     ensureAllCounters();
     setCircuitDisplayName('Sans titre');
     initSimulatorVisitCounter();
+    initExamplesPanel(loadCircuitFromJSON);
+    initWelcomeBanner(APP_PRODUCT_NAME);
+    loadExampleFromQueryParam(loadCircuitFromJSON);
     resizeCanvas(); window.addEventListener('resize', resizeCanvas);
     document.querySelectorAll('.dropdown-item[draggable=true]').forEach(item => {
         item.addEventListener('dragstart', (e) => {

@@ -1,0 +1,917 @@
+{
+    "components": [
+        {
+            "type": "jk_flipflop",
+            "x": 940,
+            "y": 160,
+            "label": "JKFF1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 740,
+            "y": 60,
+            "label": "LOGIC2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 740,
+            "y": 120,
+            "label": "LOGIC3",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 740,
+            "y": 240,
+            "label": "LOGIC4",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 740,
+            "y": 300,
+            "label": "LOGIC5",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gimp",
+            "x": 540,
+            "y": 160,
+            "label": "GImp1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "frequency": 0.5,
+            "dutyCycle": 50,
+            "voltageRail": 5,
+            "flipX": false
+        },
+        {
+            "type": "gnd",
+            "x": 540,
+            "y": 280,
+            "label": "GND1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "jk_flipflop",
+            "x": 1140,
+            "y": 160,
+            "label": "JKFF2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "jk_flipflop",
+            "x": 1340,
+            "y": 160,
+            "label": "JKFF3",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "jk_flipflop",
+            "x": 1540,
+            "y": 160,
+            "label": "JKFF4",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 980,
+            "y": 420,
+            "label": "R3",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 980,
+            "y": 560,
+            "label": "LED3",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 980,
+            "y": 700,
+            "label": "GND3",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1140,
+            "y": 420,
+            "label": "R4",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1140,
+            "y": 560,
+            "label": "LED4",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1140,
+            "y": 700,
+            "label": "GND4",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1300,
+            "y": 420,
+            "label": "R5",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1300,
+            "y": 560,
+            "label": "LED5",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1300,
+            "y": 700,
+            "label": "GND5",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1460,
+            "y": 420,
+            "label": "R6",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1460,
+            "y": 560,
+            "label": "LED6",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1460,
+            "y": 700,
+            "label": "GND6",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LOGIC4_out",
+            "points": [
+                {
+                    "x": 780,
+                    "y": 240
+                },
+                {
+                    "x": 860,
+                    "y": 240
+                },
+                {
+                    "x": 860,
+                    "y": 180
+                },
+                {
+                    "x": 900,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "JKFF1_K"
+        },
+        {
+            "fromJonctionId": "JKFF1_J",
+            "points": [
+                {
+                    "x": 900,
+                    "y": 140
+                },
+                {
+                    "x": 860,
+                    "y": 140
+                },
+                {
+                    "x": 860,
+                    "y": 120
+                },
+                {
+                    "x": 780,
+                    "y": 120
+                }
+            ],
+            "toJonctionId": "LOGIC3_out"
+        },
+        {
+            "fromJonctionId": "JKFF1_SET",
+            "points": [
+                {
+                    "x": 940,
+                    "y": 100
+                },
+                {
+                    "x": 940,
+                    "y": 60
+                },
+                {
+                    "x": 780,
+                    "y": 60
+                }
+            ],
+            "toJonctionId": "LOGIC2_out"
+        },
+        {
+            "fromJonctionId": "JKFF1_RESET",
+            "points": [
+                {
+                    "x": 940,
+                    "y": 220
+                },
+                {
+                    "x": 940,
+                    "y": 300
+                },
+                {
+                    "x": 780,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "LOGIC5_out"
+        },
+        {
+            "fromJonctionId": "GImp1_out",
+            "points": [
+                {
+                    "x": 580,
+                    "y": 160
+                },
+                {
+                    "x": 900,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "JKFF1_CLK"
+        },
+        {
+            "fromJonctionId": "GImp1_in",
+            "points": [
+                {
+                    "x": 540,
+                    "y": 200
+                },
+                {
+                    "x": 540,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "JKFF4_SET",
+            "points": [
+                {
+                    "x": 1540,
+                    "y": 100
+                },
+                {
+                    "x": 1540,
+                    "y": 60
+                },
+                {
+                    "x": 940,
+                    "y": 60
+                }
+            ],
+            "toJonctionId": "auto_junc_13"
+        },
+        {
+            "fromJonctionId": "JKFF3_SET",
+            "points": [
+                {
+                    "x": 1340,
+                    "y": 100
+                },
+                {
+                    "x": 1340,
+                    "y": 60
+                }
+            ],
+            "toJonctionId": "auto_junc_14"
+        },
+        {
+            "fromJonctionId": "JKFF2_SET",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 100
+                },
+                {
+                    "x": 1140,
+                    "y": 60
+                }
+            ],
+            "toJonctionId": "auto_junc_15"
+        },
+        {
+            "fromJonctionId": "JKFF4_RESET",
+            "points": [
+                {
+                    "x": 1540,
+                    "y": 220
+                },
+                {
+                    "x": 1540,
+                    "y": 300
+                },
+                {
+                    "x": 940,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "auto_junc_16"
+        },
+        {
+            "fromJonctionId": "JKFF3_RESET",
+            "points": [
+                {
+                    "x": 1340,
+                    "y": 220
+                },
+                {
+                    "x": 1340,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "auto_junc_17"
+        },
+        {
+            "fromJonctionId": "JKFF2_RESET",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 220
+                },
+                {
+                    "x": 1140,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "auto_junc_18"
+        },
+        {
+            "fromJonctionId": "JKFF2_J",
+            "points": [
+                {
+                    "x": 1100,
+                    "y": 140
+                },
+                {
+                    "x": 1060,
+                    "y": 140
+                },
+                {
+                    "x": 1060,
+                    "y": 80
+                },
+                {
+                    "x": 860,
+                    "y": 80
+                },
+                {
+                    "x": 860,
+                    "y": 120
+                }
+            ],
+            "toJonctionId": "auto_junc_19"
+        },
+        {
+            "fromJonctionId": "JKFF3_J",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 140
+                },
+                {
+                    "x": 1260,
+                    "y": 140
+                },
+                {
+                    "x": 1260,
+                    "y": 80
+                },
+                {
+                    "x": 1060,
+                    "y": 80
+                }
+            ],
+            "toJonctionId": "auto_junc_20"
+        },
+        {
+            "fromJonctionId": "JKFF4_J",
+            "points": [
+                {
+                    "x": 1500,
+                    "y": 140
+                },
+                {
+                    "x": 1460,
+                    "y": 140
+                },
+                {
+                    "x": 1440,
+                    "y": 140
+                },
+                {
+                    "x": 1440,
+                    "y": 80
+                },
+                {
+                    "x": 1260,
+                    "y": 80
+                }
+            ],
+            "toJonctionId": "auto_junc_21"
+        },
+        {
+            "fromJonctionId": "JKFF2_K",
+            "points": [
+                {
+                    "x": 1100,
+                    "y": 180
+                },
+                {
+                    "x": 1060,
+                    "y": 180
+                },
+                {
+                    "x": 1060,
+                    "y": 240
+                },
+                {
+                    "x": 860,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "auto_junc_22"
+        },
+        {
+            "fromJonctionId": "JKFF3_K",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 180
+                },
+                {
+                    "x": 1260,
+                    "y": 180
+                },
+                {
+                    "x": 1260,
+                    "y": 240
+                },
+                {
+                    "x": 1060,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "auto_junc_23"
+        },
+        {
+            "fromJonctionId": "JKFF4_K",
+            "points": [
+                {
+                    "x": 1500,
+                    "y": 180
+                },
+                {
+                    "x": 1440,
+                    "y": 180
+                },
+                {
+                    "x": 1440,
+                    "y": 240
+                },
+                {
+                    "x": 1260,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "auto_junc_24"
+        },
+        {
+            "fromJonctionId": "JKFF1_Q",
+            "points": [
+                {
+                    "x": 980,
+                    "y": 140
+                },
+                {
+                    "x": 1020,
+                    "y": 140
+                },
+                {
+                    "x": 1020,
+                    "y": 160
+                },
+                {
+                    "x": 1100,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "JKFF2_CLK"
+        },
+        {
+            "fromJonctionId": "JKFF2_Q",
+            "points": [
+                {
+                    "x": 1180,
+                    "y": 140
+                },
+                {
+                    "x": 1220,
+                    "y": 140
+                },
+                {
+                    "x": 1220,
+                    "y": 160
+                },
+                {
+                    "x": 1300,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "JKFF3_CLK"
+        },
+        {
+            "fromJonctionId": "JKFF3_Q",
+            "points": [
+                {
+                    "x": 1380,
+                    "y": 140
+                },
+                {
+                    "x": 1400,
+                    "y": 140
+                },
+                {
+                    "x": 1400,
+                    "y": 160
+                },
+                {
+                    "x": 1500,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "JKFF4_CLK"
+        },
+        {
+            "fromJonctionId": "R3_out",
+            "points": [
+                {
+                    "x": 980,
+                    "y": 460
+                },
+                {
+                    "x": 980,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "LED3_in"
+        },
+        {
+            "fromJonctionId": "LED3_out",
+            "points": [
+                {
+                    "x": 980,
+                    "y": 600
+                },
+                {
+                    "x": 980,
+                    "y": 660
+                }
+            ],
+            "toJonctionId": "GND3_out"
+        },
+        {
+            "fromJonctionId": "R4_out",
+            "toJonctionId": "LED4_in",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 460
+                },
+                {
+                    "x": 1140,
+                    "y": 520
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "LED4_out",
+            "toJonctionId": "GND4_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 600
+                },
+                {
+                    "x": 1140,
+                    "y": 660
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "R5_out",
+            "toJonctionId": "LED5_in",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 460
+                },
+                {
+                    "x": 1300,
+                    "y": 520
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "LED5_out",
+            "toJonctionId": "GND5_out",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 600
+                },
+                {
+                    "x": 1300,
+                    "y": 660
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "R6_out",
+            "toJonctionId": "LED6_in",
+            "points": [
+                {
+                    "x": 1460,
+                    "y": 460
+                },
+                {
+                    "x": 1460,
+                    "y": 520
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "LED6_out",
+            "toJonctionId": "GND6_out",
+            "points": [
+                {
+                    "x": 1460,
+                    "y": 600
+                },
+                {
+                    "x": 1460,
+                    "y": 660
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "JKFF4_Q",
+            "points": [
+                {
+                    "x": 1580,
+                    "y": 140
+                },
+                {
+                    "x": 1660,
+                    "y": 140
+                },
+                {
+                    "x": 1660,
+                    "y": 320
+                },
+                {
+                    "x": 980,
+                    "y": 320
+                },
+                {
+                    "x": 980,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "R3_in"
+        },
+        {
+            "fromJonctionId": "R4_in",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 380
+                },
+                {
+                    "x": 1140,
+                    "y": 340
+                },
+                {
+                    "x": 1420,
+                    "y": 340
+                },
+                {
+                    "x": 1420,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "auto_junc_25"
+        },
+        {
+            "fromJonctionId": "R5_in",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 380
+                },
+                {
+                    "x": 1300,
+                    "y": 360
+                },
+                {
+                    "x": 1240,
+                    "y": 360
+                },
+                {
+                    "x": 1240,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "auto_junc_26"
+        },
+        {
+            "fromJonctionId": "R6_in",
+            "points": [
+                {
+                    "x": 1460,
+                    "y": 380
+                },
+                {
+                    "x": 1460,
+                    "y": 260
+                },
+                {
+                    "x": 1040,
+                    "y": 260
+                },
+                {
+                    "x": 1040,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "auto_junc_27"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_13",
+            "x": 940,
+            "y": 60
+        },
+        {
+            "id": "auto_junc_14",
+            "x": 1340,
+            "y": 60
+        },
+        {
+            "id": "auto_junc_15",
+            "x": 1140,
+            "y": 60
+        },
+        {
+            "id": "auto_junc_16",
+            "x": 940,
+            "y": 300
+        },
+        {
+            "id": "auto_junc_17",
+            "x": 1340,
+            "y": 300
+        },
+        {
+            "id": "auto_junc_18",
+            "x": 1140,
+            "y": 300
+        },
+        {
+            "id": "auto_junc_19",
+            "x": 860,
+            "y": 120
+        },
+        {
+            "id": "auto_junc_20",
+            "x": 1060,
+            "y": 80
+        },
+        {
+            "id": "auto_junc_21",
+            "x": 1260,
+            "y": 80
+        },
+        {
+            "id": "auto_junc_22",
+            "x": 860,
+            "y": 240
+        },
+        {
+            "id": "auto_junc_23",
+            "x": 1060,
+            "y": 240
+        },
+        {
+            "id": "auto_junc_24",
+            "x": 1260,
+            "y": 240
+        },
+        {
+            "id": "auto_junc_25",
+            "x": 1420,
+            "y": 160
+        },
+        {
+            "id": "auto_junc_26",
+            "x": 1240,
+            "y": 160
+        },
+        {
+            "id": "auto_junc_27",
+            "x": 1040,
+            "y": 160
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 6,
+        "nand": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 4,
+        "led": 6,
+        "voltmeter": 2,
+        "ammeter": 1,
+        "ohmmeter": 1,
+        "oscilloscope": 0,
+        "junction": 31,
+        "gnd": 6,
+        "vcc": 0,
+        "logic_terminal": 5,
+        "gimp": 1,
+        "gsin": 0
+    }
+}

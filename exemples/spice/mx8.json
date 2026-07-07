@@ -1,0 +1,889 @@
+{
+    "name": "mx8",
+    "components": [
+        {
+            "type": "matrix_8x8",
+            "x": 1580,
+            "y": 180,
+            "label": "MX81",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "matrixColor": "red",
+            "flipX": false
+        },
+        {
+            "type": "arduino_uno",
+            "x": 920,
+            "y": 160,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "const int rowPins[8] = { 2, 3, 4, 5, 6, 7, 8, 9 };\nconst int colPins[8] = { 10, 11, 12, 13, A0, A1, A2, A3 };\n// 8 lignes × 8 colonnes (1 = LED allumée)\nconst byte motif[8][8] = {\n  { 0, 1, 1, 0, 0, 1, 1, 0 },\n  { 1, 1, 1, 1, 1, 1, 1, 1 },\n  { 1, 1, 1, 1, 1, 1, 1, 1 },\n  { 1, 1, 1, 1, 1, 1, 1, 1 },\n  { 0, 1, 1, 1, 1, 1, 1, 0 },\n  { 0, 0, 1, 1, 1, 1, 0, 0 },\n  { 0, 0, 0, 1, 1, 0, 0, 0 },\n  { 0, 0, 0, 0, 0, 0, 0, 0 },\n};\nvoid setup() {\n  for (int i = 0; i < 8; i++) {\n    pinMode(rowPins[i], OUTPUT);\n    pinMode(colPins[i], OUTPUT);\n  }\n}\nvoid loop() {\n  for (int c = 0; c < 8; c++) {\n    // Toutes les colonnes au repos (HIGH)\n    for (int j = 0; j < 8; j++) {\n      digitalWrite(colPins[j], HIGH);\n    }\n    // Colonne active au LOW\n    digitalWrite(colPins[c], LOW);\n    // Lignes correspondant au motif de cette colonne\n    for (int r = 0; r < 8; r++) {\n      digitalWrite(rowPins[r], motif[r][c] ? HIGH : LOW);\n    }\n    delay(3);   // scan rapide → illusion d’affichage stable\n  }\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "INPUT",
+                "D1": "INPUT",
+                "D2": "OUTPUT",
+                "D3": "OUTPUT",
+                "D4": "OUTPUT",
+                "D5": "OUTPUT",
+                "D6": "OUTPUT",
+                "D7": "OUTPUT",
+                "D8": "OUTPUT",
+                "D9": "OUTPUT",
+                "D10": "OUTPUT",
+                "D11": "OUTPUT",
+                "D12": "OUTPUT",
+                "D13": "OUTPUT",
+                "A0": "OUTPUT",
+                "A1": "OUTPUT",
+                "A2": "OUTPUT",
+                "A3": "OUTPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {},
+            "avrRegisters": {
+                "DDRB": 63,
+                "DDRC": 15,
+                "DDRD": 252,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 0
+            },
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 1166 octets (3%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 105 octets (5%) de mémoire dynamique, ce qui laisse 1943 octets pour les variables locales. Le maximum est de 2048 octets.",
+            "lastUploadOk": false,
+            "pinPulses": {},
+            "pinPhases": [
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 0,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 0,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 0,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 0,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 0,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 0,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 0
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 0,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 0,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 0,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 0,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 0,
+                        "A2": 1,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 0,
+                        "A3": 1
+                    }
+                },
+                {
+                    "durationMs": 3,
+                    "levels": {
+                        "D2": 0,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 1,
+                        "D11": 1,
+                        "D12": 1,
+                        "D13": 1,
+                        "A0": 1,
+                        "A1": 1,
+                        "A2": 1,
+                        "A3": 0
+                    }
+                }
+            ],
+            "usesLiveInput": false,
+            "liveLevels": null,
+            "serialLog": "",
+            "serialBegun": false,
+            "serialBaud": 0
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "UNO1_D2",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 260
+                },
+                {
+                    "x": 1240,
+                    "y": 260
+                },
+                {
+                    "x": 1240,
+                    "y": 100
+                },
+                {
+                    "x": 1480,
+                    "y": 100
+                }
+            ],
+            "toJonctionId": "MX81_R0"
+        },
+        {
+            "fromJonctionId": "UNO1_D3",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 240
+                },
+                {
+                    "x": 1260,
+                    "y": 240
+                },
+                {
+                    "x": 1260,
+                    "y": 120
+                },
+                {
+                    "x": 1480,
+                    "y": 120
+                }
+            ],
+            "toJonctionId": "MX81_R1"
+        },
+        {
+            "fromJonctionId": "UNO1_D4",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 220
+                },
+                {
+                    "x": 1280,
+                    "y": 220
+                },
+                {
+                    "x": 1280,
+                    "y": 140
+                },
+                {
+                    "x": 1480,
+                    "y": 140
+                }
+            ],
+            "toJonctionId": "MX81_R2"
+        },
+        {
+            "fromJonctionId": "UNO1_D5",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 200
+                },
+                {
+                    "x": 1300,
+                    "y": 200
+                },
+                {
+                    "x": 1300,
+                    "y": 160
+                },
+                {
+                    "x": 1480,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "MX81_R3"
+        },
+        {
+            "fromJonctionId": "UNO1_D6",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 180
+                },
+                {
+                    "x": 1480,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "MX81_R4"
+        },
+        {
+            "fromJonctionId": "MX81_R5",
+            "points": [
+                {
+                    "x": 1480,
+                    "y": 200
+                },
+                {
+                    "x": 1320,
+                    "y": 200
+                },
+                {
+                    "x": 1320,
+                    "y": 80
+                },
+                {
+                    "x": 1220,
+                    "y": 80
+                },
+                {
+                    "x": 1220,
+                    "y": 160
+                },
+                {
+                    "x": 1040,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "UNO1_D7"
+        },
+        {
+            "fromJonctionId": "MX81_R6",
+            "points": [
+                {
+                    "x": 1480,
+                    "y": 220
+                },
+                {
+                    "x": 1340,
+                    "y": 220
+                },
+                {
+                    "x": 1340,
+                    "y": 60
+                },
+                {
+                    "x": 1200,
+                    "y": 60
+                },
+                {
+                    "x": 1200,
+                    "y": 140
+                },
+                {
+                    "x": 1040,
+                    "y": 140
+                }
+            ],
+            "toJonctionId": "UNO1_D8"
+        },
+        {
+            "fromJonctionId": "MX81_R7",
+            "points": [
+                {
+                    "x": 1480,
+                    "y": 240
+                },
+                {
+                    "x": 1360,
+                    "y": 240
+                },
+                {
+                    "x": 1360,
+                    "y": 40
+                },
+                {
+                    "x": 1180,
+                    "y": 40
+                },
+                {
+                    "x": 1180,
+                    "y": 120
+                },
+                {
+                    "x": 1040,
+                    "y": 120
+                }
+            ],
+            "toJonctionId": "UNO1_D9"
+        },
+        {
+            "fromJonctionId": "MX81_C0",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 100
+                },
+                {
+                    "x": 1720,
+                    "y": 100
+                },
+                {
+                    "x": 1720,
+                    "y": 0
+                },
+                {
+                    "x": 1160,
+                    "y": 0
+                },
+                {
+                    "x": 1160,
+                    "y": 100
+                },
+                {
+                    "x": 1040,
+                    "y": 100
+                }
+            ],
+            "toJonctionId": "UNO1_D10"
+        },
+        {
+            "fromJonctionId": "MX81_C1",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 120
+                },
+                {
+                    "x": 1740,
+                    "y": 120
+                },
+                {
+                    "x": 1740,
+                    "y": -20
+                },
+                {
+                    "x": 1140,
+                    "y": -20
+                },
+                {
+                    "x": 1140,
+                    "y": 80
+                },
+                {
+                    "x": 1040,
+                    "y": 80
+                }
+            ],
+            "toJonctionId": "UNO1_D11"
+        },
+        {
+            "fromJonctionId": "MX81_C2",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 140
+                },
+                {
+                    "x": 1760,
+                    "y": 140
+                },
+                {
+                    "x": 1760,
+                    "y": -40
+                },
+                {
+                    "x": 1120,
+                    "y": -40
+                },
+                {
+                    "x": 1120,
+                    "y": 60
+                },
+                {
+                    "x": 1040,
+                    "y": 60
+                }
+            ],
+            "toJonctionId": "UNO1_D12"
+        },
+        {
+            "fromJonctionId": "MX81_C3",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 160
+                },
+                {
+                    "x": 1780,
+                    "y": 160
+                },
+                {
+                    "x": 1780,
+                    "y": -60
+                },
+                {
+                    "x": 1100,
+                    "y": -60
+                },
+                {
+                    "x": 1100,
+                    "y": 40
+                },
+                {
+                    "x": 1040,
+                    "y": 40
+                }
+            ],
+            "toJonctionId": "UNO1_D13"
+        },
+        {
+            "fromJonctionId": "MX81_C4",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 180
+                },
+                {
+                    "x": 1780,
+                    "y": 180
+                },
+                {
+                    "x": 1780,
+                    "y": 340
+                },
+                {
+                    "x": 760,
+                    "y": 340
+                },
+                {
+                    "x": 760,
+                    "y": 180
+                },
+                {
+                    "x": 820,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "UNO1_A0"
+        },
+        {
+            "fromJonctionId": "MX81_C5",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 200
+                },
+                {
+                    "x": 1760,
+                    "y": 200
+                },
+                {
+                    "x": 1760,
+                    "y": 360
+                },
+                {
+                    "x": 740,
+                    "y": 360
+                },
+                {
+                    "x": 740,
+                    "y": 200
+                },
+                {
+                    "x": 820,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "UNO1_A1"
+        },
+        {
+            "fromJonctionId": "MX81_C6",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 220
+                },
+                {
+                    "x": 1740,
+                    "y": 220
+                },
+                {
+                    "x": 1740,
+                    "y": 380
+                },
+                {
+                    "x": 720,
+                    "y": 380
+                },
+                {
+                    "x": 720,
+                    "y": 220
+                },
+                {
+                    "x": 820,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "UNO1_A2"
+        },
+        {
+            "fromJonctionId": "MX81_C7",
+            "points": [
+                {
+                    "x": 1680,
+                    "y": 240
+                },
+                {
+                    "x": 1720,
+                    "y": 240
+                },
+                {
+                    "x": 1720,
+                    "y": 400
+                },
+                {
+                    "x": 700,
+                    "y": 400
+                },
+                {
+                    "x": 700,
+                    "y": 240
+                },
+                {
+                    "x": 820,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "UNO1_A3"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "lm386": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 1,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 1,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

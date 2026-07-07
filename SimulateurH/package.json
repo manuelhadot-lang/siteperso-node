@@ -65,6 +65,15 @@
       {
         "from": "../tools/arduino-cli-bundle.cjs",
         "to": "simulator-app/tools/arduino-cli-bundle.cjs"
+      },
+      {
+        "from": "../tools/simulator-examples-api.cjs",
+        "to": "simulator-app/tools/simulator-examples-api.cjs"
+      },
+      {
+        "from": "../exemples",
+        "to": "simulator-app/exemples",
+        "filter": ["**/*.json"]
       }
     ],
     "compression": "maximum",

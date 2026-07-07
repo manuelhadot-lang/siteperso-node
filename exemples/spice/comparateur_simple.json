@@ -1,0 +1,208 @@
+{
+    "components": [
+        {
+            "type": "opamp",
+            "x": 860,
+            "y": 420,
+            "label": "AOP1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "LM741",
+            "vp": 15,
+            "vn": -15,
+            "flipX": false,
+            "flipY": false
+        },
+        {
+            "type": "gsin",
+            "x": 600,
+            "y": 400,
+            "label": "Sin1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "peakAmplitude": 5,
+            "frequency": 1000,
+            "offset": 0
+        },
+        {
+            "type": "gnd",
+            "x": 740,
+            "y": 580,
+            "label": "GND1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1120,
+            "y": 440,
+            "label": "Osci1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.001,
+            "ch1VoltsPerDiv": 5,
+            "ch2VoltsPerDiv": 5,
+            "ch1PositionDiv": 0,
+            "ch2PositionDiv": 0
+        },
+        {
+            "type": "gnd",
+            "x": 1120,
+            "y": 580,
+            "label": "GND2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "AOP1_plus",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 400
+                },
+                {
+                    "x": 640,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "Sin1_out"
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 540
+                },
+                {
+                    "x": 740,
+                    "y": 500
+                },
+                {
+                    "x": 600,
+                    "y": 500
+                },
+                {
+                    "x": 600,
+                    "y": 440
+                }
+            ],
+            "toJonctionId": "Sin1_in"
+        },
+        {
+            "fromJonctionId": "AOP1_minus",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 440
+                },
+                {
+                    "x": 820,
+                    "y": 500
+                },
+                {
+                    "x": 740,
+                    "y": 500
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "Osci1_CH1",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 420
+                },
+                {
+                    "x": 900,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "AOP1_out"
+        },
+        {
+            "fromJonctionId": "Osci1_CH2",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 460
+                },
+                {
+                    "x": 980,
+                    "y": 460
+                },
+                {
+                    "x": 980,
+                    "y": 320
+                },
+                {
+                    "x": 740,
+                    "y": 320
+                },
+                {
+                    "x": 740,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        },
+        {
+            "fromJonctionId": "Osci1_GND",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 500
+                },
+                {
+                    "x": 1120,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "GND2_out"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 740,
+            "y": 500
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 740,
+            "y": 400
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 1,
+        "nand": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "led": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "junction": 2,
+        "gnd": 2,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 0
+    }
+}

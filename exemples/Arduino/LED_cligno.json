@@ -1,0 +1,139 @@
+{
+    "name": "LED_cligno",
+    "components": [
+        {
+            "type": "arduino_uno",
+            "x": 720,
+            "y": 320,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "// Arduino UNO — sketch minimal\nvoid setup() {\n  pinMode(13, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(13, HIGH);\n  delay(500);\n  digitalWrite(13, LOW);\n  delay(500);\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {},
+            "pinLevels": {},
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 924 octets (2%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 9 octets (0%) de mémoire dynamique, ce qui laisse 2039 octets pour les variables locales. Le maximum est de 2048 octets."
+        },
+        {
+            "type": "resistor",
+            "x": 980,
+            "y": 200,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1160,
+            "y": 280,
+            "label": "LED1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1120,
+            "y": 380,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LED1_in",
+            "points": [
+                {
+                    "x": 1160,
+                    "y": 240
+                },
+                {
+                    "x": 1160,
+                    "y": 200
+                },
+                {
+                    "x": 1020,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "R1_out"
+        },
+        {
+            "fromJonctionId": "R1_in",
+            "points": [
+                {
+                    "x": 940,
+                    "y": 200
+                },
+                {
+                    "x": 840,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "UNO1_D13"
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 380
+                },
+                {
+                    "x": 1160,
+                    "y": 380
+                },
+                {
+                    "x": 1160,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "LED1_out"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 1,
+        "seg7": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

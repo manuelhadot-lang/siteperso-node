@@ -1,0 +1,418 @@
+{
+    "components": [
+        {
+            "type": "opamp",
+            "x": 1420,
+            "y": 280,
+            "label": "AOP_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "uA741",
+            "vp": 15,
+            "vn": -15,
+            "flipX": false,
+            "flipY": false
+        },
+        {
+            "type": "resistor",
+            "x": 1240,
+            "y": 300,
+            "label": "R_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1420,
+            "y": 180,
+            "label": "R_2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10k"
+        },
+        {
+            "type": "inductor",
+            "x": 1400,
+            "y": 440,
+            "label": "L_1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "1000m"
+        },
+        {
+            "type": "capacitor",
+            "x": 1300,
+            "y": 440,
+            "label": "C_1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10n"
+        },
+        {
+            "type": "resistor",
+            "x": 1500,
+            "y": 440,
+            "label": "R_3",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "1k"
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1820,
+            "y": 300,
+            "label": "Osci_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.0002,
+            "ch1VoltsPerDiv": 5,
+            "ch2VoltsPerDiv": 1,
+            "ch1PositionDiv": 0.9,
+            "ch2PositionDiv": -2.8
+        },
+        {
+            "type": "gnd",
+            "x": 1460,
+            "y": 600,
+            "label": "GND_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "AOP_1_minus",
+            "points": [
+                {
+                    "x": 1380,
+                    "y": 300
+                },
+                {
+                    "x": 1280,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "R_1_out"
+        },
+        {
+            "fromJonctionId": "R_2_in",
+            "points": [
+                {
+                    "x": 1380,
+                    "y": 180
+                },
+                {
+                    "x": 1320,
+                    "y": 180
+                },
+                {
+                    "x": 1320,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "R_2_out",
+            "points": [
+                {
+                    "x": 1460,
+                    "y": 180
+                },
+                {
+                    "x": 1540,
+                    "y": 180
+                },
+                {
+                    "x": 1540,
+                    "y": 280
+                },
+                {
+                    "x": 1460,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "AOP_1_out"
+        },
+        {
+            "fromJonctionId": "R_3_in",
+            "points": [
+                {
+                    "x": 1500,
+                    "y": 400
+                },
+                {
+                    "x": 1500,
+                    "y": 360
+                },
+                {
+                    "x": 1300,
+                    "y": 360
+                },
+                {
+                    "x": 1300,
+                    "y": 400
+                },
+                {
+                    "x": 1300,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "C_1_in"
+        },
+        {
+            "fromJonctionId": "L_1_in",
+            "points": [
+                {
+                    "x": 1400,
+                    "y": 400
+                },
+                {
+                    "x": 1400,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        },
+        {
+            "fromJonctionId": "C_1_out",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 480
+                },
+                {
+                    "x": 1300,
+                    "y": 540
+                },
+                {
+                    "x": 1500,
+                    "y": 540
+                },
+                {
+                    "x": 1500,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "R_3_out"
+        },
+        {
+            "fromJonctionId": "L_1_out",
+            "points": [
+                {
+                    "x": 1400,
+                    "y": 480
+                },
+                {
+                    "x": 1400,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_3"
+        },
+        {
+            "fromJonctionId": "AOP_1_plus",
+            "points": [
+                {
+                    "x": 1380,
+                    "y": 260
+                },
+                {
+                    "x": 1360,
+                    "y": 260
+                },
+                {
+                    "x": 1360,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "auto_junc_4"
+        },
+        {
+            "fromJonctionId": "R_1_in",
+            "points": [
+                {
+                    "x": 1200,
+                    "y": 300
+                },
+                {
+                    "x": 1140,
+                    "y": 300
+                },
+                {
+                    "x": 1140,
+                    "y": 540
+                },
+                {
+                    "x": 1300,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_5"
+        },
+        {
+            "fromJonctionId": "Osci_1_CH1",
+            "points": [
+                {
+                    "x": 1760,
+                    "y": 280
+                },
+                {
+                    "x": 1540,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_6"
+        },
+        {
+            "fromJonctionId": "Osci_1_GND",
+            "points": [
+                {
+                    "x": 1820,
+                    "y": 360
+                },
+                {
+                    "x": 1820,
+                    "y": 540
+                },
+                {
+                    "x": 1500,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_7"
+        },
+        {
+            "fromJonctionId": "GND_1_out",
+            "points": [
+                {
+                    "x": 1480,
+                    "y": 600
+                },
+                {
+                    "x": 1560,
+                    "y": 600
+                },
+                {
+                    "x": 1560,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_8"
+        },
+        {
+            "fromJonctionId": "Osci_1_CH2",
+            "points": [
+                {
+                    "x": 1760,
+                    "y": 320
+                },
+                {
+                    "x": 1620,
+                    "y": 320
+                },
+                {
+                    "x": 1620,
+                    "y": 120
+                },
+                {
+                    "x": 1320,
+                    "y": 120
+                },
+                {
+                    "x": 1320,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "auto_junc_9"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 1320,
+            "y": 300
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 1400,
+            "y": 360
+        },
+        {
+            "id": "auto_junc_3",
+            "x": 1400,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_4",
+            "x": 1360,
+            "y": 360
+        },
+        {
+            "id": "auto_junc_5",
+            "x": 1300,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_6",
+            "x": 1540,
+            "y": 280
+        },
+        {
+            "id": "auto_junc_7",
+            "x": 1500,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_8",
+            "x": 1560,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_9",
+            "x": 1320,
+            "y": 180
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 3,
+        "capacitor": 1,
+        "inductor": 1,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 1,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "junction": 9,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

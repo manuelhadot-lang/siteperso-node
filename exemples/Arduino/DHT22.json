@@ -1,0 +1,424 @@
+{
+    "name": "DHT22",
+    "components": [
+        {
+            "type": "grove_dht22",
+            "x": 1260,
+            "y": 260,
+            "label": "DHT1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "flipX": false,
+            "temperature": 25,
+            "humidity": 55
+        },
+        {
+            "type": "arduino_uno",
+            "x": 660,
+            "y": 360,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "#include <DHT.h>\n#include <Wire.h>\n#include <rgb_lcd.h>\n\nrgb_lcd lcd;\n\n#define DHTPIN 2\n#define DHTTYPE DHT22\n\nDHT dht(DHTPIN, DHTTYPE);\n\nvoid setup() \n{ \n  dht.begin();\n  lcd.begin(16,2);\n  lcd.setRGB(255,0,50);\n  lcd.clear();\n  lcd.print(\"Hello les STI2D\");\n  delay(2000);\n  lcd.clear();\n}\n\nvoid loop() \n{\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  lcd.setCursor(0,0);\n  lcd.print(\"Temp \");\n  lcd.print(t);\n  lcd.print(\" deg\");\n  lcd.setCursor(0,1);\n  lcd.print(\"Humi \");\n  lcd.print(h);\n  lcd.print(\" %\");\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "INPUT",
+                "D1": "INPUT",
+                "D2": "INPUT",
+                "D3": "INPUT",
+                "D4": "INPUT",
+                "D5": "INPUT",
+                "D6": "INPUT",
+                "D7": "INPUT",
+                "D8": "INPUT",
+                "D9": "INPUT",
+                "D10": "INPUT",
+                "D11": "INPUT",
+                "D12": "INPUT",
+                "D13": "INPUT",
+                "A0": "INPUT",
+                "A1": "INPUT",
+                "A2": "INPUT",
+                "A3": "INPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {},
+            "avrRegisters": {
+                "DDRB": 0,
+                "DDRC": 0,
+                "DDRD": 0,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 0
+            },
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 7322 octets (22%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 492 octets (24%) de mémoire dynamique, ce qui laisse 1556 octets pour les variables locales. Le maximum est de 2048 octets.",
+            "pinPulses": {},
+            "pinPhases": [],
+            "usesLiveInput": false,
+            "liveLevels": {},
+            "i2cBus": {
+                "active": true,
+                "address": 62,
+                "lcdId": "LCD1"
+            }
+        },
+        {
+            "type": "gnd",
+            "x": 1040,
+            "y": 300,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "vcc",
+            "x": 940,
+            "y": 260,
+            "label": "VCC1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "grove_lcd16x2",
+            "x": 1040,
+            "y": 120,
+            "label": "LCD1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "i2cAddress": 62,
+            "flipX": false,
+            "lcdDisplayCache": {
+                "lines": [
+                    "                ",
+                    "                "
+                ],
+                "phases": [
+                    {
+                        "atMs": 0,
+                        "lines": [
+                            "                ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 0,
+                            "b": 50
+                        }
+                    },
+                    {
+                        "atMs": 0,
+                        "lines": [
+                            "                ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 0,
+                            "b": 50
+                        }
+                    },
+                    {
+                        "atMs": 0,
+                        "lines": [
+                            "Hello les STI2D ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 0,
+                            "b": 50
+                        }
+                    },
+                    {
+                        "atMs": 2000,
+                        "lines": [
+                            "                ",
+                            "                "
+                        ],
+                        "backlight": true,
+                        "rgb": {
+                            "r": 255,
+                            "g": 0,
+                            "b": 50
+                        }
+                    }
+                ],
+                "hasTiming": true,
+                "setupDurationMs": 2000,
+                "loopCycleMs": 0,
+                "effectiveLoopCycleMs": 1000,
+                "setupEndState": {
+                    "ddram": [
+                        "                                        ",
+                        "                                        "
+                    ],
+                    "displayShift": 0,
+                    "cursorCol": 0,
+                    "cursorRow": 0,
+                    "backlight": true,
+                    "rgb": {
+                        "r": 255,
+                        "g": 0,
+                        "b": 50
+                    },
+                    "supportsRgb": true,
+                    "cols": 16,
+                    "rows": 2
+                },
+                "loopEvents": [
+                    {
+                        "type": "lcd",
+                        "index": 70,
+                        "fn": "setcursor",
+                        "args": "0,0"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 92,
+                        "fn": "print",
+                        "args": "\"Temp \""
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 114,
+                        "fn": "print",
+                        "args": "t"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 130,
+                        "fn": "print",
+                        "args": "\" deg\""
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 151,
+                        "fn": "setcursor",
+                        "args": "0,1"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 173,
+                        "fn": "print",
+                        "args": "\"Humi \""
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 195,
+                        "fn": "print",
+                        "args": "h"
+                    },
+                    {
+                        "type": "lcd",
+                        "index": 211,
+                        "fn": "print",
+                        "args": "\" %\""
+                    }
+                ],
+                "sketchSrc": "#include <DHT.h>\n#include <Wire.h>\n#include <rgb_lcd.h>\n\nrgb_lcd lcd;\n\n#define DHTPIN 2\n#define DHTTYPE DHT22\n\nDHT dht(DHTPIN, DHTTYPE);\n\nvoid setup() \n{ \n  dht.begin();\n  lcd.begin(16,2);\n  lcd.setRGB(255,0,50);\n  lcd.clear();\n  lcd.print(\"Hello les STI2D\");\n  delay(2000);\n  lcd.clear();\n}\n\nvoid loop() \n{\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  lcd.setCursor(0,0);\n  lcd.print(\"Temp \");\n  lcd.print(t);\n  lcd.print(\" deg\");\n  lcd.setCursor(0,1);\n  lcd.print(\"Humi \");\n  lcd.print(h);\n  lcd.print(\" %\");\n}\n",
+                "backlight": true,
+                "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 50
+                },
+                "address": 62,
+                "blank": true
+            }
+        },
+        {
+            "type": "vcc",
+            "x": 680,
+            "y": 140,
+            "label": "VCC2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 780,
+            "y": 160,
+            "label": "GND2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "UNO1_D2",
+            "points": [
+                {
+                    "x": 780,
+                    "y": 460
+                },
+                {
+                    "x": 1000,
+                    "y": 460
+                },
+                {
+                    "x": 1000,
+                    "y": 240
+                },
+                {
+                    "x": 1100,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "DHT1_DATA"
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 300
+                },
+                {
+                    "x": 1100,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "DHT1_GND"
+        },
+        {
+            "fromJonctionId": "VCC1_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 260
+                },
+                {
+                    "x": 1100,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "DHT1_VCC"
+        },
+        {
+            "fromJonctionId": "LCD1_SDA",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 100
+                },
+                {
+                    "x": 480,
+                    "y": 100
+                },
+                {
+                    "x": 480,
+                    "y": 460
+                },
+                {
+                    "x": 560,
+                    "y": 460
+                }
+            ],
+            "toJonctionId": "UNO1_A4"
+        },
+        {
+            "fromJonctionId": "LCD1_SCL",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 120
+                },
+                {
+                    "x": 500,
+                    "y": 120
+                },
+                {
+                    "x": 500,
+                    "y": 480
+                },
+                {
+                    "x": 560,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "UNO1_A5"
+        },
+        {
+            "fromJonctionId": "VCC2_out",
+            "points": [
+                {
+                    "x": 700,
+                    "y": 140
+                },
+                {
+                    "x": 840,
+                    "y": 140
+                }
+            ],
+            "toJonctionId": "LCD1_VCC"
+        },
+        {
+            "fromJonctionId": "GND2_out",
+            "points": [
+                {
+                    "x": 800,
+                    "y": 160
+                },
+                {
+                    "x": 840,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "LCD1_GND"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 0,
+        "seg7": 0,
+        "grove_lcd16x2": 1,
+        "grove_dht22": 1,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 2,
+        "vcc": 2,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

@@ -1,0 +1,132 @@
+{
+    "name": "moteurDC",
+    "components": [
+        {
+            "type": "dc_motor",
+            "x": 1200,
+            "y": 420,
+            "label": "M1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "50"
+        },
+        {
+            "type": "logic_terminal",
+            "x": 1060,
+            "y": 420,
+            "label": "LOGIC1",
+            "rotation": 0,
+            "state": 1,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 1340,
+            "y": 420,
+            "label": "LOGIC2",
+            "rotation": 180,
+            "state": 1,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "LOGIC1_out",
+            "points": [
+                {
+                    "x": 1080,
+                    "y": 420
+                },
+                {
+                    "x": 1160,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "M1_minus"
+        },
+        {
+            "fromJonctionId": "M1_plus",
+            "points": [
+                {
+                    "x": 1240,
+                    "y": 420
+                },
+                {
+                    "x": 1320,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "LOGIC2_out"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "lm386": 0,
+        "lm7805": 0,
+        "dc_motor": 1,
+        "servo_motor": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 0,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 2,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    },
+    "printFrame": {
+        "enabled": false,
+        "x": 480,
+        "y": -20,
+        "width": 1188,
+        "height": 840,
+        "cartouche": {
+            "title": "",
+            "project": "",
+            "author": "",
+            "date": "05/07/2026",
+            "scale": "",
+            "revision": "",
+            "notes": ""
+        }
+    }
+}

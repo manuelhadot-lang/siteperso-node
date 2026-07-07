@@ -1,0 +1,292 @@
+{
+    "components": [
+        {
+            "type": "opamp",
+            "x": 900,
+            "y": 440,
+            "label": "AOP1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "LM741",
+            "vp": 15,
+            "vn": -15,
+            "flipX": false,
+            "flipY": true
+        },
+        {
+            "type": "resistor",
+            "x": 900,
+            "y": 540,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10k"
+        },
+        {
+            "type": "resistor",
+            "x": 800,
+            "y": 620,
+            "label": "R2",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gsin",
+            "x": 600,
+            "y": 420,
+            "label": "Sin1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "peakAmplitude": 10,
+            "frequency": 1000,
+            "offset": 0
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1260,
+            "y": 460,
+            "label": "Osci1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.0005,
+            "ch1VoltsPerDiv": 5,
+            "ch2VoltsPerDiv": 5,
+            "ch1PositionDiv": 0,
+            "ch2PositionDiv": 0
+        },
+        {
+            "type": "gnd",
+            "x": 800,
+            "y": 740,
+            "label": "GND_4",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 600,
+            "y": 580,
+            "label": "GND_5",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 1260,
+            "y": 620,
+            "label": "GND_6",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "AOP1_plus",
+            "points": [
+                {
+                    "x": 860,
+                    "y": 460
+                },
+                {
+                    "x": 800,
+                    "y": 460
+                },
+                {
+                    "x": 800,
+                    "y": 580
+                }
+            ],
+            "toJonctionId": "R2_in"
+        },
+        {
+            "fromJonctionId": "R1_in",
+            "points": [
+                {
+                    "x": 860,
+                    "y": 540
+                },
+                {
+                    "x": 800,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 940,
+                    "y": 540
+                },
+                {
+                    "x": 1040,
+                    "y": 540
+                },
+                {
+                    "x": 1040,
+                    "y": 440
+                },
+                {
+                    "x": 940,
+                    "y": 440
+                }
+            ],
+            "toJonctionId": "AOP1_out"
+        },
+        {
+            "fromJonctionId": "Sin1_out",
+            "points": [
+                {
+                    "x": 640,
+                    "y": 420
+                },
+                {
+                    "x": 860,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "AOP1_minus"
+        },
+        {
+            "fromJonctionId": "Osci1_CH1",
+            "points": [
+                {
+                    "x": 1200,
+                    "y": 440
+                },
+                {
+                    "x": 1040,
+                    "y": 440
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        },
+        {
+            "fromJonctionId": "Osci1_CH2",
+            "points": [
+                {
+                    "x": 1200,
+                    "y": 480
+                },
+                {
+                    "x": 1100,
+                    "y": 480
+                },
+                {
+                    "x": 1100,
+                    "y": 320
+                },
+                {
+                    "x": 720,
+                    "y": 320
+                },
+                {
+                    "x": 720,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "auto_junc_3"
+        },
+        {
+            "fromJonctionId": "R2_out",
+            "points": [
+                {
+                    "x": 800,
+                    "y": 660
+                },
+                {
+                    "x": 800,
+                    "y": 720
+                }
+            ],
+            "toJonctionId": "GND_4_out"
+        },
+        {
+            "fromJonctionId": "Sin1_in",
+            "points": [
+                {
+                    "x": 600,
+                    "y": 460
+                },
+                {
+                    "x": 600,
+                    "y": 560
+                }
+            ],
+            "toJonctionId": "GND_5_out"
+        },
+        {
+            "fromJonctionId": "Osci1_GND",
+            "points": [
+                {
+                    "x": 1260,
+                    "y": 520
+                },
+                {
+                    "x": 1260,
+                    "y": 600
+                }
+            ],
+            "toJonctionId": "GND_6_out"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 800,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 1040,
+            "y": 440
+        },
+        {
+            "id": "auto_junc_3",
+            "x": 720,
+            "y": 420
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 2,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 1,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "junction": 3,
+        "gnd": 6,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 0
+    }
+}

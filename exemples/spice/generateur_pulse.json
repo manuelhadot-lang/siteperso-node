@@ -1,0 +1,327 @@
+{
+    "components": [
+        {
+            "type": "gimp",
+            "x": 460,
+            "y": 260,
+            "label": "GImp1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "frequency": 1,
+            "dutyCycle": 50,
+            "voltageRail": 5
+        },
+        {
+            "type": "led",
+            "x": 800,
+            "y": 360,
+            "label": "LED1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "d_flipflop",
+            "x": 1000,
+            "y": 180,
+            "label": "DFF1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 820,
+            "y": 20,
+            "label": "LOGIC2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "logic_terminal",
+            "x": 880,
+            "y": 280,
+            "label": "LOGIC3",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 1200,
+            "y": 200,
+            "label": "R2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "led",
+            "x": 1360,
+            "y": 300,
+            "label": "LED2",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 700,
+            "y": 260,
+            "label": "R3",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "DFF1_Qbar",
+            "points": [
+                {
+                    "x": 1040,
+                    "y": 200
+                },
+                {
+                    "x": 1100,
+                    "y": 200
+                },
+                {
+                    "x": 1100,
+                    "y": 100
+                },
+                {
+                    "x": 880,
+                    "y": 100
+                },
+                {
+                    "x": 880,
+                    "y": 160
+                },
+                {
+                    "x": 960,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "DFF1_D"
+        },
+        {
+            "fromJonctionId": "LOGIC2_out",
+            "points": [
+                {
+                    "x": 860,
+                    "y": 20
+                },
+                {
+                    "x": 1000,
+                    "y": 20
+                },
+                {
+                    "x": 1000,
+                    "y": 140
+                }
+            ],
+            "toJonctionId": "DFF1_SET"
+        },
+        {
+            "fromJonctionId": "LOGIC3_out",
+            "points": [
+                {
+                    "x": 920,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "DFF1_RESET"
+        },
+        {
+            "fromJonctionId": "R2_out",
+            "toJonctionId": "LED2_in",
+            "points": [
+                {
+                    "x": 1240,
+                    "y": 200
+                },
+                {
+                    "x": 1360,
+                    "y": 200
+                },
+                {
+                    "x": 1360,
+                    "y": 260
+                }
+            ]
+        },
+        {
+            "fromJonctionId": "LED2_out",
+            "points": [
+                {
+                    "x": 1360,
+                    "y": 340
+                },
+                {
+                    "x": 1360,
+                    "y": 420
+                },
+                {
+                    "x": 800,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "auto_junc_4"
+        },
+        {
+            "fromJonctionId": "GImp1_out",
+            "points": [
+                {
+                    "x": 500,
+                    "y": 260
+                },
+                {
+                    "x": 580,
+                    "y": 260
+                },
+                {
+                    "x": 580,
+                    "y": 200
+                },
+                {
+                    "x": 960,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "DFF1_CLK"
+        },
+        {
+            "fromJonctionId": "R2_in",
+            "points": [
+                {
+                    "x": 1160,
+                    "y": 200
+                },
+                {
+                    "x": 1140,
+                    "y": 200
+                },
+                {
+                    "x": 1140,
+                    "y": 160
+                },
+                {
+                    "x": 1040,
+                    "y": 160
+                }
+            ],
+            "toJonctionId": "DFF1_Q"
+        },
+        {
+            "fromJonctionId": "R3_in",
+            "points": [
+                {
+                    "x": 660,
+                    "y": 260
+                },
+                {
+                    "x": 580,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "auto_junc_5"
+        },
+        {
+            "fromJonctionId": "R3_out",
+            "points": [
+                {
+                    "x": 740,
+                    "y": 260
+                },
+                {
+                    "x": 800,
+                    "y": 260
+                },
+                {
+                    "x": 800,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "LED1_in"
+        },
+        {
+            "fromJonctionId": "LED1_out",
+            "points": [
+                {
+                    "x": 800,
+                    "y": 400
+                },
+                {
+                    "x": 800,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "auto_junc_4"
+        },
+        {
+            "fromJonctionId": "GImp1_in",
+            "points": [
+                {
+                    "x": 460,
+                    "y": 300
+                },
+                {
+                    "x": 460,
+                    "y": 420
+                },
+                {
+                    "x": 800,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "auto_junc_4"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_4",
+            "x": 800,
+            "y": 420
+        },
+        {
+            "id": "auto_junc_5",
+            "x": 580,
+            "y": 260
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 3,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 0,
+        "nand": 0,
+        "d_flipflop": 1,
+        "jk_flipflop": 0,
+        "led": 2,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "junction": 5,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 3,
+        "gimp": 1,
+        "gsin": 1,
+        "gsqr": 1
+    }
+}

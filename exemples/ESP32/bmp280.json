@@ -1,0 +1,188 @@
+{
+    "name": "bmp280",
+    "components": [
+        {
+            "type": "grove_bmp280",
+            "x": 980,
+            "y": 280,
+            "label": "BMP1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "flipX": false,
+            "i2cAddress": 118,
+            "pressureHpa": 1013.25,
+            "temperature": 22
+        },
+        {
+            "type": "esp32_c3",
+            "x": 440,
+            "y": 400,
+            "label": "ESP1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "#include <Wire.h>\n#include <Adafruit_BMP280.h>\n\nAdafruit_BMP280 bmp;\n\nvoid setup() {\n  Wire.begin(4, 5);      // ESP32-C3 : broches I²C du schéma\n  bmp.begin(0x76);       // Grove : 0x76 ou 0x77\n}\n\nvoid loop() {\n  float t = bmp.readTemperature();\n  float p = bmp.readPressure();   // Pa\n  Serial.print(\"P=\");\n  Serial.println(p);\n  delay(2000);\n}\n",
+            "fqbn": "esp32:esp32:esp32c3",
+            "pinModes": {},
+            "pinLevels": {},
+            "avrRegisters": {},
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 324794 octets (24%) de l'espace de stockage de programmes. Le maximum est de 1310720 octets.\nLes variables globales utilisent 15072 octets (4%) de mémoire dynamique, ce qui laisse 312608 octets pour les variables locales. Le maximum est de 327680 octets.",
+            "lastUploadOk": false,
+            "pinPulses": {},
+            "pinPhases": [],
+            "usesLiveInput": false,
+            "liveLevels": {
+                "GPIO21": 1,
+                "GPIO20": 0
+            },
+            "serialLog": "P=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\nP=101325.00\n",
+            "serialBegun": true,
+            "serialBaud": 9600
+        },
+        {
+            "type": "vcc",
+            "x": 760,
+            "y": 180,
+            "label": "VCC1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 740,
+            "y": 320,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "BMP1_SCL",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 280
+                },
+                {
+                    "x": 640,
+                    "y": 280
+                },
+                {
+                    "x": 640,
+                    "y": 320
+                },
+                {
+                    "x": 560,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "ESP1_GPIO5"
+        },
+        {
+            "fromJonctionId": "BMP1_SDA",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 260
+                },
+                {
+                    "x": 300,
+                    "y": 260
+                },
+                {
+                    "x": 300,
+                    "y": 480
+                },
+                {
+                    "x": 340,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "ESP1_GPIO4"
+        },
+        {
+            "fromJonctionId": "BMP1_VCC",
+            "points": [
+                {
+                    "x": 820,
+                    "y": 300
+                },
+                {
+                    "x": 760,
+                    "y": 300
+                },
+                {
+                    "x": 760,
+                    "y": 200
+                }
+            ],
+            "toJonctionId": "VCC1_out"
+        },
+        {
+            "fromJonctionId": "GND1_out",
+            "points": [
+                {
+                    "x": 760,
+                    "y": 320
+                },
+                {
+                    "x": 820,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "BMP1_GND"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 1,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 0,
+        "esp32_c3": 1,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 1,
+        "joyit_tft18": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 1,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

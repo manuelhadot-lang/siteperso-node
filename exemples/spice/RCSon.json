@@ -1,0 +1,235 @@
+{
+    "name": "RCSon",
+    "components": [
+        {
+            "type": "gsin",
+            "x": 560,
+            "y": 340,
+            "label": "Sin_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "peakAmplitude": 5,
+            "frequency": 440,
+            "offset": 0,
+            "sinModEnabled": true,
+            "sinModFreqLow": 440,
+            "sinModFreqHigh": 640,
+            "sinModStepHz": 10,
+            "sinModStepSec": 1
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1580,
+            "y": 360,
+            "label": "Osci_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.0005,
+            "ch1VoltsPerDiv": 2,
+            "ch2VoltsPerDiv": 2,
+            "ch1PositionDiv": 0,
+            "ch2PositionDiv": 0,
+            "timePositionDiv": 0
+        },
+        {
+            "type": "resistor",
+            "x": 740,
+            "y": 340,
+            "label": "R_2",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "capacitor",
+            "x": 840,
+            "y": 420,
+            "label": "C_1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10u"
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "R_2_in",
+            "points": [
+                {
+                    "x": 700,
+                    "y": 340
+                },
+                {
+                    "x": 600,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "Sin_1_out"
+        },
+        {
+            "fromJonctionId": "Osci_1_CH2",
+            "points": [
+                {
+                    "x": 1520,
+                    "y": 380
+                },
+                {
+                    "x": 1440,
+                    "y": 380
+                },
+                {
+                    "x": 1440,
+                    "y": 180
+                },
+                {
+                    "x": 660,
+                    "y": 180
+                },
+                {
+                    "x": 660,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "auto_junc_15"
+        },
+        {
+            "fromJonctionId": "Osci_1_GND",
+            "points": [
+                {
+                    "x": 1580,
+                    "y": 420
+                },
+                {
+                    "x": 1580,
+                    "y": 540
+                },
+                {
+                    "x": 840,
+                    "y": 540
+                },
+                {
+                    "x": 840,
+                    "y": 460
+                }
+            ],
+            "toJonctionId": "C_1_out"
+        },
+        {
+            "fromJonctionId": "Sin_1_in",
+            "points": [
+                {
+                    "x": 560,
+                    "y": 380
+                },
+                {
+                    "x": 560,
+                    "y": 540
+                },
+                {
+                    "x": 840,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_19"
+        },
+        {
+            "fromJonctionId": "C_1_in",
+            "points": [
+                {
+                    "x": 840,
+                    "y": 380
+                },
+                {
+                    "x": 840,
+                    "y": 340
+                },
+                {
+                    "x": 780,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "R_2_out"
+        },
+        {
+            "fromJonctionId": "Osci_1_CH1",
+            "points": [
+                {
+                    "x": 1520,
+                    "y": 340
+                },
+                {
+                    "x": 840,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "auto_junc_25"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_15",
+            "x": 660,
+            "y": 340
+        },
+        {
+            "id": "auto_junc_19",
+            "x": 840,
+            "y": 540
+        },
+        {
+            "id": "auto_junc_25",
+            "x": 840,
+            "y": 340
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 4,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 2,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 0,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "bode_analyzer": 1,
+        "speaker": 2,
+        "junction": 25,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 0
+    }
+}

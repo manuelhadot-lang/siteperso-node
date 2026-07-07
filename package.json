@@ -17,7 +17,8 @@
     "simulateur-h:build": "npm run dist --prefix SimulateurH",
     "simulateur-h:setup": "npm run dist:setup --prefix SimulateurH",
     "docs:simulateur-pdf": "node scripts/generate-simulateur-pdf.mjs",
-    "docs:simulateur-source-pdf": "node scripts/generate-simulateur-sources-pdf.mjs"
+    "docs:simulateur-source-pdf": "node scripts/generate-simulateur-sources-pdf.mjs",
+    "docs:simulateur-presentation-pdf": "node scripts/generate-simulateur-presentation-pdf.mjs"
   },
   "dependencies": {
     "archiver": "^7.0.1",

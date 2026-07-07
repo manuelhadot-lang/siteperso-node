@@ -1,0 +1,269 @@
+{
+    "name": "signal_carre",
+    "components": [
+        {
+            "type": "arduino_uno",
+            "x": 560,
+            "y": 300,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "// Arduino UNO — sketch minimal\nvoid setup() {\n  pinMode(13, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(13, HIGH);\n  delay(42);\n  digitalWrite(13, LOW);\n  delay(75);\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "INPUT",
+                "D1": "INPUT",
+                "D2": "INPUT",
+                "D3": "INPUT",
+                "D4": "INPUT",
+                "D5": "INPUT",
+                "D6": "INPUT",
+                "D7": "INPUT",
+                "D8": "INPUT",
+                "D9": "INPUT",
+                "D10": "INPUT",
+                "D11": "INPUT",
+                "D12": "INPUT",
+                "D13": "OUTPUT",
+                "A0": "INPUT",
+                "A1": "INPUT",
+                "A2": "INPUT",
+                "A3": "INPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {},
+            "avrRegisters": {
+                "DDRB": 32,
+                "DDRC": 0,
+                "DDRD": 0,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 0
+            },
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 924 octets (2%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 9 octets (0%) de mémoire dynamique, ce qui laisse 2039 octets pour les variables locales. Le maximum est de 2048 octets.",
+            "pinPulses": {
+                "D13": {
+                    "highSec": 0.042,
+                    "lowSec": 0.075
+                }
+            },
+            "pinPhases": [],
+            "usesLiveInput": false,
+            "liveLevels": {
+                "D13": 1
+            },
+            "serialLog": "",
+            "serialBegun": false,
+            "serialBaud": 9600
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1240,
+            "y": 200,
+            "label": "Osci1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.05,
+            "ch1VoltsPerDiv": 2,
+            "ch2VoltsPerDiv": 2,
+            "ch1PositionDiv": 0,
+            "ch2PositionDiv": -4
+        },
+        {
+            "type": "gnd",
+            "x": 1160,
+            "y": 340,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "resistor",
+            "x": 820,
+            "y": 180,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "capacitor",
+            "x": 960,
+            "y": 240,
+            "label": "C1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "1u"
+        },
+        {
+            "type": "gnd",
+            "x": 960,
+            "y": 340,
+            "label": "GND2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "GND1_out",
+            "points": [
+                {
+                    "x": 1180,
+                    "y": 340
+                },
+                {
+                    "x": 1240,
+                    "y": 340
+                },
+                {
+                    "x": 1240,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "Osci1_GND"
+        },
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 860,
+                    "y": 180
+                },
+                {
+                    "x": 1180,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "Osci1_CH1"
+        },
+        {
+            "fromJonctionId": "C1_in",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 200
+                },
+                {
+                    "x": 960,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "R1_in",
+            "points": [
+                {
+                    "x": 780,
+                    "y": 180
+                },
+                {
+                    "x": 680,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "UNO1_D13"
+        },
+        {
+            "fromJonctionId": "C1_out",
+            "points": [
+                {
+                    "x": 960,
+                    "y": 280
+                },
+                {
+                    "x": 960,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "GND2_out"
+        },
+        {
+            "fromJonctionId": "Osci1_CH2",
+            "points": [
+                {
+                    "x": 1180,
+                    "y": 220
+                },
+                {
+                    "x": 1100,
+                    "y": 220
+                },
+                {
+                    "x": 1100,
+                    "y": 100
+                },
+                {
+                    "x": 740,
+                    "y": 100
+                },
+                {
+                    "x": 740,
+                    "y": 180
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 960,
+            "y": 180
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 740,
+            "y": 180
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 1,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 0,
+        "seg7": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 2,
+        "gnd": 2,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

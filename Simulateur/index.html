@@ -17,6 +17,7 @@
                 <div class="dropdown-item dropdown-item--icon" id="btn-open"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Ouvrir...</div>
                 <div class="dropdown-item dropdown-item--icon" id="btn-save"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>Enregistrer</div>
                 <div class="dropdown-item dropdown-item--icon" id="btn-save-as"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v3a2 2 0 0 0 2 2h5"/><path d="M18 8v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><path d="M7 18h7"/><path d="M7 13h10"/><path d="M7 8h3"/></svg>Enregistrer sous...</div>
+                <div class="dropdown-item dropdown-item--icon" id="btn-examples"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>Exemples…</div>
                 <div class="dropdown-item dropdown-item--icon" id="btn-print"><svg class="lucide-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Imprimer…</div>
             </div>
         </div>
@@ -1290,6 +1291,30 @@ void loop() {
                 <button type="button" id="value-prompt-ok" class="value-prompt-btn value-prompt-btn--ok">OK</button>
                 <button type="button" id="value-prompt-cancel" class="value-prompt-btn">Annuler</button>
             </div>
+        </div>
+    </div>
+
+    <div id="welcome-modal" class="modal hidden">
+        <div class="modal-content modal-content--welcome">
+            <h2 id="welcome-title">Simulateur de Circuits</h2>
+            <p id="welcome-meta" class="welcome-meta"></p>
+            <div id="welcome-body" class="modal-body welcome-body"></div>
+            <label class="welcome-never">
+                <input type="checkbox" id="welcome-never">
+                Ne plus afficher ce message
+            </label>
+            <div class="welcome-actions">
+                <button type="button" id="welcome-close" class="welcome-btn">Continuer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="examples-modal" class="modal hidden">
+        <div class="modal-content modal-content--examples">
+            <span class="close-modal" id="close-examples">&times;</span>
+            <h2>Exemples de montages</h2>
+            <p id="examples-status" class="examples-status">Chargement…</p>
+            <div id="examples-list" class="examples-list"></div>
         </div>
     </div>
 

@@ -1,0 +1,644 @@
+{
+    "name": "bar",
+    "components": [
+        {
+            "type": "arduino_uno",
+            "x": 600,
+            "y": 280,
+            "label": "UNO1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "sketch": "// Arduino UNO — sketch minimal\nint x=0;\nvoid setup() {\n  DDRD=0b11111111;\n  DDRB=0b00000111;\n  PORTD=0xFF;\n  PORTB=7;\n}\n\nvoid loop() \n{\n if(x==0)\n {\n  while(PORTB>0)\n  {\n    PORTB=PORTB/2;\n    delay(100);\n  }\n  if(PORTD>1)\n  {\n   PORTD=PORTD/2;\n   delay(100);\n  }\n  else\n    x=1;\n }\n if(x==1)\n {\n  if(PORTD<0xFF)\n  {\n   PORTD=PORTD*2+1;\n   delay(100);\n  }\n  else\n  {\n   while(PORTB<3)\n   {\n    PORTB=PORTB*2+1;\n    delay(100);\n   }\n    x=0;\n  }\n }\n}\n",
+            "fqbn": "arduino:avr:uno",
+            "pinModes": {
+                "D0": "OUTPUT",
+                "D1": "OUTPUT",
+                "D2": "OUTPUT",
+                "D3": "OUTPUT",
+                "D4": "OUTPUT",
+                "D5": "OUTPUT",
+                "D6": "OUTPUT",
+                "D7": "OUTPUT",
+                "D8": "OUTPUT",
+                "D9": "OUTPUT",
+                "D10": "OUTPUT",
+                "D11": "INPUT",
+                "D12": "INPUT",
+                "D13": "INPUT",
+                "A0": "INPUT",
+                "A1": "INPUT",
+                "A2": "INPUT",
+                "A3": "INPUT",
+                "A4": "INPUT",
+                "A5": "INPUT"
+            },
+            "pinLevels": {},
+            "avrRegisters": {
+                "DDRB": 7,
+                "DDRC": 0,
+                "DDRD": 255,
+                "PORTB": 0,
+                "PORTC": 0,
+                "PORTD": 127
+            },
+            "lastCompileOk": true,
+            "lastCompileLog": "Le croquis utilise 756 octets (2%) de l'espace de stockage de programmes. Le maximum est de 32256 octets.\nLes variables globales utilisent 11 octets (0%) de mémoire dynamique, ce qui laisse 2037 octets pour les variables locales. Le maximum est de 2048 octets.",
+            "pinPulses": {},
+            "pinPhases": [
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 1,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 0,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 0,
+                        "D3": 0,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 0,
+                        "D2": 0,
+                        "D3": 0,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 0,
+                        "D3": 0,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 0,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 0,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 0,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 0,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 1,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 1,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 1,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                },
+                {
+                    "durationMs": 100,
+                    "levels": {
+                        "D0": 1,
+                        "D1": 1,
+                        "D2": 1,
+                        "D3": 1,
+                        "D4": 1,
+                        "D5": 1,
+                        "D6": 1,
+                        "D7": 0,
+                        "D8": 0,
+                        "D9": 0,
+                        "D10": 0
+                    }
+                }
+            ],
+            "usesLiveInput": false,
+            "liveLevels": {
+                "D0": 1,
+                "D1": 1,
+                "D2": 0,
+                "D3": 0,
+                "D4": 0,
+                "D5": 0,
+                "D6": 0,
+                "D7": 0,
+                "D8": 0,
+                "D9": 0,
+                "D10": 0
+            },
+            "serialLog": "",
+            "serialBegun": false,
+            "serialBaud": 9600
+        },
+        {
+            "type": "bargraph_dc10h",
+            "x": 1040,
+            "y": 320,
+            "label": "BAR1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "barColor": "red",
+            "flipX": false
+        },
+        {
+            "type": "gnd",
+            "x": 1000,
+            "y": 520,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "UNO1_D0",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 420
+                },
+                {
+                    "x": 1000,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "BAR1_s1"
+        },
+        {
+            "fromJonctionId": "UNO1_D1",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 400
+                },
+                {
+                    "x": 1000,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "BAR1_s2"
+        },
+        {
+            "fromJonctionId": "UNO1_D2",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 380
+                },
+                {
+                    "x": 1000,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "BAR1_s3"
+        },
+        {
+            "fromJonctionId": "UNO1_D3",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 360
+                },
+                {
+                    "x": 1000,
+                    "y": 360
+                }
+            ],
+            "toJonctionId": "BAR1_s4"
+        },
+        {
+            "fromJonctionId": "UNO1_D4",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 340
+                },
+                {
+                    "x": 1000,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "BAR1_s5"
+        },
+        {
+            "fromJonctionId": "UNO1_D5",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 320
+                },
+                {
+                    "x": 1000,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "BAR1_s6"
+        },
+        {
+            "fromJonctionId": "UNO1_D6",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 300
+                },
+                {
+                    "x": 1000,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "BAR1_s7"
+        },
+        {
+            "fromJonctionId": "UNO1_D7",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "BAR1_s8"
+        },
+        {
+            "fromJonctionId": "BAR1_COM",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 460
+                },
+                {
+                    "x": 1060,
+                    "y": 520
+                },
+                {
+                    "x": 1020,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "UNO1_D8",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 260
+                },
+                {
+                    "x": 1000,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "BAR1_s9"
+        },
+        {
+            "fromJonctionId": "UNO1_D9",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 240
+                },
+                {
+                    "x": 1000,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "BAR1_s10"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 0,
+        "resistor": 0,
+        "potentiometer": 0,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 1,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 1,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 0,
+        "gnd": 1,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

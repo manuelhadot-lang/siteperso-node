@@ -1,0 +1,224 @@
+{
+    "name": "servo",
+    "components": [
+        {
+            "type": "servo_motor",
+            "x": 800,
+            "y": 260,
+            "label": "SV1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "100"
+        },
+        {
+            "type": "gnd",
+            "x": 700,
+            "y": 280,
+            "label": "GND1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "vcc",
+            "x": 700,
+            "y": 240,
+            "label": "VCC1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "battery",
+            "x": 1020,
+            "y": 300,
+            "label": "VDC1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": 5
+        },
+        {
+            "type": "gnd",
+            "x": 980,
+            "y": 480,
+            "label": "GND3",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "potentiometer",
+            "x": 920,
+            "y": 260,
+            "label": "POT3",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10k",
+            "position": 100
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "SV1_minus",
+            "points": [
+                {
+                    "x": 760,
+                    "y": 280
+                },
+                {
+                    "x": 720,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "VCC1_out",
+            "points": [
+                {
+                    "x": 720,
+                    "y": 240
+                },
+                {
+                    "x": 760,
+                    "y": 240
+                }
+            ],
+            "toJonctionId": "SV1_plus"
+        },
+        {
+            "fromJonctionId": "POT3_wip",
+            "points": [
+                {
+                    "x": 900,
+                    "y": 260
+                },
+                {
+                    "x": 840,
+                    "y": 260
+                }
+            ],
+            "toJonctionId": "SV1_signal"
+        },
+        {
+            "fromJonctionId": "VDC1_in",
+            "points": [
+                {
+                    "x": 1020,
+                    "y": 260
+                },
+                {
+                    "x": 1020,
+                    "y": 200
+                },
+                {
+                    "x": 920,
+                    "y": 200
+                },
+                {
+                    "x": 920,
+                    "y": 220
+                }
+            ],
+            "toJonctionId": "POT3_out"
+        },
+        {
+            "fromJonctionId": "VDC1_out",
+            "points": [
+                {
+                    "x": 1020,
+                    "y": 340
+                },
+                {
+                    "x": 1020,
+                    "y": 380
+                },
+                {
+                    "x": 920,
+                    "y": 380
+                },
+                {
+                    "x": 920,
+                    "y": 300
+                }
+            ],
+            "toJonctionId": "POT3_in"
+        },
+        {
+            "fromJonctionId": "GND3_out",
+            "points": [
+                {
+                    "x": 980,
+                    "y": 460
+                },
+                {
+                    "x": 980,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "auto_junc_3"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_3",
+            "x": 980,
+            "y": 380
+        }
+    ],
+    "counters": {
+        "battery": 1,
+        "resistor": 0,
+        "potentiometer": 3,
+        "switch_spdt": 0,
+        "push_button": 0,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "lm386": 0,
+        "lm7805": 0,
+        "dc_motor": 0,
+        "servo_motor": 1,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "arduino_uno": 0,
+        "esp32_c3": 0,
+        "esp32_devkit": 0,
+        "led": 0,
+        "seg7": 0,
+        "bargraph_dc10h": 0,
+        "matrix_8x8": 0,
+        "grove_lcd16x2": 0,
+        "grove_dht22": 0,
+        "grove_tsl2591": 0,
+        "grove_bmp280": 0,
+        "joyit_tft18": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 0,
+        "bode_analyzer": 0,
+        "speaker": 0,
+        "junction": 3,
+        "gnd": 3,
+        "vcc": 1,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0,
+        "gsqr": 0
+    }
+}

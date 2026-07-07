@@ -1,0 +1,189 @@
+{
+    "components": [
+        {
+            "type": "resistor",
+            "x": 1100,
+            "y": 280,
+            "label": "R1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "500"
+        },
+        {
+            "type": "ammeter",
+            "x": 1260,
+            "y": 280,
+            "label": "A1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "led",
+            "x": 1400,
+            "y": 360,
+            "label": "LED1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "voltmeter",
+            "x": 1580,
+            "y": 380,
+            "label": "V2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "battery",
+            "x": 1000,
+            "y": 420,
+            "label": "VDC3",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "R1_out",
+            "points": [
+                {
+                    "x": 1140,
+                    "y": 280
+                },
+                {
+                    "x": 1220,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "A1_in"
+        },
+        {
+            "fromJonctionId": "A1_out",
+            "points": [
+                {
+                    "x": 1300,
+                    "y": 280
+                },
+                {
+                    "x": 1380,
+                    "y": 280
+                },
+                {
+                    "x": 1400,
+                    "y": 280
+                },
+                {
+                    "x": 1400,
+                    "y": 320
+                }
+            ],
+            "toJonctionId": "LED1_in"
+        },
+        {
+            "fromJonctionId": "V2_out",
+            "points": [
+                {
+                    "x": 1580,
+                    "y": 340
+                },
+                {
+                    "x": 1580,
+                    "y": 280
+                },
+                {
+                    "x": 1400,
+                    "y": 280
+                }
+            ],
+            "toJonctionId": "auto_junc_5"
+        },
+        {
+            "fromJonctionId": "VDC3_out",
+            "points": [
+                {
+                    "x": 1000,
+                    "y": 460
+                },
+                {
+                    "x": 1000,
+                    "y": 520
+                },
+                {
+                    "x": 1580,
+                    "y": 520
+                },
+                {
+                    "x": 1580,
+                    "y": 420
+                }
+            ],
+            "toJonctionId": "V2_in"
+        },
+        {
+            "fromJonctionId": "LED1_out",
+            "points": [
+                {
+                    "x": 1400,
+                    "y": 400
+                },
+                {
+                    "x": 1400,
+                    "y": 520
+                }
+            ],
+            "toJonctionId": "auto_junc_7"
+        },
+        {
+            "fromJonctionId": "R1_in",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 280
+                },
+                {
+                    "x": 1000,
+                    "y": 380
+                }
+            ],
+            "toJonctionId": "VDC3_in"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_5",
+            "x": 1400,
+            "y": 280
+        },
+        {
+            "id": "auto_junc_7",
+            "x": 1400,
+            "y": 520
+        }
+    ],
+    "counters": {
+        "battery": 3,
+        "resistor": 2,
+        "nand": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "led": 1,
+        "voltmeter": 2,
+        "ammeter": 1,
+        "ohmmeter": 1,
+        "junction": 9,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 0
+    }
+}

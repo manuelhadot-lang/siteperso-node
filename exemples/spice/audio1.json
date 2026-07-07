@@ -1,0 +1,161 @@
+{
+    "components": [
+        {
+            "type": "gsin",
+            "x": 560,
+            "y": 340,
+            "label": "Sin_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "peakAmplitude": 5,
+            "frequency": 440,
+            "offset": 0
+        },
+        {
+            "type": "speaker",
+            "x": 960,
+            "y": 440,
+            "label": "HP_1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "8"
+        },
+        {
+            "type": "oscilloscope",
+            "x": 1120,
+            "y": 360,
+            "label": "Osci_1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "timeDivSec": 0.0005,
+            "ch1VoltsPerDiv": 2,
+            "ch2VoltsPerDiv": 1,
+            "ch1PositionDiv": 0,
+            "ch2PositionDiv": 0
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "Sin_1_in",
+            "points": [
+                {
+                    "x": 560,
+                    "y": 380
+                },
+                {
+                    "x": 560,
+                    "y": 540
+                },
+                {
+                    "x": 960,
+                    "y": 540
+                },
+                {
+                    "x": 960,
+                    "y": 480
+                }
+            ],
+            "toJonctionId": "HP_1_in"
+        },
+        {
+            "fromJonctionId": "Sin_1_out",
+            "points": [
+                {
+                    "x": 600,
+                    "y": 340
+                },
+                {
+                    "x": 960,
+                    "y": 340
+                },
+                {
+                    "x": 960,
+                    "y": 400
+                }
+            ],
+            "toJonctionId": "HP_1_out"
+        },
+        {
+            "fromJonctionId": "Osci_1_CH1",
+            "points": [
+                {
+                    "x": 1060,
+                    "y": 340
+                },
+                {
+                    "x": 960,
+                    "y": 340
+                }
+            ],
+            "toJonctionId": "auto_junc_1"
+        },
+        {
+            "fromJonctionId": "Osci_1_GND",
+            "points": [
+                {
+                    "x": 1120,
+                    "y": 420
+                },
+                {
+                    "x": 1120,
+                    "y": 540
+                },
+                {
+                    "x": 960,
+                    "y": 540
+                }
+            ],
+            "toJonctionId": "auto_junc_2"
+        }
+    ],
+    "autoJunctions": [
+        {
+            "id": "auto_junc_1",
+            "x": 960,
+            "y": 340
+        },
+        {
+            "id": "auto_junc_2",
+            "x": 960,
+            "y": 540
+        }
+    ],
+    "counters": {
+        "battery": 0,
+        "resistor": 1,
+        "capacitor": 0,
+        "inductor": 0,
+        "diode": 0,
+        "npn": 0,
+        "opamp": 0,
+        "not": 0,
+        "and": 0,
+        "nand": 0,
+        "or": 0,
+        "nor": 0,
+        "xor": 0,
+        "xnor": 0,
+        "d_flipflop": 0,
+        "jk_flipflop": 0,
+        "cd4511": 0,
+        "ic_74hc90": 0,
+        "led": 0,
+        "seg7": 0,
+        "voltmeter": 0,
+        "ammeter": 0,
+        "ohmmeter": 0,
+        "oscilloscope": 1,
+        "bode_analyzer": 0,
+        "speaker": 1,
+        "junction": 2,
+        "gnd": 0,
+        "vcc": 0,
+        "logic_terminal": 0,
+        "gimp": 0,
+        "gsin": 1,
+        "gsqr": 0
+    }
+}

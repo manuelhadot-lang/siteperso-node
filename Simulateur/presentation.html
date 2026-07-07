@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur STI2D — Présentation</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --border: #334155;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #00d1ff;
+            --accent-dim: #0891b2;
+            --ok: #10b981;
+            --warn: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Roboto, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.55;
+        }
+        a { color: var(--accent); }
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 24px;
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(8px);
+        }
+        .topbar h1 {
+            font-family: Orbitron, sans-serif;
+            font-size: 1rem;
+            letter-spacing: 0.04em;
+        }
+        .topbar-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .lang-switch {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .lang-switch__btn {
+            padding: 6px 12px;
+            border: none;
+            background: var(--panel);
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.06em;
+        }
+        .lang-switch__btn:hover { color: var(--accent); }
+        .lang-switch__btn--active {
+            background: var(--accent);
+            color: #0f172a;
+        }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn--primary {
+            background: var(--accent);
+            color: #0f172a;
+            border-color: var(--accent);
+            font-weight: 700;
+        }
+        .btn--primary:hover { filter: brightness(1.08); color: #0f172a; }
+        .hero {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 48px 24px 32px;
+            text-align: center;
+        }
+        .hero .tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent-dim);
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-bottom: 16px;
+        }
+        .hero h2 {
+            font-family: Orbitron, sans-serif;
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            margin-bottom: 12px;
+        }
+        .hero p { color: var(--muted); max-width: 720px; margin: 0 auto 24px; font-size: 1.05rem; }
+        .hero-badges {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        .hero-badges span {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        main { max-width: 960px; margin: 0 auto; padding: 0 24px 64px; }
+        section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        section h3 {
+            font-family: Orbitron, sans-serif;
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+        section p, section li { color: var(--muted); }
+        section ul { padding-left: 1.2rem; margin-top: 8px; }
+        section li { margin: 4px 0; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            margin-top: 12px;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 10px 12px;
+            text-align: left;
+        }
+        th { background: #0f172a; color: var(--accent); font-weight: 600; }
+        td:first-child { color: var(--text); }
+        .yes { color: var(--ok); }
+        .no { color: #f87171; }
+        .quote {
+            border-left: 4px solid var(--accent);
+            padding: 12px 16px;
+            background: #0f172a;
+            font-style: italic;
+            color: var(--text);
+            margin-top: 12px;
+        }
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+        @media print {
+            body { background: #fff; color: #111; }
+            .topbar, .no-print { display: none !important; }
+            section { break-inside: avoid; border-color: #ccc; background: #fff; }
+            section h3 { color: #1565c0; }
+            section p, section li { color: #333; }
+            th { background: #eee; color: #111; }
+            .hero { padding-top: 0; }
+            .hero .tag, .hero-badges span { border-color: #999; color: #333; }
+            a { color: #111; text-decoration: none; }
+            table { font-size: 9pt; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar no-print">
+        <div class="topbar-left">
+            <h1 data-i18n="top.title">Simulateur STI2D</h1>
+            <div class="lang-switch" role="group" aria-label="Language">
+                <button type="button" class="lang-switch__btn lang-switch__btn--active" data-lang="fr" aria-pressed="true">FR</button>
+                <button type="button" class="lang-switch__btn" data-lang="en" aria-pressed="false">EN</button>
+            </div>
+        </div>
+        <div class="actions">
+            <a class="btn" href="index.html" data-i18n="top.open">Ouvrir le simulateur</a>
+            <a class="btn" href="/" data-i18n="top.portal">Portail lycée</a>
+            <button type="button" class="btn" data-i18n="top.print" onclick="window.print()">Imprimer</button>
+            <a class="btn btn--primary" href="/Simulateur/fiche-presentation.pdf" data-i18n="top.pdf" data-i18n-title="top.pdf.hint" title="PDF en français">Télécharger PDF</a>
+        </div>
+    </header>
+
+    <div class="hero">
+        <span class="tag" data-i18n="hero.tag">STI2D · SIN · LGT Saint-Erembert</span>
+        <h2 data-i18n="hero.title">Simulateur de circuits tout-en-un</h2>
+        <p data-i18n="hero.lead">
+            Schéma interactif, simulation SPICE (ngspice), programmation Arduino et ESP32,
+            capteurs Grove, logique numérique et application Windows avec téléversement USB —
+            conçu pour la pédagogie STI2D.
+        </p>
+        <div class="hero-badges">
+            <span>ngspice + XSPICE</span>
+            <span>Arduino UNO · ESP32</span>
+            <span>82+ tests</span>
+            <span>Simulateur H Windows</span>
+        </div>
+    </div>
+
+    <main>
+        <section>
+            <h3 data-i18n="s.one">En une phrase</h3>
+            <p class="quote" data-i18n="s.one.q">
+                Un environnement qui relie le schéma électrique, la simulation SPICE,
+                la programmation microcontrôleur et — en version bureau — le téléversement sur carte réelle.
+            </p>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.problem">Le problème adressé</h3>
+            <p data-i18n="s.problem.intro">En STI2D, l'élève enchaîne souvent plusieurs outils incompatibles :</p>
+            <ul>
+                <li data-i18n="s.problem.l1"><strong>Fritzing / Tinkercad</strong> — schéma sans SPICE réel</li>
+                <li data-i18n="s.problem.l2"><strong>LTspice / Proteus</strong> — puissants mais hors contexte lycée</li>
+                <li data-i18n="s.problem.l3"><strong>Wokwi / IDE Arduino</strong> — peu de lien avec l'analogique STI2D</li>
+                <li data-i18n="s.problem.l4"><strong>Logisim</strong> — logique isolée du reste du montage</li>
+            </ul>
+            <p class="quote" style="margin-top:10px" data-i18n="s.problem.out">
+                Résultat : temps perdu en installation et changement d'outil, moins de temps sur la physique.
+            </p>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.offer">Ce que propose l'outil</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th data-i18n="t.ver">Version</th>
+                        <th data-i18n="t.content">Contenu</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong data-i18n="s.offer.web">Site web</strong></td>
+                        <td data-i18n="s.offer.web.d">Simulateur en ligne sur le portail</td>
+                    </tr>
+                    <tr>
+                        <td><strong data-i18n="s.offer.h">Simulateur H</strong></td>
+                        <td data-i18n="s.offer.h.d">Application Windows</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.features">Composants et fonctionnalités</h3>
+            <ul>
+                <li data-i18n="s.features.l1">Analogique</li>
+                <li data-i18n="s.features.l2">Logique</li>
+                <li data-i18n="s.features.l3">Microcontrôleurs</li>
+                <li data-i18n="s.features.l4">Capteurs / affichage</li>
+                <li data-i18n="s.features.l5">Mécanique</li>
+                <li data-i18n="s.features.l6">Mesures</li>
+            </ul>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.compare">Comparaison rapide</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th data-i18n="t.crit">Critère</th>
+                        <th data-i18n="t.other">Tinkercad / Wokwi</th>
+                        <th data-i18n="t.ours">Notre simulateur</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-i18n="c.ui">Interface en français</td>
+                        <td class="no" data-i18n="c.partial">Partiel</td>
+                        <td class="yes" data-i18n="c.native">Natif</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="c.spice">SPICE analogique réel</td>
+                        <td class="no" data-i18n="c.limited">Limité</td>
+                        <td class="yes">ngspice</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="c.logic">CD4511, 74HC90, Bode</td>
+                        <td class="no" data-i18n="c.rare">Rare</td>
+                        <td class="yes" data-i18n="c.integrated">Intégré</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="c.win">Pack Windows + USB</td>
+                        <td class="no" data-i18n="c.no">Non</td>
+                        <td class="yes" data-i18n="c.yes">Oui</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="c.portal">Lien cours / quiz lycée</td>
+                        <td class="no" data-i18n="c.no">Non</td>
+                        <td class="yes" data-i18n="c.same">Même portail</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.benefits">Bénéfices pour l'établissement</h3>
+            <ul>
+                <li data-i18n="s.benefits.l1">Moins de temps perdu</li>
+                <li data-i18n="s.benefits.l2">Continuité</li>
+                <li data-i18n="s.benefits.l3">Circuits JSON</li>
+                <li data-i18n="s.benefits.l4">Outil interne</li>
+            </ul>
+        </section>
+
+        <section>
+            <h3 data-i18n="s.hooks">Phrases d'accroche</h3>
+            <p class="quote" data-i18n="s.hooks.q1">« En un seul outil… »</p>
+            <p class="quote" style="margin-top:10px" data-i18n="s.hooks.q2">« Pensé pour le programme STI2D… »</p>
+        </section>
+    </main>
+
+    <footer>
+        <span data-i18n="foot">© STI2D — LGT Saint-Erembert · Simulateur de Circuits ·</span>
+        <a href="index.html" data-i18n="foot.link">Accéder au simulateur</a>
+    </footer>
+
+    <script src="presentation-i18n.js"></script>
+</body>
+</html>
