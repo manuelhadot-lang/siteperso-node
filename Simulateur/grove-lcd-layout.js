@@ -1,5 +1,5 @@
 /** Grove LCD RGB 2×16 I2C — géométrie calée grille, centré sur comp.x/y (origine = centre du boîtier). */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const GROVE_LCD_COLS = 16;
 export const GROVE_LCD_ROWS = 2;

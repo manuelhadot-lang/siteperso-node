@@ -1,5 +1,5 @@
 /** Géométrie CD4511 : boîtier 4×8 pas, broches ±3 pas, espacement vertical 1 pas. */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 /** Rectangle central : 4 pas (L) × 8 pas (H), centré sur le composant. */
 export const CD4511_BOX_L = -2 * G;

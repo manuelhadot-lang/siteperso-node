@@ -387,11 +387,12 @@ function estimateParallelLcResonantHz(components) {
     return 1 / (2 * Math.PI * Math.sqrt(lHenry * cFarad));
 }
 
-/** AOP + LC + oscilloscope, sans générateur externe : oscillateur autonome. */
+/** LC + oscilloscope sans générateur externe : excitation par impulsion (pas avec AOP — instable en UIC). */
 function circuitHasAutonomousLcOscillator(components) {
+    if (components.some((c) => isOpampType(c.type))) return false;
+    if (components.some((c) => isSignalGeneratorType(c.type))) return false;
     return (
         components.some((c) => c.type === "oscilloscope") &&
-        components.some((c) => isOpampType(c.type)) &&
         components.some((c) => c.type === "inductor") &&
         components.some((c) => c.type === "capacitor")
     );

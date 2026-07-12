@@ -2,9 +2,11 @@
 import { showModal, hideModal } from "./modal-ui.js";
 
 let loadCircuit = null;
+let setDisplayName = null;
 
-export function initExamplesPanel(onLoadCircuit) {
+export function initExamplesPanel({ loadCircuit: onLoadCircuit, setDisplayName: onSetDisplayName } = {}) {
     loadCircuit = onLoadCircuit;
+    setDisplayName = onSetDisplayName;
     const modal = document.getElementById("examples-modal");
     const listEl = document.getElementById("examples-list");
     const statusEl = document.getElementById("examples-status");
@@ -65,6 +67,7 @@ async function loadExample(url, name, modal, statusEl) {
     try {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setDisplayName?.(name);
         loadCircuit(await res.text());
         hideModal(modal);
     } catch (err) {

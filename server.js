@@ -540,6 +540,7 @@ app.use('/Simulateur', express.static(dirSimulateur, {
         res.setHeader('X-Sim-UI', SIM_UI_VERSION);
     },
 }));
+app.use('/3D', express.static(path.join(__dirname, '3D')));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
 app.get('/api/version', (req, res) => {
     res.json({

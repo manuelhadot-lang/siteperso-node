@@ -1,5 +1,5 @@
 /** Grove BMP280 (pression / T° I²C) — géométrie calée grille, origine = centre du module. */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const GROVE_BMP280_PINS = ['SDA', 'SCL', 'VCC', 'GND'];
 export const GROVE_BMP280_PIN_COUNT = GROVE_BMP280_PINS.length;

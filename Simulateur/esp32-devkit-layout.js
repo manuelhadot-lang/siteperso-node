@@ -1,5 +1,5 @@
 /** Géométrie ESP32 DevKit V1 (WROOM-32) — ~30 GPIO, logique 3,3 V. */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const ESP32_DEVKIT_BOX_L = -4 * G;
 export const ESP32_DEVKIT_BOX_R = 5 * G;

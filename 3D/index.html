@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+
+<html lang="fr">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Laboratoire virtuel 3D — STI2D</title>
+
+    <link rel="stylesheet" href="/style.css">
+
+    <link rel="stylesheet" href="/3D/lab.css">
+
+</head>
+
+<body>
+
+    <header>
+
+        <div class="header-main">
+
+            <a href="/" class="logo-container">
+
+                <span class="logo-title">STI2D</span>
+
+            </a>
+
+            <h1>LABORATOIRE VIRTUEL 3D</h1>
+
+        </div>
+
+    </header>
+
+
+
+    <main class="container">
+
+        <h2 class="sequence-title">🖼️ Galerie virtuelle</h2>
+
+
+
+        <div id="lab-workspace" class="lab-workspace">
+
+        <div class="lab-header-bar">
+            <nav class="lab-menubar" aria-label="Menus">
+                <div class="lab-menu" data-menu="file">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Fichier</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="new">Nouveau</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="open">Ouvrir (bibliothèque)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="open-disk">Ouvrir depuis le disque…</button>
+                        <hr class="lab-menu__sep">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="save">Enregistrer</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="save-as">Enregistrer sous (bibliothèque)…</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="save-disk">Enregistrer sur le disque…</button>
+                        <hr class="lab-menu__sep">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-file-action="close">Fermer</button>
+                    </div>
+                </div>
+            </nav>
+
+        <div class="lab-toolbar">
+            <div class="lab-toolbar__transform" role="group" aria-label="Transformation des objets">
+                <div class="lab-toolbar__mode-group">
+                    <button type="button" class="lab-toolbar__mode-btn is-active" data-mode="none" title="Sélection (sans gizmo)" aria-label="Sélection">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--select" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div class="lab-toolbar__mode-group">
+                    <button type="button" class="lab-toolbar__mode-btn" data-mode="translate" title="Déplacer (G)" aria-label="Déplacer">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--translate" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="lab-toolbar__snap-btn is-snapped" data-snap-mode="translate" title="Calé sur grille (1 m)" aria-label="Calé grille" aria-pressed="true">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--snap" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div class="lab-toolbar__mode-group">
+                    <button type="button" class="lab-toolbar__mode-btn" data-mode="rotate" title="Rotation (R)" aria-label="Rotation">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--rotate" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="lab-toolbar__snap-btn is-snapped" data-snap-mode="rotate" title="Calé (10°)" aria-label="Calé rotation" aria-pressed="true">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--snap" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div class="lab-toolbar__mode-group">
+                    <button type="button" class="lab-toolbar__mode-btn" data-mode="scale" title="Échelle (E)" aria-label="Échelle">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--scale" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="lab-toolbar__snap-btn is-snapped" data-snap-mode="scale" title="Calé (1 m)" aria-label="Calé échelle" aria-pressed="true">
+                        <span class="lab-toolbar__icon lab-toolbar__icon--snap" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="lab-toolbar__mode-group">
+                <button type="button" id="btn-quad-view" class="lab-toolbar__mode-btn" title="Vue 4 panneaux (dessus, droite, gauche, réelle)" aria-label="Vue 4 panneaux" aria-pressed="false">
+                    <span class="lab-toolbar__icon lab-toolbar__icon--quad" aria-hidden="true"></span>
+                </button>
+            </div>
+            <label class="lab-toolbar__speed" title="Vitesse de déplacement">
+                <span class="lab-toolbar__speed-label">Vitesse</span>
+                <input type="range" id="lab-move-speed" min="2" max="24" value="10" step="1" aria-label="Vitesse de déplacement">
+                <output id="lab-move-speed-value" for="lab-move-speed">10</output>
+            </label>
+        </div>
+        </div>
+
+
+
+        <div id="lab-stage" class="lab-stage">
+
+            <aside id="lab-side-panel" class="lab-side-panel">
+
+                <button type="button" id="lab-panel-toggle" class="lab-side-panel__tab" aria-expanded="true" title="Replier le panneau">‹</button>
+
+                <div class="lab-side-panel__body">
+
+                    <section class="lab-side-panel__section lab-side-panel__section--open" data-section="objects">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="true" aria-controls="lab-section-objects">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Objets</span>
+                        </button>
+                        <div id="lab-section-objects" class="lab-side-panel__section-body">
+                            <button type="button" id="btn-add-cube" class="lab-side-panel__tool" title="Cube 1 m — glisser-déposer ou clic (C)" draggable="true" aria-label="Cube 1 m">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-cube-3d">
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--front"></span>
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--back"></span>
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--right"></span>
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--left"></span>
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--top"></span>
+                                        <span class="lab-cube-3d__face lab-cube-3d__face--bottom"></span>
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--open" data-section="lights">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="true" aria-controls="lab-section-lights">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Lumières</span>
+                        </button>
+                        <div id="lab-section-lights" class="lab-side-panel__section-body">
+                            <div class="lab-side-panel__lights">
+                                <button type="button" id="btn-add-spot" class="lab-side-panel__tool lab-side-panel__tool--light" title="Projecteur spot" aria-label="Spot">
+                                    <span class="lab-side-panel__light-icon lab-side-panel__light-icon--spot" aria-hidden="true"></span>
+                                    <span class="lab-side-panel__tool-label">Spot</span>
+                                </button>
+                                <button type="button" id="btn-add-sun" class="lab-side-panel__tool lab-side-panel__tool--light" title="Soleil (lumière directionnelle)" aria-label="Soleil">
+                                    <span class="lab-side-panel__light-icon lab-side-panel__light-icon--sun" aria-hidden="true"></span>
+                                    <span class="lab-side-panel__tool-label">Soleil</span>
+                                </button>
+                                <button type="button" id="btn-add-lamp" class="lab-side-panel__tool lab-side-panel__tool--light" title="Lampe (lumière ponctuelle)" aria-label="Lampe">
+                                    <span class="lab-side-panel__light-icon lab-side-panel__light-icon--lamp" aria-hidden="true"></span>
+                                    <span class="lab-side-panel__tool-label">Lampe</span>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+
+            </aside>
+
+
+
+            <div id="lab-viewport" class="lab-viewport">
+
+                <div id="lab-object-info" class="lab-object-info" hidden>
+                    <p class="lab-object-info__row"><span class="lab-object-info__label">Position</span> <strong data-field="position">—</strong></p>
+                    <p class="lab-object-info__row"><span class="lab-object-info__label">Rotation</span> <strong data-field="rotation">—</strong></p>
+                    <p class="lab-object-info__row"><span class="lab-object-info__label">Échelle</span> <strong data-field="scale">—</strong></p>
+                </div>
+
+                <button type="button" id="btn-fullscreen" class="lab-viewport-fs" aria-pressed="false" title="Afficher en plein écran">
+
+                    ⛶ Plein écran
+
+                </button>
+
+                <div id="lab-blocker">
+
+                    <div id="lab-instructions">
+
+                        <span class="lab-instructions__title">Entrer dans la galerie</span>
+
+                        <br><br>
+
+                        Cliquez dans la zone 3D pour explorer
+
+                        <br>
+
+                        <span class="lab-instructions__keys">Z Q S D · espace : sauter · molette · clic gauche : regarder · clic droit : sélectionner · double-clic : zoomer</span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <aside id="lab-scene-panel" class="lab-scene-panel">
+
+                <div class="lab-scene-panel__body">
+
+                    <p class="lab-scene-panel__title">Scène</p>
+
+                    <ul id="lab-scene-list" class="lab-scene-list" aria-label="Éléments de la scène"></ul>
+
+                </div>
+
+                <button type="button" id="lab-scene-panel-toggle" class="lab-scene-panel__tab" aria-expanded="true" title="Replier le panneau scène">›</button>
+
+            </aside>
+
+        </div>
+
+        </div>
+
+
+
+        <h2 class="sequence-title">📦 Objets 3D</h2>
+
+        <div class="grid">
+
+            <div class="card">
+
+                <h3>Modèle de robot</h3>
+
+                <p>Visualisez le modèle 3D du robot tri-postal.</p>
+
+                <span class="badge" style="background: #eab308; color: #1e293b; margin-top: auto;">Bientôt disponible</span>
+
+            </div>
+
+            <div class="card">
+
+                <h3>Station météo</h3>
+
+                <p>Explorez l'assemblage des composants de la station.</p>
+
+                <span class="badge" style="background: #eab308; color: #1e293b; margin-top: auto;">Bientôt disponible</span>
+
+            </div>
+
+            <div class="card">
+
+                <h3>Autres modèles</h3>
+
+                <p>Plus de modèles et de visualisations à venir.</p>
+
+                <span class="badge" style="background: #eab308; color: #1e293b; margin-top: auto;">Bientôt disponible</span>
+
+            </div>
+
+        </div>
+
+    </main>
+
+
+
+    <script type="importmap">
+
+    {
+
+        "imports": {
+
+            "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
+
+            "three/addons/": "https://unpkg.com/three@0.132.2/examples/jsm/"
+
+        }
+
+    }
+
+    </script>
+
+    <script type="module" src="/3D/app.js"></script>
+
+    <script src="/site-access-unload.js" defer></script>
+
+</body>
+
+</html>
+

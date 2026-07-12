@@ -1,5 +1,5 @@
 /** Grove TSL2591 (luminosité I²C) — géométrie calée grille, origine = centre du module. */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const GROVE_TSL2591_PINS = ['SDA', 'SCL', 'VCC', 'GND'];
 export const GROVE_TSL2591_PIN_COUNT = GROVE_TSL2591_PINS.length;

@@ -9,7 +9,7 @@
             "rotation": 0,
             "state": 0,
             "highVoltage": 5,
-            "sketch": "// Arduino UNO — sketch minimal\nint x=9;\nint touche;\n\nvoid setup() {\n  DDRD=0b00001111;\n  pinMode(touche,INPUT);\n}\n\nvoid loop() \n{\n  touche=digitalRead(13);\n  if(touche==0)\n  {\n    if(x>-1)\n    {\n      PORTD=x;\n      delay(200);\n      x=x-1;\n     }\n    else\n      x=9;\n   }\n}\n",
+            "sketch": "// Arduino UNO — sketch minimal\nconst int touche = 13;\nint x = 9;\n\nvoid setup() {\n  DDRD = 0b00001111;\n  pinMode(touche, INPUT);\n}\n\nvoid loop() {\n  if (digitalRead(touche) == 0) {\n    if (x > -1) {\n      PORTD = x;\n      delay(200);\n      x = x - 1;\n    } else {\n      x = 9;\n    }\n  }\n}\n",
             "fqbn": "arduino:avr:uno",
             "pinModes": {
                 "D0": "OUTPUT",
@@ -444,16 +444,10 @@
                     "y": -60
                 }
             ],
-            "toJonctionId": "auto_junc_2"
+            "toJonctionId": "BP1_in"
         }
     ],
-    "autoJunctions": [
-        {
-            "id": "auto_junc_2",
-            "x": 880,
-            "y": -60
-        }
-    ],
+    "autoJunctions": [],
     "counters": {
         "battery": 1,
         "resistor": 2,

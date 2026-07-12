@@ -1,5 +1,5 @@
 /** Géométrie 74HC90 / 74LS90 — boîtier DIP 14 broches (datasheet TI). */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const IC90_BOX_L = -2 * G;
 export const IC90_BOX_R = 2 * G;

@@ -1,5 +1,5 @@
 /** Géométrie Arduino UNO R3 — brochage réel (headers power/analog + digital). */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const UNO_BOX_L = -4 * G;
 export const UNO_BOX_R = 5 * G;

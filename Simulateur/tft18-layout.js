@@ -1,5 +1,5 @@
 /** Joy-it RB-TFT1.8 (ST7735R, 128×160, SPI) — géométrie grille, origine = centre du module. */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const TFT18_WIDTH = 128;
 export const TFT18_HEIGHT = 160;

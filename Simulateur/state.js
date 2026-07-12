@@ -1,9 +1,11 @@
 // state.js
-// Remplacez les deux premières lignes de state.js par :
+import { GRID_SIZE, snapToGrid } from './grid-constants.js';
+
+export { GRID_SIZE, snapToGrid };
+
 export const canvas = document.getElementById('circuitCanvas') || document.createElement('canvas');
 export const ctx = canvas.getContext ? canvas.getContext('2d') : null;
 
-export const GRID_SIZE = 20; 
 export let scale = { value: 1.0 };
 export let pan = { x: 0, y: 0 };
 
@@ -62,7 +64,6 @@ export const emptyDragImage = new Image();
 emptyDragImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 // Utilitaires de base liés à la grille
-export function snapToGrid(val) { return Math.round(val / GRID_SIZE) * GRID_SIZE; }
 export function toGridCoords(clientX, clientY) {
     const rect = canvas.getBoundingClientRect(); 
     return { 

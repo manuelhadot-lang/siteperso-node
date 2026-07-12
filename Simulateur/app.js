@@ -1209,7 +1209,7 @@ function initApp() {
     ensureAllCounters();
     setCircuitDisplayName('Sans titre');
     initSimulatorVisitCounter();
-    initExamplesPanel(loadCircuitFromJSON);
+    initExamplesPanel({ loadCircuit: loadCircuitFromJSON, setDisplayName: setCircuitDisplayName });
     initWelcomeBanner(APP_PRODUCT_NAME);
     loadExampleFromQueryParam(loadCircuitFromJSON);
     resizeCanvas(); window.addEventListener('resize', resizeCanvas);

@@ -1,5 +1,5 @@
 /** Géométrie ESP32-C3 DevKitM-1 — brochage header (3,3 V logique). */
-import { GRID_SIZE as G } from './state.js';
+import { GRID_SIZE as G } from './grid-constants.js';
 
 export const ESP32_BOX_L = -4 * G;
 export const ESP32_BOX_R = 5 * G;
