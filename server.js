@@ -216,7 +216,7 @@ app.get('/acces-site', (req, res) => {
     <form method="post" action="/acces-site" autocomplete="off">
       <input type="hidden" name="next" value="${escapeHtmlAttr(nextTarget)}">
       <label for="pw">Mot de passe</label>
-      <input id="pw" name="password" type="password" required autocomplete="off" autofocus readonly>
+      <input id="pw" name="password" type="password" required autocomplete="new-password" autofocus>
       <button type="submit">Entrer</button>
     </form>
   </div>
@@ -224,15 +224,17 @@ app.get('/acces-site', (req, res) => {
     (function () {
       var el = document.getElementById("pw");
       if (!el) return;
-      // Empêche l’autofill navigateur (souvent hors « effacement du cache »).
-      function clearPw() { el.value = ""; }
-      clearPw();
-      el.addEventListener("focus", function () { el.removeAttribute("readonly"); });
+      var touched = false;
+      el.addEventListener("input", function () { touched = true; });
+      el.addEventListener("keydown", function () { touched = true; });
+      // Vide un éventuel autofill sans bloquer la saisie.
+      function clearIfUntouched() {
+        if (!touched) el.value = "";
+      }
+      clearIfUntouched();
       window.addEventListener("pageshow", function () {
-        el.setAttribute("readonly", "readonly");
-        clearPw();
-        setTimeout(clearPw, 50);
-        setTimeout(clearPw, 250);
+        touched = false;
+        clearIfUntouched();
       });
     })();
   </script>
