@@ -1,14 +1,19 @@
 /** Lumières de scène : spot, soleil (directionnelle), lampe (point). */
 import * as THREE from "three";
-import { SHADOW_KEY } from "./lab-shadows.js";
+import { bindRangeSliderWheel } from "./wheel-utils.js";
 
 export const LIGHT_INTENSITY_MAX = 20;
 export const LIGHT_INTENSITY_STEP = 0.05;
-export const LIGHT_INTENSITY_WHEEL_STEP = 0.08;
 export const LAB_LIGHT_KEY = "labLight";
 export const LIGHT_MARKER_VISIBLE_KEY = "lightMarkerVisible";
 export const LIGHT_INTENSITY_KEY = "lightIntensity";
+export const LIGHT_SPOT_ANGLE_KEY = "lightSpotAngleDeg";
 export const SCENE_ITEM_ID_KEY = "sceneItemId";
+
+export const DEFAULT_SPOT_ANGLE_DEG = 48;
+export const SPOT_ANGLE_MIN = 5;
+export const SPOT_ANGLE_MAX = 90;
+export const SPOT_ANGLE_STEP = 1;
 
 export const LIGHT_TYPE = {
     SPOT: "spot",
@@ -47,6 +52,44 @@ export function setLightIntensity(pivot, intensity) {
     pivot.userData[LIGHT_INTENSITY_KEY] = value;
     const light = pivot.userData.mainLight;
     if (light) light.intensity = value;
+}
+
+/**
+ * @param {THREE.Object3D | null | undefined} pivot
+ */
+export function isSpotLight(pivot) {
+    return pivot?.userData?.lightType === LIGHT_TYPE.SPOT;
+}
+
+/**
+ * @param {THREE.Group} pivot
+ */
+export function getLightSpotAngleDeg(pivot) {
+    const light = pivot?.userData?.mainLight;
+    if (light?.isSpotLight) {
+        return THREE.MathUtils.radToDeg(light.angle);
+    }
+    const stored = pivot?.userData?.[LIGHT_SPOT_ANGLE_KEY];
+    return typeof stored === "number" ? stored : DEFAULT_SPOT_ANGLE_DEG;
+}
+
+/**
+ * @param {THREE.Group} pivot
+ * @param {number} degrees
+ */
+export function setLightSpotAngleDeg(pivot, degrees) {
+    const value = THREE.MathUtils.clamp(degrees, SPOT_ANGLE_MIN, SPOT_ANGLE_MAX);
+    pivot.userData[LIGHT_SPOT_ANGLE_KEY] = value;
+    const light = pivot.userData.mainLight;
+    if (!light?.isSpotLight) return;
+
+    light.angle = THREE.MathUtils.degToRad(value);
+    if (light.castShadow && light.shadow?.camera) {
+        light.shadow.camera.fov = value * 1.05;
+        light.shadow.camera.updateProjectionMatrix();
+    }
+    const helper = pivot.userData.lightHelper;
+    if (helper?.visible) helper.update?.();
 }
 
 /**
@@ -105,7 +148,7 @@ export function createLightPivot(type) {
             0
         );
         light.position.set(0, 0, 0);
-        light.castShadow = false;
+        light.castShadow = true;
         target.position.set(0, -4, 0);
         light.target = target;
 
@@ -149,8 +192,13 @@ export function createLightPivot(type) {
     pivot.userData.snapToFloor = false;
     pivot.userData[LIGHT_MARKER_VISIBLE_KEY] = true;
     pivot.userData[LIGHT_INTENSITY_KEY] = intensity;
-    pivot.userData[SHADOW_KEY] = false;
-    light.castShadow = false;
+    pivot.userData.shadowEnabled = true;
+    pivot.userData.shadowOpacity = 0.85;
+    if (type === LIGHT_TYPE.SPOT) {
+        pivot.userData[LIGHT_SPOT_ANGLE_KEY] = DEFAULT_SPOT_ANGLE_DEG;
+    }
+    // Ombres activées par défaut (soleil / spot / lampe) — réglables dans le panneau scène.
+    light.castShadow = type === LIGHT_TYPE.SPOT || type === LIGHT_TYPE.SUN || type === LIGHT_TYPE.LAMP;
 
     return pivot;
 }
@@ -246,20 +294,23 @@ export function getLightLabel(type) {
  * @param {(value: number) => void} onChange
  */
 export function bindIntensitySliderWheel(slider, onChange) {
-    slider.addEventListener(
-        "wheel",
-        (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const step = event.shiftKey ? 0.5 : LIGHT_INTENSITY_WHEEL_STEP;
-            const delta = -Math.sign(event.deltaY) * step;
-            const min = Number(slider.min);
-            const max = Number(slider.max);
-            const next = Math.max(min, Math.min(max, Number(slider.value) + delta));
-            const rounded = Math.round(next / LIGHT_INTENSITY_STEP) * LIGHT_INTENSITY_STEP;
-            slider.value = String(rounded);
-            onChange(rounded);
-        },
-        { passive: false }
-    );
+    bindRangeSliderWheel(slider, onChange, {
+        step: LIGHT_INTENSITY_STEP,
+        wheelFactor: 0.015,
+        shiftMultiplier: 2,
+        host: slider.closest("label") ?? slider,
+    });
+}
+
+/**
+ * @param {HTMLInputElement} slider
+ * @param {(value: number) => void} onChange
+ */
+export function bindSpotAngleSliderWheel(slider, onChange) {
+    bindRangeSliderWheel(slider, onChange, {
+        step: SPOT_ANGLE_STEP,
+        wheelFactor: 0.025,
+        shiftMultiplier: 2,
+        host: slider.closest(".lab-context-menu__intensity") ?? slider.closest("label") ?? slider,
+    });
 }

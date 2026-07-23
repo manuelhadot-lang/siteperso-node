@@ -39,8 +39,11 @@ export function createHistory({ maxSize = 50 } = {}) {
  * @param {import("three").Object3D} object
  */
 export function captureObjectState(object) {
+    // TransformControls met à jour le quaternion ; synchroniser l’Euler avant capture.
+    object.rotation.setFromQuaternion(object.quaternion, object.rotation.order);
     return {
         position: object.position.clone(),
+        quaternion: object.quaternion.clone(),
         rotation: object.rotation.clone(),
         scale: object.scale.clone(),
         collisionEnabled: !!object.userData[COLLISION_KEY],
@@ -52,9 +55,13 @@ export function captureObjectState(object) {
  * @param {ReturnType<typeof captureObjectState>} b
  */
 export function objectStatesEqual(a, b) {
+    const rotEqual =
+        a.quaternion && b.quaternion
+            ? a.quaternion.equals(b.quaternion)
+            : a.rotation.equals(b.rotation);
     return (
         a.position.equals(b.position) &&
-        a.rotation.equals(b.rotation) &&
+        rotEqual &&
         a.scale.equals(b.scale) &&
         a.collisionEnabled === b.collisionEnabled
     );

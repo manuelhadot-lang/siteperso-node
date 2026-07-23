@@ -180,6 +180,8 @@ app.get('/acces-site', (req, res) => {
     if (hasSiteAccessFromCookies(req.headers.cookie)) return res.redirect(302, nextTarget);
     const err = req.query.err === '1';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
     res.send(`<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -211,13 +213,29 @@ app.get('/acces-site', (req, res) => {
     <p>Ce site n’est visible qu’avec le mot de passe fourni par l’administrateur.</p>
     ${siteAccessLogoutOnPageUnloadEnabled() ? '<p class="hint">Option active : à chaque fois que vous quittez une page du site, la session est oubliée — le mot de passe sera redemandé.</p>' : ''}
     ${err ? '<div class="err">Mot de passe incorrect.</div>' : ''}
-    <form method="post" action="/acces-site">
+    <form method="post" action="/acces-site" autocomplete="off">
       <input type="hidden" name="next" value="${escapeHtmlAttr(nextTarget)}">
       <label for="pw">Mot de passe</label>
-      <input id="pw" name="password" type="password" required autocomplete="current-password" autofocus>
+      <input id="pw" name="password" type="password" required autocomplete="off" autofocus readonly>
       <button type="submit">Entrer</button>
     </form>
   </div>
+  <script>
+    (function () {
+      var el = document.getElementById("pw");
+      if (!el) return;
+      // Empêche l’autofill navigateur (souvent hors « effacement du cache »).
+      function clearPw() { el.value = ""; }
+      clearPw();
+      el.addEventListener("focus", function () { el.removeAttribute("readonly"); });
+      window.addEventListener("pageshow", function () {
+        el.setAttribute("readonly", "readonly");
+        clearPw();
+        setTimeout(clearPw, 50);
+        setTimeout(clearPw, 250);
+      });
+    })();
+  </script>
   <script src="/site-access-unload.js" defer></script>
 </body>
 </html>`);
@@ -540,7 +558,11 @@ app.use('/Simulateur', express.static(dirSimulateur, {
         res.setHeader('X-Sim-UI', SIM_UI_VERSION);
     },
 }));
-app.use('/3D', express.static(path.join(__dirname, '3D')));
+app.use('/3D', express.static(path.join(__dirname, '3D'), {
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'no-store');
+    },
+}));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
 app.get('/api/version', (req, res) => {
     res.json({

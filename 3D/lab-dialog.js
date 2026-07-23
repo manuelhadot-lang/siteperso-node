@@ -144,9 +144,10 @@ export async function labPrompt(
 
 /**
  * @param {{ name: string, updatedAt?: number }[]} scenes
+ * @param {{ onPickDiskFile?: () => void }} [options]
  * @returns {Promise<string | null>} nom de la scène choisie
  */
-export async function labPickScene(scenes) {
+export async function labPickScene(scenes, options = {}) {
     const root = ensureOverlay();
 
     const listHtml = scenes.length
@@ -166,6 +167,7 @@ export async function labPickScene(scenes) {
             <h2 class="lab-dialog__title" id="lab-dialog-title">Ouvrir une scène</h2>
             <div class="lab-dialog__scene-list">${listHtml}</div>
             <div class="lab-dialog__actions">
+                <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-dialog-open-disk>Ouvrir un fichier…</button>
                 <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost" data-dialog-cancel>Fermer</button>
             </div>
         </div>
@@ -180,6 +182,10 @@ export async function labPickScene(scenes) {
         };
 
         root.querySelector("[data-dialog-cancel]")?.addEventListener("click", () => finish(null));
+        root.querySelector("[data-dialog-open-disk]")?.addEventListener("click", () => {
+            options.onPickDiskFile?.();
+            finish(null);
+        });
         root.querySelectorAll("[data-scene-name]").forEach((btn) => {
             btn.addEventListener("click", () => {
                 finish(btn.getAttribute("data-scene-name"));
@@ -197,6 +203,23 @@ export async function labAlert(message, { title = "Information" } = {}) {
         <div class="lab-dialog" role="alertdialog" aria-modal="true" aria-labelledby="lab-dialog-title">
             <h2 class="lab-dialog__title" id="lab-dialog-title">${escapeHtml(title)}</h2>
             <p class="lab-dialog__message">${escapeHtml(message)}</p>
+            <div class="lab-dialog__actions">
+                <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-dialog-confirm>OK</button>
+            </div>
+        </div>
+    `);
+}
+
+/**
+ * Dialogue avec contenu HTML de confiance (aide, etc.).
+ * @param {string} bodyHtml
+ * @param {{ title?: string }} [opts]
+ */
+export async function labRichAlert(bodyHtml, { title = "Information" } = {}) {
+    await showDialog(`
+        <div class="lab-dialog lab-dialog--wide" role="alertdialog" aria-modal="true" aria-labelledby="lab-dialog-title">
+            <h2 class="lab-dialog__title" id="lab-dialog-title">${escapeHtml(title)}</h2>
+            <div class="lab-dialog__rich">${bodyHtml}</div>
             <div class="lab-dialog__actions">
                 <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-dialog-confirm>OK</button>
             </div>

@@ -6,6 +6,12 @@ export const CUBE_HALF = CUBE_SIZE / 2;
 export const ROTATION_SNAP_DEG = 10;
 export const ROTATION_SNAP_RAD = (ROTATION_SNAP_DEG * Math.PI) / 180;
 
+/** @param {number} [size] */
+export function formatGridSizeMeters(size = GRID_SIZE) {
+    const label = Number.isInteger(size) ? String(size) : size.toFixed(2).replace(".", ",");
+    return `${label} × ${label} m`;
+}
+
 export function snapValue(value, step) {
     return Math.round(value / step) * step;
 }

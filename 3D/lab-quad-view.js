@@ -5,7 +5,7 @@ import { configureRendererShadows } from "./lab-shadows.js";
 import { wheelZoomFactor } from "./wheel-utils.js";
 
 /** Demi-étendue ortho par défaut : grille 50 m visible avec petite marge. */
-const ORTHO_BASE_HALF = GRID_SIZE / 2 + 1;
+let orthoBaseHalf = GRID_SIZE / 2 + 1;
 const ORTHO_DISTANCE = 40;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 20;
@@ -80,18 +80,33 @@ export function initQuadView(ctx) {
 
     function makeOrthoCamera() {
         return new THREE.OrthographicCamera(
-            -ORTHO_BASE_HALF,
-            ORTHO_BASE_HALF,
-            ORTHO_BASE_HALF,
-            -ORTHO_BASE_HALF,
+            -orthoBaseHalf,
+            orthoBaseHalf,
+            orthoBaseHalf,
+            -orthoBaseHalf,
             0.1,
-            500
+            Math.max(500, orthoBaseHalf * 8)
         );
     }
 
     const topCam = makeOrthoCamera();
     const rightCam = makeOrthoCamera();
     const leftCam = makeOrthoCamera();
+
+    /**
+     * @param {number} sizeMeters largeur monde (m)
+     */
+    function setWorldSize(sizeMeters) {
+        const size = Math.max(GRID_SIZE, Number(sizeMeters) || GRID_SIZE);
+        orthoBaseHalf = size / 2 + 1;
+        const far = Math.max(500, size * 3);
+        for (const cam of [topCam, rightCam, leftCam]) {
+            cam.near = 0.1;
+            cam.far = far;
+            cam.updateProjectionMatrix();
+        }
+        if (enabled) resizeAll();
+    }
 
     /** @type {Record<"top"|"right"|"left", number>} */
     const zoomLevels = { top: 1, right: 1, left: 1 };
@@ -101,7 +116,7 @@ export function initQuadView(ctx) {
 
     /** @param {"top"|"right"|"left"} view */
     function getOrthoHalf(view) {
-        return ORTHO_BASE_HALF / zoomLevels[view];
+        return orthoBaseHalf / zoomLevels[view];
     }
 
     /** @param {"top"|"right"|"left"} view @param {WheelEvent} event */
@@ -246,5 +261,6 @@ export function initQuadView(ctx) {
         isInMainView,
         renderAuxViews,
         resizeAll,
+        setWorldSize,
     };
 }

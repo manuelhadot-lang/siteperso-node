@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260719tubeundo">
 
 </head>
 
@@ -45,6 +45,7 @@
         <div id="lab-workspace" class="lab-workspace">
 
         <div class="lab-header-bar">
+            <div class="lab-header-bar__top">
             <nav class="lab-menubar" aria-label="Menus">
                 <div class="lab-menu" data-menu="file">
                     <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Fichier</button>
@@ -60,7 +61,56 @@
                         <button type="button" class="lab-menu__item" role="menuitem" data-file-action="close">Fermer</button>
                     </div>
                 </div>
+                <div class="lab-menu" data-menu="import">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Importer</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="any">Modèle 3D…</button>
+                        <hr class="lab-menu__sep">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="gltf">GLTF / GLB (.glb, .gltf)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="fbx">FBX (.fbx)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="obj">OBJ (.obj)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="stl">STL (.stl)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="dae">Collada (.dae)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="ply">PLY (.ply)</button>
+                        <hr class="lab-menu__sep">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-import-action="blend" title="Exportez depuis Blender en GLB / FBX / OBJ">Blender (.blend)…</button>
+                    </div>
+                </div>
+                <div class="lab-menu" data-menu="export">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Exporter</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-export-action="gltf">GLTF (.glb)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-export-action="obj">OBJ (.obj)</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-export-action="fbx">FBX (.fbx)</button>
+                    </div>
+                </div>
+                <div class="lab-menu" data-menu="skybox">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Skybox</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="load">Charger HDRI…</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="clear">Retirer skybox</button>
+                    </div>
+                </div>
+                <div class="lab-menu" data-menu="help">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Description</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-help-action="shortcuts">Outils &amp; raccourcis…</button>
+                    </div>
+                </div>
+                <div class="lab-menu" data-menu="face">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Face</button>
+                    <div class="lab-menu__panel" hidden role="menu">
+                        <button type="button" class="lab-menu__item" role="menuitem" data-face-action="toggle-triangulation">Mode triangulation : OFF</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-face-action="clear-triangle-selection">Vider la sélection de triangles</button>
+                    </div>
+                </div>
+                <input id="lab-skybox-faces-input" type="file" accept=".hdr,.jpg,.jpeg,.png,.webp,image/vnd.radiance,image/x-hdr" multiple hidden>
+                <input id="lab-import-file-input" type="file" accept=".glb,.gltf,.fbx,.obj,.stl,.dae,.ply" hidden>
             </nav>
+            <button type="button" id="btn-fullscreen" class="lab-fullscreen-btn" aria-pressed="false" title="Afficher en plein écran">
+                ⛶ Plein écran
+            </button>
+            </div>
 
         <div class="lab-toolbar">
             <div class="lab-toolbar__transform" role="group" aria-label="Transformation des objets">
@@ -99,30 +149,54 @@
                     <span class="lab-toolbar__icon lab-toolbar__icon--quad" aria-hidden="true"></span>
                 </button>
             </div>
+            <div class="lab-toolbar__mode-group">
+                <button type="button" id="btn-csg-subtract" class="lab-toolbar__mode-btn" title="Perforer — soustraire un objet (trou)" aria-label="Perforer un objet" aria-pressed="false">
+                    <span class="lab-toolbar__icon lab-toolbar__icon--csg" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div class="lab-toolbar__mode-group">
+                <button type="button" id="btn-voice-dimensions" class="lab-toolbar__mode-btn" title="Transformer au micro (échelle, position, rotation)" aria-label="Transformer au micro" aria-pressed="false">
+                    <span class="lab-toolbar__icon lab-toolbar__icon--mic" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div id="lab-voice-panel" class="lab-voice-panel" hidden>
+                <label class="lab-voice-panel__field">
+                    <span class="lab-voice-panel__label">Mode</span>
+                    <select id="lab-voice-mode" aria-label="Mode de transformation vocale">
+                        <option value="scale">Échelle</option>
+                        <option value="position">Position</option>
+                        <option value="rotation">Rotation</option>
+                    </select>
+                </label>
+                <button type="button" id="lab-voice-start" class="lab-voice-panel__start">Écouter</button>
+                <span class="lab-voice-panel__step" data-axis="x">X <output id="lab-voice-x">—</output></span>
+                <span class="lab-voice-panel__step" data-axis="y">Y <output id="lab-voice-y">—</output></span>
+                <span class="lab-voice-panel__step" data-axis="z">Z <output id="lab-voice-z">—</output></span>
+                <span id="lab-voice-hint" class="lab-voice-panel__hint">Cliquez le micro pour commencer</span>
+            </div>
             <label class="lab-toolbar__speed" title="Vitesse de déplacement">
                 <span class="lab-toolbar__speed-label">Vitesse</span>
-                <input type="range" id="lab-move-speed" min="2" max="24" value="10" step="1" aria-label="Vitesse de déplacement">
-                <output id="lab-move-speed-value" for="lab-move-speed">10</output>
+                <input type="range" id="lab-move-speed" min="1" max="18" value="5" step="0.5" aria-label="Vitesse de déplacement">
+                <output id="lab-move-speed-value" for="lab-move-speed">5</output>
             </label>
+            <div class="lab-toolbar__mode-group lab-toolbar__fps" role="group" aria-label="Mode de déplacement">
+                <button type="button" id="btn-fps-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn" title="FPS — marcher, sauter (Espace), courir (Maj)" aria-label="Mode FPS" aria-pressed="false">FPS</button>
+                <button type="button" id="btn-design-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn is-active" title="Conception — orbite autour de l’objet sélectionné (type Blender)" aria-label="Mode conception" aria-pressed="true">Conception</button>
+                <button type="button" id="btn-overview-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn" title="Vue d’ensemble — se déplacer librement + molette" aria-label="Mode vue d’ensemble" aria-pressed="false">Vue</button>
+            </div>
         </div>
         </div>
-
-
 
         <div id="lab-stage" class="lab-stage">
-
             <aside id="lab-side-panel" class="lab-side-panel">
-
                 <button type="button" id="lab-panel-toggle" class="lab-side-panel__tab" aria-expanded="true" title="Replier le panneau">‹</button>
-
                 <div class="lab-side-panel__body">
-
-                    <section class="lab-side-panel__section lab-side-panel__section--open" data-section="objects">
-                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="true" aria-controls="lab-section-objects">
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="objects">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-objects">
                             <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
                             <span>Objets</span>
                         </button>
-                        <div id="lab-section-objects" class="lab-side-panel__section-body">
+                        <div id="lab-section-objects" class="lab-side-panel__section-body lab-side-panel__objects">
                             <button type="button" id="btn-add-cube" class="lab-side-panel__tool" title="Cube 1 m — glisser-déposer ou clic (C)" draggable="true" aria-label="Cube 1 m">
                                 <span class="lab-side-panel__tool-icon" aria-hidden="true">
                                     <span class="lab-cube-3d">
@@ -135,11 +209,359 @@
                                     </span>
                                 </span>
                             </button>
+                            <button type="button" id="btn-add-sphere" class="lab-side-panel__tool" title="Sphère 1 m — glisser-déposer ou clic" draggable="true" aria-label="Sphère 1 m">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-sphere-3d"></span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-pyramid" class="lab-side-panel__tool" title="Pyramide — glisser-déposer ou clic" draggable="true" aria-label="Pyramide">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-pyramid-3d"></span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-cylinder" class="lab-side-panel__tool" title="Cylindre — glisser-déposer ou clic" draggable="true" aria-label="Cylindre">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-cylinder-3d"></span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-cone" class="lab-side-panel__tool" title="Cône tronqué (frustum) — glisser-déposer ou clic" draggable="true" aria-label="Cône tronqué">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-cone-3d"></span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-torus" class="lab-side-panel__tool" title="Anneau (tore) — glisser-déposer ou clic" draggable="true" aria-label="Anneau">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-torus-3d"></span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-panel" class="lab-side-panel__tool" title="Panneau plat — glisser-déposer ou clic" draggable="true" aria-label="Panneau">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-panel-3d"></span>
+                                </span>
+                            </button>
                         </div>
                     </section>
 
-                    <section class="lab-side-panel__section lab-side-panel__section--open" data-section="lights">
-                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="true" aria-controls="lab-section-lights">
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="complexes">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-complexes">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Complexes</span>
+                        </button>
+                        <div id="lab-section-complexes" class="lab-side-panel__section-body">
+                            <button type="button" id="btn-add-stair" class="lab-side-panel__tool" title="Escalier (droit ou circulaire) — glisser-déposer ou clic" draggable="true" aria-label="Escalier">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-stair-3d" aria-hidden="true">
+                                        <span class="lab-stair-3d__step lab-stair-3d__step--1">
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
+                                        </span>
+                                        <span class="lab-stair-3d__step lab-stair-3d__step--2">
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
+                                        </span>
+                                        <span class="lab-stair-3d__step lab-stair-3d__step--3">
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
+                                        </span>
+                                        <span class="lab-stair-3d__step lab-stair-3d__step--4">
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
+                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
+                                        </span>
+                                    </span>
+                                </span>
+                            </button>
+                            <button type="button" id="btn-add-tube" class="lab-side-panel__tool lab-side-panel__tool--icon-only" title="Tubulure" draggable="true" aria-label="Tubulure">
+                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
+                                    <span class="lab-tube-3d" aria-hidden="true"></span>
+                                </span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="face-texture">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-face-texture">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Texture Face</span>
+                        </button>
+                        <div id="lab-section-face-texture" class="lab-side-panel__section-body">
+                            <button type="button" id="btn-face-draw-panel" class="lab-side-panel__tool lab-face-texture__toggle" aria-label="Activer la peinture sur une face">
+                                <span class="lab-side-panel__tool-label">Activer peinture</span>
+                            </button>
+                            <div id="lab-draw-panel-side" class="lab-draw-panel lab-draw-panel--side" hidden>
+                                <label class="lab-draw-panel__field">
+                                    <span class="lab-draw-panel__label">Couleur</span>
+                                    <input type="color" id="lab-draw-color-side" value="#111827" aria-label="Couleur du pinceau">
+                                </label>
+                                <label class="lab-draw-panel__field">
+                                    <span class="lab-draw-panel__label">Outil</span>
+                                    <select id="lab-draw-tool-side" aria-label="Outil de dessin face">
+                                        <option value="pencil">Crayon</option>
+                                        <option value="fill">Peinture face</option>
+                                        <option value="face-texture">Texture face</option>
+                                        <option value="decal">Décalcomanie</option>
+                                        <option value="text">Texte</option>
+                                        <option value="rect">Rectangle</option>
+                                        <option value="circle">Cercle</option>
+                                    </select>
+                                </label>
+                                <label class="lab-draw-panel__field">
+                                    <span class="lab-draw-panel__label">Taille</span>
+                                    <input type="range" id="lab-draw-size-side" min="1" max="48" value="8" aria-label="Taille">
+                                </label>
+                                <label class="lab-draw-panel__field">
+                                    <span class="lab-draw-panel__label">Opacité</span>
+                                    <input type="range" id="lab-draw-opacity-side" min="5" max="100" value="100" step="5" aria-label="Opacité">
+                                </label>
+                                <div class="lab-draw-panel__row">
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Tile X</span>
+                                        <input type="number" id="lab-draw-tile-x-side" min="0.1" max="100" step="0.1" value="1" aria-label="Tile X">
+                                    </label>
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Tile Y</span>
+                                        <input type="number" id="lab-draw-tile-y-side" min="0.1" max="100" step="0.1" value="1" aria-label="Tile Y">
+                                    </label>
+                                </div>
+                                <div class="lab-draw-panel__row">
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Off. X</span>
+                                        <input type="number" id="lab-draw-offset-x-side" min="-10" max="10" step="0.01" value="0" aria-label="Offset X">
+                                    </label>
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Off. Y</span>
+                                        <input type="number" id="lab-draw-offset-y-side" min="-10" max="10" step="0.01" value="0" aria-label="Offset Y">
+                                    </label>
+                                </div>
+                                <span class="lab-draw-panel__field">
+                                    <button type="button" id="lab-draw-texture-side" class="lab-draw-panel__texture-btn">Tex. pinceau</button>
+                                    <button type="button" id="lab-draw-texture-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer texture pinceau" hidden>×</button>
+                                </span>
+                                <span class="lab-draw-panel__field">
+                                    <button type="button" id="lab-draw-face-texture-side" class="lab-draw-panel__texture-btn">Tex. face</button>
+                                    <button type="button" id="lab-draw-face-texture-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer texture face" hidden>×</button>
+                                </span>
+                                <span class="lab-draw-panel__field">
+                                    <button type="button" id="lab-draw-apply-triangles-side" class="lab-draw-panel__texture-btn">Appliquer △</button>
+                                    <button type="button" id="lab-draw-clear-triangles-side" class="lab-draw-panel__texture-clear" aria-label="Vider la sélection des triangles">×</button>
+                                </span>
+                                <span class="lab-draw-panel__field">
+                                    <button type="button" id="lab-draw-decal-side" class="lab-draw-panel__texture-btn">Décalco</button>
+                                    <button type="button" id="lab-draw-decal-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer décalcomanie" hidden>×</button>
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="terrain">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-terrain">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Terrain</span>
+                        </button>
+                        <div id="lab-section-terrain" class="lab-side-panel__section-body">
+                            <label class="lab-terrain__check" title="Masquer le plateau gris d’origine — la collision joueur (FPS) reste active">
+                                <input id="lab-floor-visible" type="checkbox" checked>
+                                <span>Afficher le plateau</span>
+                            </label>
+                            <button type="button" id="btn-create-terrain" class="lab-side-panel__tool lab-terrain__create">
+                                <span class="lab-terrain__icon" aria-hidden="true"></span>
+                                <span class="lab-side-panel__tool-label">Créer sur toute la grille</span>
+                            </button>
+                            <label class="lab-terrain__range" title="Taille du terrain (mètres)">
+                                <span>Taille <output id="lab-terrain-size-value">50 m</output></span>
+                                <input id="lab-terrain-size" type="range" min="10" max="500" step="1" value="50">
+                            </label>
+                            <div id="lab-terrain-tools" class="lab-terrain__tools" hidden>
+                                <div class="lab-terrain__modes" role="group" aria-label="Outil de terrain">
+                                    <button type="button" data-terrain-mode="mound" class="is-active" title="Mamelon">Mamelon</button>
+                                    <button type="button" data-terrain-mode="mountain" title="Montagne">Montagne</button>
+                                    <button type="button" data-terrain-mode="basin" title="Cuvette">Cuvette</button>
+                                    <button type="button" data-terrain-mode="smooth" title="Lisser">Lisser</button>
+                                    <button type="button" data-terrain-mode="paint" title="Dessiner">Dessiner</button>
+                                </div>
+                                <label class="lab-terrain__range">
+                                    <span>Rayon <output id="lab-terrain-radius-value">3,00 m</output></span>
+                                    <input id="lab-terrain-radius" type="range" min="0.05" max="8" step="0.05" value="3" title="Rayon du pinceau (0,05 m minimum)">
+                                </label>
+                                <label class="lab-terrain__range">
+                                    <span>Intensité <output id="lab-terrain-strength-value">0,20</output></span>
+                                    <input id="lab-terrain-strength" type="range" min="0.03" max="0.6" step="0.01" value="0.2">
+                                </label>
+                                <div class="lab-terrain__appearance">
+                                    <label title="Couleur du terrain">
+                                        <span>Couleur</span>
+                                        <input id="lab-terrain-color" type="color" value="#455838">
+                                    </label>
+                                    <label title="Couleur du dessin">
+                                        <span>Pinceau</span>
+                                        <input id="lab-terrain-paint-color" type="color" value="#6b4423">
+                                    </label>
+                                </div>
+                                <input id="lab-terrain-texture-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+                                <button type="button" id="btn-terrain-texture" class="lab-terrain__action">Texture générale du sol</button>
+                                <input id="lab-terrain-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+                                <div class="lab-terrain__brush-texture">
+                                    <button type="button" id="btn-terrain-normal" class="lab-terrain__action">Normal map du sol</button>
+                                    <button type="button" id="btn-terrain-normal-clear" title="Retirer la normal map du sol" hidden>×</button>
+                                </div>
+                                <label class="lab-terrain__range" title="Répétition de la texture du sol">
+                                    <span>Tile sol <output id="lab-terrain-texture-tile-value">8,00</output></span>
+                                    <input id="lab-terrain-texture-tile" type="range" min="0.25" max="1000" step="0.25" value="8" title="Répétitions de la texture sur le sol (jusqu’à 1000)">
+                                </label>
+                                <input id="lab-terrain-brush-texture-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+                                <div class="lab-terrain__brush-texture">
+                                    <button type="button" id="btn-terrain-brush-texture" class="lab-terrain__action">Texture du pinceau</button>
+                                    <button type="button" id="btn-terrain-brush-texture-clear" title="Revenir au pinceau couleur" hidden>×</button>
+                                </div>
+                                <input id="lab-terrain-brush-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+                                <div class="lab-terrain__brush-texture">
+                                    <button type="button" id="btn-terrain-brush-normal" class="lab-terrain__action">Normal map pinceau</button>
+                                    <button type="button" id="btn-terrain-brush-normal-clear" title="Retirer la normal map du pinceau" hidden>×</button>
+                                </div>
+                                <label class="lab-terrain__range" title="Opacité / intensité du trait de pinceau">
+                                    <span>Intensité pinceau <output id="lab-terrain-paint-intensity-value">1,00</output></span>
+                                    <input id="lab-terrain-paint-intensity" type="range" min="0.05" max="1" step="0.01" value="1">
+                                </label>
+                                <label class="lab-terrain__range" title="Intensité des normal maps du terrain">
+                                    <span>Intensité normale <output id="lab-terrain-normal-scale-value">1,00</output></span>
+                                    <input id="lab-terrain-normal-scale" type="range" min="0" max="3" step="0.05" value="1">
+                                </label>
+                                <label class="lab-terrain__range" title="Répétition de la texture peinte — plus bas = tuile plus grande">
+                                    <span>Tile pinceau <output id="lab-terrain-paint-tile-value">1,00</output></span>
+                                    <input id="lab-terrain-paint-tile" type="range" min="0.05" max="1000" step="0.05" value="1" title="Répétitions de la texture du pinceau (jusqu’à 1000)">
+                                </label>
+                                <div class="lab-terrain__history">
+                                    <button type="button" id="btn-terrain-undo" title="Annuler">↶</button>
+                                    <button type="button" id="btn-terrain-redo" title="Rétablir">↷</button>
+                                    <button type="button" id="btn-terrain-reset" title="Remettre le terrain à plat">Aplatir</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="ocean">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-ocean">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Océan</span>
+                        </button>
+                        <div id="lab-section-ocean" class="lab-side-panel__section-body">
+                            <button type="button" id="btn-create-ocean" class="lab-side-panel__tool lab-ocean__create">
+                                <span class="lab-ocean__icon" aria-hidden="true"></span>
+                                <span class="lab-side-panel__tool-label">Créer un océan</span>
+                            </button>
+                            <div id="lab-ocean-tools" class="lab-ocean__tools" hidden>
+                                <div class="lab-ocean__appearance">
+                                    <label title="Couleur de l’eau">
+                                        <span>Eau</span>
+                                        <input id="lab-ocean-color" type="color" value="#0a3d4d">
+                                    </label>
+                                    <label title="Teinte des reflets solaires">
+                                        <span>Soleil</span>
+                                        <input id="lab-ocean-sun-color" type="color" value="#fff4e0">
+                                    </label>
+                                </div>
+                                <label class="lab-ocean__range" title="Opacité de l’eau (plus haut = plus opaque, jusqu’à 5)">
+                                    <span>Opacité <output id="lab-ocean-opacity-value">5,00</output></span>
+                                    <input id="lab-ocean-opacity" type="range" min="0.25" max="5" step="0.05" value="5">
+                                </label>
+                                <label class="lab-ocean__range" title="Hauteur des vagues (Gerstner)">
+                                    <span>Hauteur <output id="lab-ocean-wave-height-value">0,48 m</output></span>
+                                    <input id="lab-ocean-wave-height" type="range" min="0" max="2.5" step="0.01" value="0.48">
+                                </label>
+                                <label class="lab-ocean__range" title="Longueur / fréquence des vagues">
+                                    <span>Fréquence <output id="lab-ocean-wave-scale-value">0,095</output></span>
+                                    <input id="lab-ocean-wave-scale" type="range" min="0.02" max="0.35" step="0.005" value="0.095">
+                                </label>
+                                <label class="lab-ocean__range" title="Vitesse d’animation">
+                                    <span>Vitesse <output id="lab-ocean-wave-speed-value">1,00</output></span>
+                                    <input id="lab-ocean-wave-speed" type="range" min="0" max="3" step="0.05" value="1">
+                                </label>
+                                <label class="lab-ocean__range" title="Raideur / crêtes des vagues géométriques">
+                                    <span>Crêtes <output id="lab-ocean-choppiness-value">1,05</output></span>
+                                    <input id="lab-ocean-choppiness" type="range" min="0" max="2.5" step="0.05" value="1.05">
+                                </label>
+                                <label class="lab-ocean__range" title="Intensité des rides / vagues de détail sur la surface">
+                                    <span>Vagues surface <output id="lab-ocean-surface-waves-value">1,00</output></span>
+                                    <input id="lab-ocean-surface-waves" type="range" min="0" max="2.5" step="0.05" value="1">
+                                </label>
+                                <label class="lab-ocean__range" title="Densité des rides de surface — plus haut = plus petites et denses">
+                                    <span>Échelle surface <output id="lab-ocean-surface-scale-value">1,00</output></span>
+                                    <input id="lab-ocean-surface-scale" type="range" min="0.15" max="4" step="0.05" value="1">
+                                </label>
+                                <label class="lab-ocean__range" title="Distorsion des reflets">
+                                    <span>Reflets <output id="lab-ocean-distortion-value">2,40</output></span>
+                                    <input id="lab-ocean-distortion" type="range" min="0.2" max="10" step="0.1" value="2.4">
+                                </label>
+                                <label class="lab-ocean__range" title="Écume sur les crêtes">
+                                    <span>Écume <output id="lab-ocean-foam-value">0,85</output></span>
+                                    <input id="lab-ocean-foam" type="range" min="0" max="1.5" step="0.05" value="0.85">
+                                </label>
+                                <label class="lab-ocean__range" title="Niveau d’eau (hauteur Y)">
+                                    <span>Niveau <output id="lab-ocean-level-value">-0,05 m</output></span>
+                                    <input id="lab-ocean-level" type="range" min="-5" max="8" step="0.05" value="-0.05">
+                                </label>
+                                <label class="lab-ocean__range" title="Étendue de l’océan">
+                                    <span>Taille <output id="lab-ocean-size-value">180 m</output></span>
+                                    <input id="lab-ocean-size" type="range" min="20" max="500" step="1" value="180">
+                                </label>
+                                <button type="button" id="btn-ocean-remove" class="lab-ocean__action">Retirer l’océan</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="vegetation">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-vegetation">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Végétation</span>
+                        </button>
+                        <div id="lab-section-vegetation" class="lab-side-panel__section-body">
+                            <div class="lab-vegetation__types" role="group" aria-label="Type de végétal">
+                                <button type="button" data-veg-type="tree" class="is-active" title="Arbre feuillu (forme simple)">Arbre</button>
+                                <button type="button" data-veg-type="bush" title="Buisson (forme simple)">Buisson</button>
+                                <button type="button" data-veg-type="pine" title="Pin / conifère (forme simple)">Pin</button>
+                                <button type="button" data-veg-type="flower" title="Touffe de fleurs (forme simple)">Fleurs</button>
+                                <button type="button" data-veg-type="model" title="Modèle 3D importé (.glb)" disabled>Modèle</button>
+                            </div>
+                            <label class="lab-vegetation__range" title="Hauteur du végétal">
+                                <span>Hauteur <output id="lab-veg-height-value">4,20 m</output></span>
+                                <input id="lab-veg-height" type="range" min="0.3" max="12" step="0.1" value="4.2">
+                            </label>
+                            <label class="lab-vegetation__range" title="Luminosité des modèles importés">
+                                <span>Luminosité <output id="lab-veg-brightness-value">78 %</output></span>
+                                <input id="lab-veg-brightness" type="range" min="0.15" max="1.5" step="0.05" value="0.78">
+                            </label>
+                            <label class="lab-vegetation__check">
+                                <input id="lab-veg-paint-ground" type="checkbox" checked>
+                                <span>Peindre le sol sous le végétal</span>
+                            </label>
+                            <button type="button" id="btn-veg-place" class="lab-side-panel__tool lab-vegetation__place">
+                                <span class="lab-vegetation__icon" aria-hidden="true"></span>
+                                <span class="lab-side-panel__tool-label">Placer (clic sur le sol)</span>
+                            </button>
+                            <button type="button" id="btn-veg-import" class="lab-vegetation__action">Importer arbre .glb</button>
+                            <input type="file" id="lab-veg-file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden>
+                            <p id="lab-veg-model-name" class="lab-vegetation__model-name" hidden></p>
+                            <button type="button" id="btn-veg-apply-brush" class="lab-vegetation__action">Texture sol → pinceau</button>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="lights">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-lights">
                             <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
                             <span>Lumières</span>
                         </button>
@@ -175,11 +597,7 @@
                     <p class="lab-object-info__row"><span class="lab-object-info__label">Échelle</span> <strong data-field="scale">—</strong></p>
                 </div>
 
-                <button type="button" id="btn-fullscreen" class="lab-viewport-fs" aria-pressed="false" title="Afficher en plein écran">
-
-                    ⛶ Plein écran
-
-                </button>
+                <div id="lab-hover-tooltip" class="lab-hover-tooltip" hidden></div>
 
                 <div id="lab-blocker">
 
@@ -269,7 +687,14 @@
 
             "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
 
-            "three/addons/": "https://unpkg.com/three@0.132.2/examples/jsm/"
+            "three/addons/": "https://unpkg.com/three@0.132.2/examples/jsm/",
+
+            "@comfyorg/fbx-exporter-three": "https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/dist/index.js",
+
+            "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js",
+
+            "three-csg-ts": "https://cdn.jsdelivr.net/npm/three-csg-ts@3.1.10/+esm",
+            "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@2.5.1/manifold.js"
 
         }
 
@@ -277,7 +702,8 @@
 
     </script>
 
-    <script type="module" src="/3D/app.js"></script>
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260719tubeundo"></script>
+    <script type="module" src="/3D/app.js?v=20260719tubeundo"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

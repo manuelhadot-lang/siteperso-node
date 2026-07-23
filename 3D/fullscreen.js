@@ -1,12 +1,20 @@
-/** Plein écran — reste actif ; aucune boîte de dialogue navigateur. */
-import { isLabDialogOpen } from "./lab-dialog.js";
+/** Plein écran — CSS fiable + API native en complément. */
 
 /** @type {HTMLElement | null} */
 let targetContainer = null;
 /** @type {HTMLButtonElement | null} */
 let buttonRef = null;
-/** Mode plein écran demandé par l'utilisateur (indépendant des dialogues système). */
+/** L'utilisateur veut le mode plein écran (CSS au minimum). */
 let fullscreenIntent = false;
+/** Le navigateur affiche réellement lab-workspace en plein écran natif. */
+let nativeActive = false;
+/** Sélecteur de fichier ouvert — le natif est suspendu volontairement. */
+let filePickerPending = false;
+
+/** @type {(() => void) | null} */
+let focusRestoreHandler = null;
+/** @type {HTMLButtonElement | null} */
+let recoveryButton = null;
 
 function fullscreenElement() {
     return document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -24,34 +32,199 @@ function exitFullscreen() {
     return fn.call(document);
 }
 
+function nativeSupported() {
+    if (!targetContainer) return false;
+    return !!(targetContainer.requestFullscreen || targetContainer.webkitRequestFullscreen);
+}
+
 function syncUi() {
     if (!targetContainer || !buttonRef) return;
 
     targetContainer.classList.toggle("lab-workspace--fullscreen", fullscreenIntent);
+    document.documentElement.classList.toggle("lab-fs-active", fullscreenIntent);
+    buttonRef.classList.toggle("is-active", fullscreenIntent);
     buttonRef.setAttribute("aria-pressed", fullscreenIntent ? "true" : "false");
     buttonRef.title = fullscreenIntent ? "Quitter le plein écran (Échap)" : "Afficher en plein écran";
     buttonRef.textContent = fullscreenIntent ? "⤡ Fenêtré" : "⛶ Plein écran";
     window.dispatchEvent(new Event("resize"));
 }
 
-async function restoreNativeFullscreen() {
-    if (!targetContainer || !fullscreenIntent) return;
-    targetContainer.classList.add("lab-workspace--fullscreen");
-    if (fullscreenElement() !== targetContainer) {
+function hideFullscreenRecovery() {
+    recoveryButton?.remove();
+    recoveryButton = null;
+}
+
+function showFullscreenRecovery() {
+    if (!targetContainer || !fullscreenIntent || fullscreenElement() === targetContainer) {
+        hideFullscreenRecovery();
+        return;
+    }
+    if (recoveryButton) return;
+
+    recoveryButton = document.createElement("button");
+    recoveryButton.type = "button";
+    recoveryButton.className = "lab-fullscreen-recovery";
+    recoveryButton.textContent = "⛶ Revenir en plein écran";
+    recoveryButton.title = "Le navigateur exige un clic pour réactiver le plein écran";
+    recoveryButton.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!targetContainer || !fullscreenIntent) return;
         try {
             await requestFullscreen(targetContainer);
+            nativeActive = fullscreenElement() === targetContainer;
+            if (nativeActive) hideFullscreenRecovery();
         } catch {
-            /* Mode CSS seul si le navigateur refuse */
+            nativeActive = false;
+        }
+        syncUi();
+    });
+    targetContainer.appendChild(recoveryButton);
+}
+
+/** Maintient le plein écran CSS (couvre la page même sans API native). */
+export function ensureCssFullscreen() {
+    if (!targetContainer || !fullscreenIntent) return;
+    targetContainer.classList.add("lab-workspace--fullscreen");
+    document.documentElement.classList.add("lab-fs-active");
+    syncUi();
+}
+
+function exitFullscreenMode() {
+    if (!targetContainer) return;
+    fullscreenIntent = false;
+    nativeActive = false;
+    filePickerPending = false;
+    hideFullscreenRecovery();
+    disarmFocusFullscreenRestore();
+    targetContainer.classList.remove("lab-workspace--fullscreen");
+    document.documentElement.classList.remove("lab-fs-active");
+    if (fullscreenElement() === targetContainer) {
+        exitFullscreen().catch(() => {});
+    }
+    syncUi();
+}
+
+async function enterFullscreenMode() {
+    if (!targetContainer) return;
+    fullscreenIntent = true;
+    ensureCssFullscreen();
+
+    if (nativeSupported()) {
+        try {
+            await requestFullscreen(targetContainer);
+            nativeActive = fullscreenElement() === targetContainer;
+            if (nativeActive) hideFullscreenRecovery();
+        } catch {
+            nativeActive = false;
         }
     }
     syncUi();
 }
 
+async function restoreNativeFullscreenWithRetry(maxAttempts = 10) {
+    if (!targetContainer || !fullscreenIntent || filePickerPending) return;
+    ensureCssFullscreen();
+    if (!nativeSupported()) {
+        nativeActive = false;
+        syncUi();
+        return;
+    }
+
+    const delays = [0, 0, 8, 16, 24, 40, 64, 96, 128, 160];
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (fullscreenElement() === targetContainer) {
+            nativeActive = true;
+            hideFullscreenRecovery();
+            syncUi();
+            return;
+        }
+        try {
+            await requestFullscreen(targetContainer);
+            if (fullscreenElement() === targetContainer) {
+                nativeActive = true;
+                hideFullscreenRecovery();
+                syncUi();
+                return;
+            }
+        } catch {
+            /* nouvel essai */
+        }
+        const delay = delays[Math.min(attempt, delays.length - 1)] ?? 40;
+        if (attempt < maxAttempts - 1 && delay > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, delay));
+        }
+    }
+
+    nativeActive = false;
+    syncUi();
+    showFullscreenRecovery();
+}
+
+/** Tente de rétablir le plein écran natif immédiatement (ex. après choix de fichier). */
+export function restoreFullscreenNow() {
+    if (!targetContainer || !fullscreenIntent) return Promise.resolve();
+    ensureCssFullscreen();
+    if (!nativeSupported() || fullscreenElement() === targetContainer) {
+        nativeActive = fullscreenElement() === targetContainer;
+        syncUi();
+        return Promise.resolve();
+    }
+
+    // L'appel doit partir immédiatement pendant l'événement `change` :
+    // c'est le seul instant où le navigateur peut encore accepter le geste utilisateur.
+    let directRequest;
+    try {
+        directRequest = requestFullscreen(targetContainer);
+    } catch {
+        return restoreNativeFullscreenWithRetry();
+    }
+
+    return Promise.resolve(directRequest)
+        .then(() => {
+            nativeActive = fullscreenElement() === targetContainer;
+            if (nativeActive) hideFullscreenRecovery();
+            syncUi();
+            if (!nativeActive) return restoreNativeFullscreenWithRetry();
+            return undefined;
+        })
+        .catch(() => restoreNativeFullscreenWithRetry());
+}
+
+function onVisibilityRestore() {
+    if (document.visibilityState !== "visible") return;
+    if (!fullscreenIntent || filePickerPending) return;
+    void restoreNativeFullscreenWithRetry();
+}
+
+function armFocusFullscreenRestore() {
+    if (focusRestoreHandler) return;
+    focusRestoreHandler = () => {
+        if (!fullscreenIntent || filePickerPending) return;
+        void restoreNativeFullscreenWithRetry();
+    };
+    window.addEventListener("focus", focusRestoreHandler);
+    document.addEventListener("visibilitychange", onVisibilityRestore);
+}
+
+function disarmFocusFullscreenRestore() {
+    if (focusRestoreHandler) {
+        window.removeEventListener("focus", focusRestoreHandler);
+        focusRestoreHandler = null;
+    }
+    document.removeEventListener("visibilitychange", onVisibilityRestore);
+}
+
+/** Restaure plein écran CSS + natif après un dialogue système. */
+export function ensureLabFullscreenAfterFile() {
+    if (!fullscreenIntent) return Promise.resolve();
+    return restoreFullscreenNow();
+}
+
 /**
- * Exécute une action (menu Fichier, dialogue…) sans quitter le plein écran visuel.
  * @template T
  * @param {() => T | Promise<T>} fn
- * @returns {Promise<T>}
  */
 export async function preserveFullscreenDuring(fn) {
     const wanted = fullscreenIntent;
@@ -59,63 +232,98 @@ export async function preserveFullscreenDuring(fn) {
         return await fn();
     } finally {
         if (wanted) {
-            await restoreNativeFullscreen();
+            await ensureLabFullscreenAfterFile();
         }
     }
 }
+
+/**
+ * Ouvre un input fichier en conservant le plein écran (CSS + restauration native).
+ * @param {HTMLInputElement} input
+ */
+export function pickFilePreservingFullscreen(input) {
+    if (!fullscreenIntent) {
+        input.click();
+        return Promise.resolve();
+    }
+
+    ensureCssFullscreen();
+    filePickerPending = true;
+    armFocusFullscreenRestore();
+
+    return new Promise((resolve) => {
+        const finish = () => {
+            input.removeEventListener("change", onChange);
+            input.removeEventListener("cancel", finish);
+            filePickerPending = false;
+            ensureCssFullscreen();
+            void restoreFullscreenNow().finally(() => {
+                disarmFocusFullscreenRestore();
+                resolve(undefined);
+            });
+        };
+        const onChange = () => finish();
+        input.addEventListener("change", onChange, { once: true });
+        input.addEventListener("cancel", finish, { once: true });
+        input.click();
+    });
+}
+
+/** @returns {boolean} */
+export function isFullscreenActive() {
+    return fullscreenIntent;
+}
+
+let initialized = false;
 
 /**
  * @param {HTMLElement} container
  * @param {HTMLButtonElement} button
  */
 export function initFullscreenToggle(container, button) {
-    if (!container || !button) return;
+    if (!container || !button || initialized) return;
+    initialized = true;
 
     targetContainer = container;
     buttonRef = button;
 
-    const supported = !!(container.requestFullscreen || container.webkitRequestFullscreen);
-    if (!supported) {
-        button.hidden = true;
-    }
-
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         if (fullscreenIntent) {
-            fullscreenIntent = false;
-            container.classList.remove("lab-workspace--fullscreen");
-            if (fullscreenElement() === container) {
-                exitFullscreen().catch(() => {});
-            }
+            exitFullscreenMode();
         } else {
-            fullscreenIntent = true;
-            container.classList.add("lab-workspace--fullscreen");
-            if (supported) {
-                requestFullscreen(container).catch(() => {});
-            }
+            void enterFullscreenMode();
         }
-        syncUi();
     });
 
     const onFullscreenChange = () => {
-        if (fullscreenIntent && targetContainer) {
-            targetContainer.classList.add("lab-workspace--fullscreen");
+        const isNative = fullscreenElement() === targetContainer;
+        if (isNative) {
+            nativeActive = true;
+            hideFullscreenRecovery();
+            return;
         }
-        syncUi();
+        nativeActive = false;
+        if (!fullscreenIntent) return;
+
+        ensureCssFullscreen();
+        if (!filePickerPending) {
+            void restoreNativeFullscreenWithRetry();
+        }
     };
 
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
     document.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape" || !fullscreenIntent || isLabDialogOpen()) return;
-        if (fullscreenElement() !== container) return;
-        requestAnimationFrame(() => {
-            if (fullscreenElement() !== container) {
-                fullscreenIntent = false;
-                container.classList.remove("lab-workspace--fullscreen");
-                syncUi();
-            }
-        });
+        if (event.code !== "Escape" || !fullscreenIntent) return;
+        if (filePickerPending) return;
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return;
+        }
+        if (event.target instanceof HTMLSelectElement) return;
+        exitFullscreenMode();
     });
 
     syncUi();

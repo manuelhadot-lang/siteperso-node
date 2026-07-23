@@ -86,7 +86,8 @@ export function initFileMenu(handlers) {
         } else if (key === "s") {
             event.preventDefault();
             preserveFullscreenDuring(() => handlers.onSave?.());
-        } else if (key === "w") {
+        } else if (event.code === "KeyW" && !event.shiftKey) {
+            // Ctrl+W ferme (touche physique W uniquement — évite de voler Ctrl+Z AZERTY).
             event.preventDefault();
             preserveFullscreenDuring(() => handlers.onClose?.());
         }
