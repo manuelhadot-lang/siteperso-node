@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css?v=20260719tubeundo">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260817bounds">
 
 </head>
 
@@ -91,21 +91,61 @@
                         <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="clear">Retirer skybox</button>
                     </div>
                 </div>
+                <div class="lab-menu" data-menu="freesites">
+                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Free Site 3D</button>
+                    <div class="lab-menu__panel lab-menu__panel--freesites" hidden role="menu">
+                        <div class="lab-menu__group-label">Modèles 3D</div>
+                        <a class="lab-menu__item" role="menuitem" href="https://sketchfab.com/search?features=downloadable&amp;type=models" target="_blank" rel="noopener noreferrer">Sketchfab</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://polyhaven.com/models" target="_blank" rel="noopener noreferrer">Poly Haven — Models</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://kenney.nl/assets" target="_blank" rel="noopener noreferrer">Kenney</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://quaternius.com" target="_blank" rel="noopener noreferrer">Quaternius</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://www.cgtrader.com/free-3d-models" target="_blank" rel="noopener noreferrer">CGTrader Free</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://free3d.com" target="_blank" rel="noopener noreferrer">Free3D</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://opengameart.org" target="_blank" rel="noopener noreferrer">OpenGameArt</a>
+                        <hr class="lab-menu__sep">
+                        <div class="lab-menu__group-label">Personnages / animation</div>
+                        <a class="lab-menu__item" role="menuitem" href="https://www.mixamo.com" target="_blank" rel="noopener noreferrer">Mixamo</a>
+                        <hr class="lab-menu__sep">
+                        <div class="lab-menu__group-label">HDRI</div>
+                        <a class="lab-menu__item" role="menuitem" href="https://polyhaven.com/hdris" target="_blank" rel="noopener noreferrer">Poly Haven — HDRIs</a>
+                        <hr class="lab-menu__sep">
+                        <div class="lab-menu__group-label">Textures</div>
+                        <a class="lab-menu__item" role="menuitem" href="https://ambientcg.com" target="_blank" rel="noopener noreferrer">ambientCG</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://polyhaven.com/textures" target="_blank" rel="noopener noreferrer">Poly Haven — Textures</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://www.texturecan.com" target="_blank" rel="noopener noreferrer">Texture Can</a>
+                        <hr class="lab-menu__sep">
+                        <div class="lab-menu__group-label">Conversion → GLB</div>
+                        <a class="lab-menu__item" role="menuitem" href="https://twineconvert.com/fbx-to-glb" target="_blank" rel="noopener noreferrer">FBX → GLB (navigateur)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://products.aspose.app/3d/conversion/fbx-to-glb" target="_blank" rel="noopener noreferrer">FBX → GLB (Aspose)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://products.aspose.app/3d/conversion/obj-to-glb" target="_blank" rel="noopener noreferrer">OBJ → GLB</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://products.aspose.app/3d/conversion/stl-to-glb" target="_blank" rel="noopener noreferrer">STL → GLB</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://products.aspose.app/3d/conversion/dae-to-glb" target="_blank" rel="noopener noreferrer">DAE → GLB</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://blackthread.io/gltf-converter/" target="_blank" rel="noopener noreferrer">glTF Converter (multi-formats)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://products.aspose.app/3d/conversion" target="_blank" rel="noopener noreferrer">Convertisseur 3D (tous formats)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://www.blender.org/download/" target="_blank" rel="noopener noreferrer">Blender (export GLB)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://docs.blender.org/manual/fr/latest/files/import_export/gltf.html" target="_blank" rel="noopener noreferrer">Blender → GLB (mode d’emploi)</a>
+                        <a class="lab-menu__item" role="menuitem" href="https://gltf.report/" target="_blank" rel="noopener noreferrer">glTF Report (vérifier un GLB)</a>
+                    </div>
+                </div>
                 <div class="lab-menu" data-menu="help">
                     <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Description</button>
                     <div class="lab-menu__panel" hidden role="menu">
                         <button type="button" class="lab-menu__item" role="menuitem" data-help-action="shortcuts">Outils &amp; raccourcis…</button>
                     </div>
                 </div>
-                <div class="lab-menu" data-menu="face">
-                    <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Face</button>
-                    <div class="lab-menu__panel" hidden role="menu">
-                        <button type="button" class="lab-menu__item" role="menuitem" data-face-action="toggle-triangulation">Mode triangulation : OFF</button>
-                        <button type="button" class="lab-menu__item" role="menuitem" data-face-action="clear-triangle-selection">Vider la sélection de triangles</button>
-                    </div>
-                </div>
                 <input id="lab-skybox-faces-input" type="file" accept=".hdr,.jpg,.jpeg,.png,.webp,image/vnd.radiance,image/x-hdr" multiple hidden>
                 <input id="lab-import-file-input" type="file" accept=".glb,.gltf,.fbx,.obj,.stl,.dae,.ply" hidden>
+                <!-- Hors panneau : ouvert via le label « Charger… » — visuellement invisible. -->
+                <input
+                    id="lab-objlib-file"
+                    class="lab-objlib__file-input"
+                    type="file"
+                    data-objlib-file
+                    accept=".glb,.gltf,.fbx,.obj,.stl,.dae,.ply,application/octet-stream"
+                    multiple
+                    tabindex="-1"
+                    aria-hidden="true"
+                >
             </nav>
             <button type="button" id="btn-fullscreen" class="lab-fullscreen-btn" aria-pressed="false" title="Afficher en plein écran">
                 ⛶ Plein écran
@@ -183,6 +223,7 @@
                 <button type="button" id="btn-fps-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn" title="FPS — marcher, sauter (Espace), courir (Maj)" aria-label="Mode FPS" aria-pressed="false">FPS</button>
                 <button type="button" id="btn-design-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn is-active" title="Conception — orbite autour de l’objet sélectionné (type Blender)" aria-label="Mode conception" aria-pressed="true">Conception</button>
                 <button type="button" id="btn-overview-mode" class="lab-toolbar__mode-btn lab-toolbar__fps-btn" title="Vue d’ensemble — se déplacer librement + molette" aria-label="Mode vue d’ensemble" aria-pressed="false">Vue</button>
+                <button type="button" id="btn-place-avatar" class="lab-toolbar__mode-btn lab-toolbar__fps-btn" title="Placer l’avatar — clic sur le sol, un objet ou une barque" aria-label="Placer l’avatar" aria-pressed="false">Avatar</button>
             </div>
         </div>
         </div>
@@ -247,124 +288,136 @@
                             <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
                             <span>Complexes</span>
                         </button>
-                        <div id="lab-section-complexes" class="lab-side-panel__section-body">
-                            <button type="button" id="btn-add-stair" class="lab-side-panel__tool" title="Escalier (droit ou circulaire) — glisser-déposer ou clic" draggable="true" aria-label="Escalier">
-                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
-                                    <span class="lab-stair-3d" aria-hidden="true">
-                                        <span class="lab-stair-3d__step lab-stair-3d__step--1">
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
-                                        </span>
-                                        <span class="lab-stair-3d__step lab-stair-3d__step--2">
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
-                                        </span>
-                                        <span class="lab-stair-3d__step lab-stair-3d__step--3">
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
-                                        </span>
-                                        <span class="lab-stair-3d__step lab-stair-3d__step--4">
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--front"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--back"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--right"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--left"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--top"></span>
-                                            <span class="lab-stair-3d__face lab-stair-3d__face--bottom"></span>
-                                        </span>
-                                    </span>
-                                </span>
+                        <div id="lab-section-complexes" class="lab-side-panel__section-body lab-side-panel__complexes">
+                            <button type="button" id="btn-add-stair" class="lab-side-panel__tool lab-side-panel__tool--label" title="Escalier (droit ou circulaire) — glisser-déposer ou clic" draggable="true" aria-label="Escalier">
+                                <span class="lab-side-panel__tool-label">Escalier</span>
                             </button>
-                            <button type="button" id="btn-add-tube" class="lab-side-panel__tool lab-side-panel__tool--icon-only" title="Tubulure" draggable="true" aria-label="Tubulure">
-                                <span class="lab-side-panel__tool-icon" aria-hidden="true">
-                                    <span class="lab-tube-3d" aria-hidden="true"></span>
-                                </span>
+                            <button type="button" id="btn-add-tube" class="lab-side-panel__tool lab-side-panel__tool--label" title="Tubulure — glisser-déposer ou clic" draggable="true" aria-label="Tubulure">
+                                <span class="lab-side-panel__tool-label">Tubulure</span>
                             </button>
+                            <button type="button" id="btn-add-boat" class="lab-side-panel__tool lab-side-panel__tool--label" title="Barque en bois — flotte sur l’océan et suit la houle" draggable="true" aria-label="Barque">
+                                <span class="lab-side-panel__tool-label">Barque</span>
+                            </button>
+                            <details class="lab-side-panel__submenu" data-arch-submenu>
+                                <summary class="lab-side-panel__submenu-summary">Architecture</summary>
+                                <div class="lab-side-panel__submenu-body">
+                                    <button type="button" class="lab-side-panel__tool lab-side-panel__tool--label" data-arch-layout="rect" title="Pièce rectangulaire — murs, porte et fenêtres" draggable="true" aria-label="Pièce unique">
+                                        <span class="lab-side-panel__tool-label">Pièce unique</span>
+                                    </button>
+                                    <button type="button" class="lab-side-panel__tool lab-side-panel__tool--label" data-arch-layout="L" title="Pièce en L — encoche nord-est" draggable="true" aria-label="Pièce en L">
+                                        <span class="lab-side-panel__tool-label">Pièce en L</span>
+                                    </button>
+                                    <button type="button" class="lab-side-panel__tool lab-side-panel__tool--label" data-arch-layout="U" title="Pièce en U — cour ouverte au nord" draggable="true" aria-label="Pièce en U">
+                                        <span class="lab-side-panel__tool-label">Pièce en U</span>
+                                    </button>
+                                    <button type="button" class="lab-side-panel__tool lab-side-panel__tool--label" data-arch-layout="patio" title="Patio — cour intérieure ouverte (sol + plafond)" draggable="true" aria-label="Patio">
+                                        <span class="lab-side-panel__tool-label">Patio</span>
+                                    </button>
+                                </div>
+                            </details>
                         </div>
                     </section>
 
-                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="face-texture">
-                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-face-texture">
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="textures">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-textures">
                             <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
-                            <span>Texture Face</span>
+                            <span>Textures</span>
                         </button>
-                        <div id="lab-section-face-texture" class="lab-side-panel__section-body">
-                            <button type="button" id="btn-face-draw-panel" class="lab-side-panel__tool lab-face-texture__toggle" aria-label="Activer la peinture sur une face">
-                                <span class="lab-side-panel__tool-label">Activer peinture</span>
-                            </button>
-                            <div id="lab-draw-panel-side" class="lab-draw-panel lab-draw-panel--side" hidden>
-                                <label class="lab-draw-panel__field">
-                                    <span class="lab-draw-panel__label">Couleur</span>
-                                    <input type="color" id="lab-draw-color-side" value="#111827" aria-label="Couleur du pinceau">
+                        <div id="lab-section-textures" class="lab-side-panel__section-body lab-texlib">
+                            <div class="lab-texlib__mode" role="group" aria-label="Cible d'application">
+                                <button type="button" class="lab-texlib__mode-btn is-active" data-texlib-mode="object" aria-pressed="true">Objet complet</button>
+                                <button type="button" class="lab-texlib__mode-btn" data-texlib-mode="face" aria-pressed="false">Face</button>
+                                <button type="button" class="lab-texlib__mode-btn" data-texlib-mode="triangles" aria-pressed="false">Triangles</button>
+                                <button type="button" class="lab-texlib__mode-clear" data-texlib-clear-tris title="Vider la sélection de triangles (Échap / Ctrl+Z)" aria-label="Vider sélection triangles">Vider △</button>
+                            </div>
+                            <p class="lab-texlib__mode-hint" data-texlib-mode-hint>Déposez une texture sur l’objet entier. Tile = dernier objet texturé.</p>
+                            <div class="lab-texlib__browser">
+                                <div class="lab-texlib__tabs" data-texlib-tabs role="tablist" aria-label="Bibliothèque" aria-orientation="vertical"></div>
+                                <div class="lab-texlib__grid" data-texlib-grid role="tabpanel"></div>
+                            </div>
+                            <div class="lab-texlib__import-row">
+                                <label class="lab-texlib__domain">
+                                    <span>Domaine</span>
+                                    <select data-texlib-domain title="Onglet où ranger la texture chargée (ou la sélection)"></select>
                                 </label>
-                                <label class="lab-draw-panel__field">
-                                    <span class="lab-draw-panel__label">Outil</span>
-                                    <select id="lab-draw-tool-side" aria-label="Outil de dessin face">
-                                        <option value="pencil">Crayon</option>
-                                        <option value="fill">Peinture face</option>
-                                        <option value="face-texture">Texture face</option>
-                                        <option value="decal">Décalcomanie</option>
-                                        <option value="text">Texte</option>
-                                        <option value="rect">Rectangle</option>
-                                        <option value="circle">Cercle</option>
+                                <label class="lab-texlib__domain">
+                                    <span>Couche</span>
+                                    <select data-texlib-layer title="Couche PBR à appliquer au chargement et au dépôt">
+                                        <option value="auto">Auto (nom du fichier)</option>
+                                        <option value="color">Couleur</option>
+                                        <option value="normal">Normal</option>
+                                        <option value="specular">Spéculaire</option>
+                                        <option value="roughness">Roughness</option>
                                     </select>
                                 </label>
-                                <label class="lab-draw-panel__field">
-                                    <span class="lab-draw-panel__label">Taille</span>
-                                    <input type="range" id="lab-draw-size-side" min="1" max="48" value="8" aria-label="Taille">
-                                </label>
-                                <label class="lab-draw-panel__field">
-                                    <span class="lab-draw-panel__label">Opacité</span>
-                                    <input type="range" id="lab-draw-opacity-side" min="5" max="100" value="100" step="5" aria-label="Opacité">
-                                </label>
-                                <div class="lab-draw-panel__row">
-                                    <label class="lab-draw-panel__field">
-                                        <span class="lab-draw-panel__label">Tile X</span>
-                                        <input type="number" id="lab-draw-tile-x-side" min="0.1" max="100" step="0.1" value="1" aria-label="Tile X">
-                                    </label>
-                                    <label class="lab-draw-panel__field">
-                                        <span class="lab-draw-panel__label">Tile Y</span>
-                                        <input type="number" id="lab-draw-tile-y-side" min="0.1" max="100" step="0.1" value="1" aria-label="Tile Y">
-                                    </label>
-                                </div>
-                                <div class="lab-draw-panel__row">
-                                    <label class="lab-draw-panel__field">
-                                        <span class="lab-draw-panel__label">Off. X</span>
-                                        <input type="number" id="lab-draw-offset-x-side" min="-10" max="10" step="0.01" value="0" aria-label="Offset X">
-                                    </label>
-                                    <label class="lab-draw-panel__field">
-                                        <span class="lab-draw-panel__label">Off. Y</span>
-                                        <input type="number" id="lab-draw-offset-y-side" min="-10" max="10" step="0.01" value="0" aria-label="Offset Y">
-                                    </label>
-                                </div>
-                                <span class="lab-draw-panel__field">
-                                    <button type="button" id="lab-draw-texture-side" class="lab-draw-panel__texture-btn">Tex. pinceau</button>
-                                    <button type="button" id="lab-draw-texture-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer texture pinceau" hidden>×</button>
-                                </span>
-                                <span class="lab-draw-panel__field">
-                                    <button type="button" id="lab-draw-face-texture-side" class="lab-draw-panel__texture-btn">Tex. face</button>
-                                    <button type="button" id="lab-draw-face-texture-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer texture face" hidden>×</button>
-                                </span>
-                                <span class="lab-draw-panel__field">
-                                    <button type="button" id="lab-draw-apply-triangles-side" class="lab-draw-panel__texture-btn">Appliquer △</button>
-                                    <button type="button" id="lab-draw-clear-triangles-side" class="lab-draw-panel__texture-clear" aria-label="Vider la sélection des triangles">×</button>
-                                </span>
-                                <span class="lab-draw-panel__field">
-                                    <button type="button" id="lab-draw-decal-side" class="lab-draw-panel__texture-btn">Décalco</button>
-                                    <button type="button" id="lab-draw-decal-clear-side" class="lab-draw-panel__texture-clear" aria-label="Retirer décalcomanie" hidden>×</button>
-                                </span>
+                                <button type="button" class="lab-texlib__action" data-texlib-add>Charger…</button>
+                                <button type="button" class="lab-texlib__action lab-texlib__action--danger" data-texlib-delete disabled>Supprimer</button>
+                                <input type="file" data-texlib-file accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden multiple>
                             </div>
+                            <div class="lab-texlib__uv" title="Tile / offset — X/Y classiques ; Z = projection UV boîte (XYZ)">
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Tile X</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" id="lab-draw-tile-x-side" data-texlib-tile-x min="0.1" max="100" step="0.1" value="1" aria-label="Tile X curseur">
+                                        <input type="number" data-texlib-tile-x-num min="0.1" max="100" step="0.1" value="1" aria-label="Tile X saisie">
+                                    </div>
+                                </label>
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Tile Y</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" id="lab-draw-tile-y-side" data-texlib-tile-y min="0.1" max="100" step="0.1" value="1" aria-label="Tile Y curseur">
+                                        <input type="number" data-texlib-tile-y-num min="0.1" max="100" step="0.1" value="1" aria-label="Tile Y saisie">
+                                    </div>
+                                </label>
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Tile Z</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" data-texlib-tile-z min="0.1" max="100" step="0.1" value="1" aria-label="Tile Z curseur">
+                                        <input type="number" data-texlib-tile-z-num min="0.1" max="100" step="0.1" value="1" aria-label="Tile Z saisie">
+                                    </div>
+                                </label>
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Off. X</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" id="lab-draw-offset-x-side" data-texlib-offset-x min="-10" max="10" step="0.05" value="0" aria-label="Offset X curseur">
+                                        <input type="number" data-texlib-offset-x-num min="-10" max="10" step="0.05" value="0" aria-label="Offset X saisie">
+                                    </div>
+                                </label>
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Off. Y</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" id="lab-draw-offset-y-side" data-texlib-offset-y min="-10" max="10" step="0.05" value="0" aria-label="Offset Y curseur">
+                                        <input type="number" data-texlib-offset-y-num min="-10" max="10" step="0.05" value="0" aria-label="Offset Y saisie">
+                                    </div>
+                                </label>
+                                <label class="lab-texlib__field lab-texlib__field--uv">
+                                    <span>Off. Z</span>
+                                    <div class="lab-texlib__uv-controls">
+                                        <input type="range" data-texlib-offset-z min="-10" max="10" step="0.05" value="0" aria-label="Offset Z curseur">
+                                        <input type="number" data-texlib-offset-z-num min="-10" max="10" step="0.05" value="0" aria-label="Offset Z saisie">
+                                    </div>
+                                </label>
+                            </div>
+                            <details class="lab-texlib__paint">
+                                <summary>Peinture (optionnel)</summary>
+                                <button type="button" id="btn-face-draw-panel" class="lab-side-panel__tool lab-face-texture__toggle" aria-label="Activer la peinture sur une face">
+                                    <span class="lab-side-panel__tool-label">Activer peinture</span>
+                                </button>
+                                <div id="lab-draw-panel-side" class="lab-draw-panel lab-draw-panel--side" hidden>
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Couleur</span>
+                                        <input type="color" id="lab-draw-color-side" value="#111827" aria-label="Couleur du crayon">
+                                    </label>
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Taille</span>
+                                        <input type="range" id="lab-draw-size-side" min="1" max="48" value="8" aria-label="Taille du pinceau">
+                                    </label>
+                                    <label class="lab-draw-panel__field">
+                                        <span class="lab-draw-panel__label">Opacité</span>
+                                        <input type="range" id="lab-draw-opacity-side" min="0.05" max="1" step="0.05" value="1" aria-label="Opacité du pinceau">
+                                    </label>
+                                </div>
+                            </details>
                         </div>
                     </section>
 
@@ -468,11 +521,11 @@
                                 <div class="lab-ocean__appearance">
                                     <label title="Couleur de l’eau">
                                         <span>Eau</span>
-                                        <input id="lab-ocean-color" type="color" value="#0a3d4d">
+                                        <input id="lab-ocean-color" type="color" value="#074455">
                                     </label>
                                     <label title="Teinte des reflets solaires">
                                         <span>Soleil</span>
-                                        <input id="lab-ocean-sun-color" type="color" value="#fff4e0">
+                                        <input id="lab-ocean-sun-color" type="color" value="#fff1d6">
                                     </label>
                                 </div>
                                 <label class="lab-ocean__range" title="Opacité de l’eau (plus haut = plus opaque, jusqu’à 5)">
@@ -480,36 +533,36 @@
                                     <input id="lab-ocean-opacity" type="range" min="0.25" max="5" step="0.05" value="5">
                                 </label>
                                 <label class="lab-ocean__range" title="Hauteur des vagues (Gerstner)">
-                                    <span>Hauteur <output id="lab-ocean-wave-height-value">0,48 m</output></span>
-                                    <input id="lab-ocean-wave-height" type="range" min="0" max="2.5" step="0.01" value="0.48">
+                                    <span>Hauteur <output id="lab-ocean-wave-height-value">0,42 m</output></span>
+                                    <input id="lab-ocean-wave-height" type="range" min="0" max="2.5" step="0.01" value="0.42">
                                 </label>
                                 <label class="lab-ocean__range" title="Longueur / fréquence des vagues">
-                                    <span>Fréquence <output id="lab-ocean-wave-scale-value">0,095</output></span>
-                                    <input id="lab-ocean-wave-scale" type="range" min="0.02" max="0.35" step="0.005" value="0.095">
+                                    <span>Fréquence <output id="lab-ocean-wave-scale-value">0,100</output></span>
+                                    <input id="lab-ocean-wave-scale" type="range" min="0.02" max="0.35" step="0.005" value="0.1">
                                 </label>
                                 <label class="lab-ocean__range" title="Vitesse d’animation">
                                     <span>Vitesse <output id="lab-ocean-wave-speed-value">1,00</output></span>
                                     <input id="lab-ocean-wave-speed" type="range" min="0" max="3" step="0.05" value="1">
                                 </label>
                                 <label class="lab-ocean__range" title="Raideur / crêtes des vagues géométriques">
-                                    <span>Crêtes <output id="lab-ocean-choppiness-value">1,05</output></span>
-                                    <input id="lab-ocean-choppiness" type="range" min="0" max="2.5" step="0.05" value="1.05">
+                                    <span>Crêtes <output id="lab-ocean-choppiness-value">0,95</output></span>
+                                    <input id="lab-ocean-choppiness" type="range" min="0" max="2.5" step="0.05" value="0.95">
                                 </label>
                                 <label class="lab-ocean__range" title="Intensité des rides / vagues de détail sur la surface">
-                                    <span>Vagues surface <output id="lab-ocean-surface-waves-value">1,00</output></span>
-                                    <input id="lab-ocean-surface-waves" type="range" min="0" max="2.5" step="0.05" value="1">
+                                    <span>Vagues surface <output id="lab-ocean-surface-waves-value">1,15</output></span>
+                                    <input id="lab-ocean-surface-waves" type="range" min="0" max="2.5" step="0.05" value="1.15">
                                 </label>
                                 <label class="lab-ocean__range" title="Densité des rides de surface — plus haut = plus petites et denses">
-                                    <span>Échelle surface <output id="lab-ocean-surface-scale-value">1,00</output></span>
-                                    <input id="lab-ocean-surface-scale" type="range" min="0.15" max="4" step="0.05" value="1">
+                                    <span>Échelle surface <output id="lab-ocean-surface-scale-value">1,10</output></span>
+                                    <input id="lab-ocean-surface-scale" type="range" min="0.15" max="4" step="0.05" value="1.1">
                                 </label>
                                 <label class="lab-ocean__range" title="Distorsion des reflets">
-                                    <span>Reflets <output id="lab-ocean-distortion-value">2,40</output></span>
-                                    <input id="lab-ocean-distortion" type="range" min="0.2" max="10" step="0.1" value="2.4">
+                                    <span>Reflets <output id="lab-ocean-distortion-value">1,35</output></span>
+                                    <input id="lab-ocean-distortion" type="range" min="0.2" max="10" step="0.1" value="1.35">
                                 </label>
                                 <label class="lab-ocean__range" title="Écume sur les crêtes">
-                                    <span>Écume <output id="lab-ocean-foam-value">0,85</output></span>
-                                    <input id="lab-ocean-foam" type="range" min="0" max="1.5" step="0.05" value="0.85">
+                                    <span>Écume <output id="lab-ocean-foam-value">0,80</output></span>
+                                    <input id="lab-ocean-foam" type="range" min="0" max="1.5" step="0.05" value="0.8">
                                 </label>
                                 <label class="lab-ocean__range" title="Niveau d’eau (hauteur Y)">
                                     <span>Niveau <output id="lab-ocean-level-value">-0,05 m</output></span>
@@ -524,39 +577,33 @@
                         </div>
                     </section>
 
-                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="vegetation">
-                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-vegetation">
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="objlib">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-objlib">
                             <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
-                            <span>Végétation</span>
+                            <span>Objets chargés</span>
                         </button>
-                        <div id="lab-section-vegetation" class="lab-side-panel__section-body">
-                            <div class="lab-vegetation__types" role="group" aria-label="Type de végétal">
-                                <button type="button" data-veg-type="tree" class="is-active" title="Arbre feuillu (forme simple)">Arbre</button>
-                                <button type="button" data-veg-type="bush" title="Buisson (forme simple)">Buisson</button>
-                                <button type="button" data-veg-type="pine" title="Pin / conifère (forme simple)">Pin</button>
-                                <button type="button" data-veg-type="flower" title="Touffe de fleurs (forme simple)">Fleurs</button>
-                                <button type="button" data-veg-type="model" title="Modèle 3D importé (.glb)" disabled>Modèle</button>
+                        <div id="lab-section-objlib" class="lab-side-panel__section-body lab-objlib">
+                            <div class="lab-objlib__browser">
+                                <div class="lab-objlib__tabs" data-objlib-tabs role="tablist" aria-label="Catégories d’objets" aria-orientation="vertical"></div>
+                                <div class="lab-objlib__grid" data-objlib-grid role="tabpanel"></div>
                             </div>
-                            <label class="lab-vegetation__range" title="Hauteur du végétal">
-                                <span>Hauteur <output id="lab-veg-height-value">4,20 m</output></span>
-                                <input id="lab-veg-height" type="range" min="0.3" max="12" step="0.1" value="4.2">
-                            </label>
-                            <label class="lab-vegetation__range" title="Luminosité des modèles importés">
-                                <span>Luminosité <output id="lab-veg-brightness-value">78 %</output></span>
-                                <input id="lab-veg-brightness" type="range" min="0.15" max="1.5" step="0.05" value="0.78">
-                            </label>
-                            <label class="lab-vegetation__check">
-                                <input id="lab-veg-paint-ground" type="checkbox" checked>
-                                <span>Peindre le sol sous le végétal</span>
-                            </label>
-                            <button type="button" id="btn-veg-place" class="lab-side-panel__tool lab-vegetation__place">
-                                <span class="lab-vegetation__icon" aria-hidden="true"></span>
-                                <span class="lab-side-panel__tool-label">Placer (clic sur le sol)</span>
-                            </button>
-                            <button type="button" id="btn-veg-import" class="lab-vegetation__action">Importer arbre .glb</button>
-                            <input type="file" id="lab-veg-file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden>
-                            <p id="lab-veg-model-name" class="lab-vegetation__model-name" hidden></p>
-                            <button type="button" id="btn-veg-apply-brush" class="lab-vegetation__action">Texture sol → pinceau</button>
+                            <div class="lab-objlib__import-row">
+                                <label class="lab-objlib__domain">
+                                    <span>Catégorie</span>
+                                    <select data-objlib-domain title="Onglet où ranger l’objet chargé">
+                                        <option value="perso">Perso</option>
+                                        <option value="meubles">Meubles</option>
+                                        <option value="props">Props</option>
+                                        <option value="vehicules">Véhicules</option>
+                                        <option value="archi">Architecture</option>
+                                        <option value="divers">Divers</option>
+                                    </select>
+                                </label>
+                                <label class="lab-objlib__action" for="lab-objlib-file" data-objlib-add title="Importer GLB, FBX, OBJ…">Charger…</label>
+                                <button type="button" class="lab-objlib__action" data-objlib-rename disabled title="Renommer l’objet dans cette liste (avant de le placer)">Renommer</button>
+                                <button type="button" class="lab-objlib__action" data-objlib-place disabled title="Placer l’objet sélectionné dans la scène">Placer</button>
+                                <button type="button" class="lab-objlib__action lab-objlib__action--danger" data-objlib-delete disabled>Supprimer</button>
+                            </div>
                         </div>
                     </section>
 
@@ -567,18 +614,19 @@
                         </button>
                         <div id="lab-section-lights" class="lab-side-panel__section-body">
                             <div class="lab-side-panel__lights">
-                                <button type="button" id="btn-add-spot" class="lab-side-panel__tool lab-side-panel__tool--light" title="Projecteur spot" aria-label="Spot">
+                                <button type="button" id="btn-add-spot" class="lab-side-panel__tool lab-side-panel__tool--light" title="Clic sur un mur, sol ou plafond pour placer le spot" aria-label="Spot" aria-pressed="false">
                                     <span class="lab-side-panel__light-icon lab-side-panel__light-icon--spot" aria-hidden="true"></span>
                                     <span class="lab-side-panel__tool-label">Spot</span>
                                 </button>
-                                <button type="button" id="btn-add-sun" class="lab-side-panel__tool lab-side-panel__tool--light" title="Soleil (lumière directionnelle)" aria-label="Soleil">
+                                <button type="button" id="btn-add-sun" class="lab-side-panel__tool lab-side-panel__tool--light" title="Clic sur une surface pour placer le soleil (orienté)" aria-label="Soleil" aria-pressed="false">
                                     <span class="lab-side-panel__light-icon lab-side-panel__light-icon--sun" aria-hidden="true"></span>
                                     <span class="lab-side-panel__tool-label">Soleil</span>
                                 </button>
-                                <button type="button" id="btn-add-lamp" class="lab-side-panel__tool lab-side-panel__tool--light" title="Lampe (lumière ponctuelle)" aria-label="Lampe">
+                                <button type="button" id="btn-add-lamp" class="lab-side-panel__tool lab-side-panel__tool--light" title="Clic sur un mur, sol ou plafond pour placer la lampe" aria-label="Lampe" aria-pressed="false">
                                     <span class="lab-side-panel__light-icon lab-side-panel__light-icon--lamp" aria-hidden="true"></span>
                                     <span class="lab-side-panel__tool-label">Lampe</span>
                                 </button>
+                                <p class="lab-side-panel__hint">Cliquez un bouton puis une surface — le spot s’oriente vers la pièce. Ensuite R = rotation, G = déplacer.</p>
                             </div>
                         </div>
                     </section>
@@ -592,6 +640,9 @@
             <div id="lab-viewport" class="lab-viewport">
 
                 <div id="lab-object-info" class="lab-object-info" hidden>
+                    <p class="lab-object-info__row" title="Cube englobant dans la scène : H = hauteur (Y), L = longueur (X), W = largeur (Z)">
+                        <span class="lab-object-info__label">Taille</span> <strong data-field="size">—</strong>
+                    </p>
                     <p class="lab-object-info__row"><span class="lab-object-info__label">Position</span> <strong data-field="position">—</strong></p>
                     <p class="lab-object-info__row"><span class="lab-object-info__label">Rotation</span> <strong data-field="rotation">—</strong></p>
                     <p class="lab-object-info__row"><span class="lab-object-info__label">Échelle</span> <strong data-field="scale">—</strong></p>
@@ -702,8 +753,21 @@
 
     </script>
 
-    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260719tubeundo"></script>
-    <script type="module" src="/3D/app.js?v=20260719tubeundo"></script>
+    <script>
+    /* Filet si la biblio JS n’est pas encore chargée. */
+    document.addEventListener("change", function (event) {
+        var t = event.target;
+        if (!t || t.id !== "lab-objlib-file") return;
+        var n = t.files && t.files.length ? t.files.length : 0;
+        if (n && !(window.__LAB_OBJLIB__ && window.__LAB_OBJLIB__.addFiles)) {
+            window.__LAB_OBJLIB_PENDING__ = window.__LAB_OBJLIB_PENDING__ || [];
+            for (var i = 0; i < t.files.length; i++) window.__LAB_OBJLIB_PENDING__.push(t.files[i]);
+        }
+    }, true);
+    </script>
+
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260817bounds"></script>
+    <script type="module" src="/3D/app.js?v=20260817bounds"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

@@ -1,5 +1,6 @@
 /** Scènes 3D — bibliothèque locale + enregistrement sur disque (API Fichiers). */
 import * as THREE from "three";
+import { normalizeArchLayout } from "./lab-architecture.js";
 
 const SCENE_VERSION = 1;
 const DEFAULT_FILENAME = "scene-lab-3d.json";
@@ -13,6 +14,82 @@ const FILE_TYPES = [
     },
 ];
 
+/**
+ * Champs d’apparence partagés (évite d’oublier un champ dans un type d’objet).
+ * @param {object} snapshot
+ * @param {{ defaultColor?: string, colorOptional?: boolean, includeTextures?: boolean }} [opts]
+ */
+function serializeObjectAppearance(snapshot, opts = {}) {
+    const includeTextures = opts.includeTextures !== false;
+    const colorOptional = !!opts.colorOptional;
+    const defaultColor = opts.defaultColor ?? "#00d1ff";
+    /** @type {Record<string, unknown>} */
+    const out = {
+        shadowEnabled: !!snapshot.shadowEnabled,
+        shadowOpacity:
+            typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
+        color: colorOptional ? snapshot.color || undefined : snapshot.color || defaultColor,
+        roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
+        metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
+        opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
+        glass: !!snapshot.glass,
+        smooth: snapshot.smooth !== false,
+        glassRestore: snapshot.glassRestore || undefined,
+    };
+    if (includeTextures) {
+        out.textureDataUrl = snapshot.textureDataUrl || null;
+        out.normalTextureDataUrl = snapshot.normalTextureDataUrl || null;
+        out.specularTextureDataUrl = snapshot.specularTextureDataUrl || null;
+        out.textureTile = typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined;
+        out.normalScale = typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined;
+    }
+    return out;
+}
+
+/**
+ * @param {object} raw
+ */
+function deserializeGlassRestore(raw) {
+    if (!raw?.glassRestore || typeof raw.glassRestore !== "object") return undefined;
+    const g = raw.glassRestore;
+    return {
+        opacity: typeof g.opacity === "number" ? g.opacity : undefined,
+        roughness: typeof g.roughness === "number" ? g.roughness : undefined,
+        metalness: typeof g.metalness === "number" ? g.metalness : undefined,
+    };
+}
+
+/**
+ * @param {object} raw
+ * @param {{ defaultColor?: string, colorOptional?: boolean, includeTextures?: boolean }} [opts]
+ */
+function deserializeObjectAppearance(raw, opts = {}) {
+    const includeTextures = opts.includeTextures !== false;
+    const colorOptional = !!opts.colorOptional;
+    const defaultColor = opts.defaultColor ?? "#00d1ff";
+    const legacy = /** @type {{ texture?: string | null }} */ (raw);
+    /** @type {Record<string, unknown>} */
+    const out = {
+        shadowEnabled: !!raw.shadowEnabled,
+        shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
+        color: colorOptional ? raw.color || undefined : raw.color || defaultColor,
+        roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
+        metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
+        opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
+        glass: !!raw.glass,
+        smooth: raw.smooth !== false,
+        glassRestore: deserializeGlassRestore(raw),
+    };
+    if (includeTextures) {
+        out.textureDataUrl = raw.textureDataUrl ?? legacy.texture ?? null;
+        out.normalTextureDataUrl = raw.normalTextureDataUrl || null;
+        out.specularTextureDataUrl = raw.specularTextureDataUrl || null;
+        out.textureTile = typeof raw.textureTile === "number" ? raw.textureTile : undefined;
+        out.normalScale = typeof raw.normalScale === "number" ? raw.normalScale : undefined;
+    }
+    return out;
+}
+
 /** @type {string | null} */
 let currentFileName = null;
 /** @type {FileSystemFileHandle | null} */
@@ -22,22 +99,51 @@ let diskFileHandle = null;
  * @param {ReturnType<import("./lab-history.js").captureObjectState> & { kind?: string }} snapshot
  */
 export function serializeObjectSnapshot(snapshot) {
+    const out = serializeObjectSnapshotBody(snapshot);
+    if (out && Array.isArray(snapshot?.triangleTextures) && snapshot.triangleTextures.length) {
+        out.triangleTextures = snapshot.triangleTextures;
+    }
+    if (out && snapshot?.facePbr && typeof snapshot.facePbr === "object") {
+        out.facePbr = snapshot.facePbr;
+    }
+    if (out && snapshot?.importAppearance && typeof snapshot.importAppearance === "object") {
+        out.importAppearance = snapshot.importAppearance;
+    }
+    if (out && Array.isArray(snapshot?.meshSolidify) && snapshot.meshSolidify.length) {
+        out.meshSolidify = snapshot.meshSolidify;
+    }
+    if (out && snapshot?.facePaint && typeof snapshot.facePaint === "object") {
+        out.facePaint = snapshot.facePaint;
+    }
+    if (out && typeof snapshot?.sceneItemLabel === "string" && snapshot.sceneItemLabel.trim()) {
+        out.sceneItemLabel = snapshot.sceneItemLabel.trim();
+    }
+    return out;
+}
+
+/**
+ * @param {ReturnType<import("./lab-history.js").captureObjectState> & { kind?: string }} snapshot
+ */
+function serializeObjectSnapshotBody(snapshot) {
+    if (!snapshot?.position || !snapshot?.rotation || !snapshot?.scale) {
+        throw new Error("Snapshot incomplet (position / rotation / échelle manquantes).");
+    }
     const base = {
         kind: snapshot.kind || "cube",
         position: {
-            x: snapshot.position.x,
-            y: snapshot.position.y,
-            z: snapshot.position.z,
+            x: Number(snapshot.position.x) || 0,
+            y: Number(snapshot.position.y) || 0,
+            z: Number(snapshot.position.z) || 0,
         },
         rotation: {
-            x: snapshot.rotation.x,
-            y: snapshot.rotation.y,
-            z: snapshot.rotation.z,
+            x: Number(snapshot.rotation.x) || 0,
+            y: Number(snapshot.rotation.y) || 0,
+            z: Number(snapshot.rotation.z) || 0,
         },
         scale: {
-            x: snapshot.scale.x,
-            y: snapshot.scale.y,
-            z: snapshot.scale.z,
+            x: Number(snapshot.scale.x) || 1,
+            y: Number(snapshot.scale.y) || 1,
+            z: Number(snapshot.scale.z) || 1,
         },
     };
     if (snapshot.quaternion) {
@@ -53,9 +159,11 @@ export function serializeObjectSnapshot(snapshot) {
         return {
             ...base,
             lightType: snapshot.lightType || "point",
+            lightAim: snapshot.lightAim === "negY" ? "negY" : "negZ",
             markerVisible: snapshot.markerVisible !== false,
             intensity: typeof snapshot.intensity === "number" ? snapshot.intensity : 1,
             spotAngle: typeof snapshot.spotAngle === "number" ? snapshot.spotAngle : undefined,
+            spotPenumbra: typeof snapshot.spotPenumbra === "number" ? snapshot.spotPenumbra : undefined,
             shadowEnabled: !!snapshot.shadowEnabled,
             shadowOpacity:
                 typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
@@ -76,20 +184,7 @@ export function serializeObjectSnapshot(snapshot) {
             stairArcDeg:
                 typeof snapshot.stairArcDeg === "number" ? snapshot.stairArcDeg : undefined,
             collisionEnabled: !!snapshot.collisionEnabled,
-            shadowEnabled: !!snapshot.shadowEnabled,
-            shadowOpacity:
-                typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
-            color: snapshot.color || "#8b9cb3",
-            textureDataUrl: snapshot.textureDataUrl || null,
-            normalTextureDataUrl: snapshot.normalTextureDataUrl || null,
-            textureTile: typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined,
-            normalScale: typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined,
-            roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
-            metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
-            opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
-            glass: !!snapshot.glass,
-            smooth: snapshot.smooth !== false,
-            glassRestore: snapshot.glassRestore || undefined,
+            ...serializeObjectAppearance(snapshot, { defaultColor: "#8b9cb3" }),
         };
     }
 
@@ -106,20 +201,7 @@ export function serializeObjectSnapshot(snapshot) {
             landingDepth:
                 typeof snapshot.landingDepth === "number" ? snapshot.landingDepth : undefined,
             collisionEnabled: !!snapshot.collisionEnabled,
-            shadowEnabled: !!snapshot.shadowEnabled,
-            shadowOpacity:
-                typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
-            color: snapshot.color || "#8b9cb3",
-            textureDataUrl: snapshot.textureDataUrl || null,
-            normalTextureDataUrl: snapshot.normalTextureDataUrl || null,
-            textureTile: typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined,
-            normalScale: typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined,
-            roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
-            metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
-            opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
-            glass: !!snapshot.glass,
-            smooth: snapshot.smooth !== false,
-            glassRestore: snapshot.glassRestore || undefined,
+            ...serializeObjectAppearance(snapshot, { defaultColor: "#8b9cb3" }),
         };
     }
 
@@ -142,20 +224,60 @@ export function serializeObjectSnapshot(snapshot) {
                     ? snapshot.tubeCaps
                     : undefined,
             collisionEnabled: !!snapshot.collisionEnabled,
-            shadowEnabled: !!snapshot.shadowEnabled,
-            shadowOpacity:
-                typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
-            color: snapshot.color || "#00d1ff",
-            textureDataUrl: snapshot.textureDataUrl || null,
-            normalTextureDataUrl: snapshot.normalTextureDataUrl || null,
-            textureTile: typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined,
-            normalScale: typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined,
-            roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
-            metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
-            opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
-            glass: !!snapshot.glass,
-            smooth: snapshot.smooth !== false,
-            glassRestore: snapshot.glassRestore || undefined,
+            ...serializeObjectAppearance(snapshot),
+        };
+    }
+
+    if (snapshot.kind === "architecture") {
+        return {
+            ...base,
+            kind: "architecture",
+            archLayout: normalizeArchLayout(snapshot.archLayout),
+            archLength: typeof snapshot.archLength === "number" ? snapshot.archLength : undefined,
+            archWidth: typeof snapshot.archWidth === "number" ? snapshot.archWidth : undefined,
+            archHeight: typeof snapshot.archHeight === "number" ? snapshot.archHeight : undefined,
+            archWall: typeof snapshot.archWall === "number" ? snapshot.archWall : undefined,
+            archWingA: typeof snapshot.archWingA === "number" ? snapshot.archWingA : undefined,
+            archWingB: typeof snapshot.archWingB === "number" ? snapshot.archWingB : undefined,
+            archFloors: typeof snapshot.archFloors === "number" ? snapshot.archFloors : undefined,
+            archCeiling: snapshot.archCeiling !== false,
+            archPlinth: !!snapshot.archPlinth,
+            archPlinthFloors: Array.isArray(snapshot.archPlinthFloors)
+                ? snapshot.archPlinthFloors
+                : snapshot.archPlinth
+                  ? [0]
+                  : [],
+            archOpenings: Array.isArray(snapshot.archOpenings) ? snapshot.archOpenings : [],
+            collisionEnabled: !!snapshot.collisionEnabled,
+            ...serializeObjectAppearance(snapshot, { defaultColor: "#c8c2b4" }),
+            archFaceTextures:
+                snapshot.archFaceTextures && typeof snapshot.archFaceTextures === "object"
+                    ? snapshot.archFaceTextures
+                    : undefined,
+        };
+    }
+
+    if (snapshot.kind === "boat") {
+        return {
+            ...base,
+            kind: "boat",
+            boatLength: typeof snapshot.boatLength === "number" ? snapshot.boatLength : undefined,
+            boatWidth: typeof snapshot.boatWidth === "number" ? snapshot.boatWidth : undefined,
+            boatFloat: snapshot.boatFloat !== false,
+            boatDensity:
+                typeof snapshot.boatDensity === "number" ? snapshot.boatDensity : undefined,
+            boatShell:
+                snapshot.boatShell === "imported" || snapshot.boatShell === "native"
+                    ? snapshot.boatShell
+                    : "procedural",
+            boatBaseKind:
+                typeof snapshot.boatBaseKind === "string" ? snapshot.boatBaseKind : undefined,
+            importFormat:
+                typeof snapshot.importFormat === "string" ? snapshot.importFormat : undefined,
+            importName: typeof snapshot.importName === "string" ? snapshot.importName : undefined,
+            importDataUrl: snapshot.importDataUrl || null,
+            collisionEnabled: !!snapshot.collisionEnabled,
+            ...serializeObjectAppearance(snapshot, { defaultColor: "#ffffff" }),
         };
     }
 
@@ -191,20 +313,7 @@ export function serializeObjectSnapshot(snapshot) {
             kind: "csg",
             csgGeometry: snapshot.csgGeometry || null,
             collisionEnabled: !!snapshot.collisionEnabled,
-            shadowEnabled: !!snapshot.shadowEnabled,
-            shadowOpacity:
-                typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
-            color: snapshot.color || "#00d1ff",
-            textureDataUrl: snapshot.textureDataUrl || null,
-            normalTextureDataUrl: snapshot.normalTextureDataUrl || null,
-            textureTile: typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined,
-            normalScale: typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined,
-            roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
-            metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
-            opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
-            glass: !!snapshot.glass,
-            smooth: snapshot.smooth !== false,
-            glassRestore: snapshot.glassRestore || undefined,
+            ...serializeObjectAppearance(snapshot),
         };
     }
 
@@ -216,9 +325,20 @@ export function serializeObjectSnapshot(snapshot) {
             importName: snapshot.importName || "Import",
             importDataUrl: snapshot.importDataUrl || null,
             collisionEnabled: !!snapshot.collisionEnabled,
-            shadowEnabled: !!snapshot.shadowEnabled,
-            shadowOpacity:
-                typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
+            ...serializeObjectAppearance(snapshot, { colorOptional: true, includeTextures: false }),
+            facePaint:
+                snapshot.facePaint && typeof snapshot.facePaint === "object"
+                    ? snapshot.facePaint
+                    : undefined,
+            facePbr:
+                snapshot.facePbr && typeof snapshot.facePbr === "object"
+                    ? snapshot.facePbr
+                    : undefined,
+            importAppearance:
+                snapshot.importAppearance && typeof snapshot.importAppearance === "object"
+                    ? snapshot.importAppearance
+                    : undefined,
+            meshSolidify: Array.isArray(snapshot.meshSolidify) ? snapshot.meshSolidify : undefined,
         };
     }
 
@@ -234,25 +354,14 @@ export function serializeObjectSnapshot(snapshot) {
                 ? snapshot.kind
                 : base.kind,
         collisionEnabled: !!snapshot.collisionEnabled,
-        shadowEnabled: !!snapshot.shadowEnabled,
-        shadowOpacity:
-            typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
-        color: snapshot.color || "#00d1ff",
-        textureDataUrl: snapshot.textureDataUrl || null,
-        normalTextureDataUrl: snapshot.normalTextureDataUrl || null,
-        textureTile: typeof snapshot.textureTile === "number" ? snapshot.textureTile : undefined,
-        normalScale: typeof snapshot.normalScale === "number" ? snapshot.normalScale : undefined,
-        roughness: typeof snapshot.roughness === "number" ? snapshot.roughness : undefined,
-        metalness: typeof snapshot.metalness === "number" ? snapshot.metalness : undefined,
-        opacity: typeof snapshot.opacity === "number" ? snapshot.opacity : undefined,
-        glass: !!snapshot.glass,
-        smooth: snapshot.smooth !== false,
-        glassRestore: snapshot.glassRestore || undefined,
+        ...serializeObjectAppearance(snapshot),
         facePaint:
-            snapshot.kind === "cube" || snapshot.kind === "panel" || !snapshot.kind
-                ? snapshot.facePaint && typeof snapshot.facePaint === "object"
-                    ? snapshot.facePaint
-                    : undefined
+            snapshot.facePaint && typeof snapshot.facePaint === "object"
+                ? snapshot.facePaint
+                : undefined,
+        facePbr:
+            snapshot.facePbr && typeof snapshot.facePbr === "object"
+                ? snapshot.facePbr
                 : undefined,
     };
 }
@@ -330,6 +439,32 @@ function readQuaternion(raw) {
  * @param {ReturnType<typeof serializeObjectSnapshot>} raw
  */
 export function deserializeObjectSnapshot(raw) {
+    const out = deserializeObjectSnapshotBody(raw);
+    if (out && Array.isArray(raw?.triangleTextures) && raw.triangleTextures.length) {
+        out.triangleTextures = raw.triangleTextures;
+    }
+    if (out && raw?.facePbr && typeof raw.facePbr === "object") {
+        out.facePbr = raw.facePbr;
+    }
+    if (out && raw?.importAppearance && typeof raw.importAppearance === "object") {
+        out.importAppearance = raw.importAppearance;
+    }
+    if (out && Array.isArray(raw?.meshSolidify) && raw.meshSolidify.length) {
+        out.meshSolidify = raw.meshSolidify;
+    }
+    if (out && raw?.facePaint && typeof raw.facePaint === "object") {
+        out.facePaint = raw.facePaint;
+    }
+    if (out && typeof raw?.sceneItemLabel === "string" && raw.sceneItemLabel.trim()) {
+        out.sceneItemLabel = raw.sceneItemLabel.trim();
+    }
+    return out;
+}
+
+/**
+ * @param {ReturnType<typeof serializeObjectSnapshot>} raw
+ */
+function deserializeObjectSnapshotBody(raw) {
     const kind =
         raw.kind === "light"
             ? "light"
@@ -339,6 +474,10 @@ export function deserializeObjectSnapshot(raw) {
                 ? "landing"
               : raw.kind === "tube"
                 ? "tube"
+              : raw.kind === "architecture"
+                ? "architecture"
+              : raw.kind === "boat"
+                ? "boat"
               : raw.kind === "vegetation"
                 ? "vegetation"
                 : raw.kind === "csg"
@@ -368,13 +507,16 @@ export function deserializeObjectSnapshot(raw) {
     if (quaternion) base.quaternion = quaternion;
 
     if (kind === "light") {
-        const legacy = /** @type {{ type?: string, lightType?: string }} */ (raw);
+        const legacy = /** @type {{ type?: string, lightType?: string, lightAim?: string }} */ (raw);
         return {
             ...base,
             lightType: legacy.lightType || legacy.type || "point",
+            // Absent = ancienne scène (cible sous le pivot).
+            lightAim: legacy.lightAim === "negZ" ? "negZ" : "negY",
             markerVisible: raw.markerVisible !== false,
             intensity: typeof raw.intensity === "number" ? raw.intensity : 1,
             spotAngle: typeof raw.spotAngle === "number" ? raw.spotAngle : undefined,
+            spotPenumbra: typeof raw.spotPenumbra === "number" ? raw.spotPenumbra : undefined,
             shadowEnabled: !!raw.shadowEnabled,
             shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
         };
@@ -392,35 +534,7 @@ export function deserializeObjectSnapshot(raw) {
             stairRadius: typeof raw.stairRadius === "number" ? raw.stairRadius : undefined,
             stairArcDeg: typeof raw.stairArcDeg === "number" ? raw.stairArcDeg : undefined,
             collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision ?? true),
-            shadowEnabled: !!raw.shadowEnabled,
-            shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
-            color: raw.color || "#8b9cb3",
-            textureDataUrl: raw.textureDataUrl ?? legacy.texture ?? null,
-            normalTextureDataUrl: raw.normalTextureDataUrl || null,
-            textureTile: typeof raw.textureTile === "number" ? raw.textureTile : undefined,
-            normalScale: typeof raw.normalScale === "number" ? raw.normalScale : undefined,
-            roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
-            metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
-            opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
-            glass: !!raw.glass,
-            smooth: raw.smooth !== false,
-            glassRestore:
-                raw.glassRestore && typeof raw.glassRestore === "object"
-                    ? {
-                          opacity:
-                              typeof raw.glassRestore.opacity === "number"
-                                  ? raw.glassRestore.opacity
-                                  : undefined,
-                          roughness:
-                              typeof raw.glassRestore.roughness === "number"
-                                  ? raw.glassRestore.roughness
-                                  : undefined,
-                          metalness:
-                              typeof raw.glassRestore.metalness === "number"
-                                  ? raw.glassRestore.metalness
-                                  : undefined,
-                      }
-                    : undefined,
+            ...deserializeObjectAppearance(raw, { defaultColor: "#8b9cb3" }),
         };
     }
 
@@ -434,35 +548,7 @@ export function deserializeObjectSnapshot(raw) {
             landingWidth: typeof raw.landingWidth === "number" ? raw.landingWidth : undefined,
             landingDepth: typeof raw.landingDepth === "number" ? raw.landingDepth : undefined,
             collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision ?? true),
-            shadowEnabled: !!raw.shadowEnabled,
-            shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
-            color: raw.color || "#8b9cb3",
-            textureDataUrl: raw.textureDataUrl ?? legacy.texture ?? null,
-            normalTextureDataUrl: raw.normalTextureDataUrl || null,
-            textureTile: typeof raw.textureTile === "number" ? raw.textureTile : undefined,
-            normalScale: typeof raw.normalScale === "number" ? raw.normalScale : undefined,
-            roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
-            metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
-            opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
-            glass: !!raw.glass,
-            smooth: raw.smooth !== false,
-            glassRestore:
-                raw.glassRestore && typeof raw.glassRestore === "object"
-                    ? {
-                          opacity:
-                              typeof raw.glassRestore.opacity === "number"
-                                  ? raw.glassRestore.opacity
-                                  : undefined,
-                          roughness:
-                              typeof raw.glassRestore.roughness === "number"
-                                  ? raw.glassRestore.roughness
-                                  : undefined,
-                          metalness:
-                              typeof raw.glassRestore.metalness === "number"
-                                  ? raw.glassRestore.metalness
-                                  : undefined,
-                      }
-                    : undefined,
+            ...deserializeObjectAppearance(raw, { defaultColor: "#8b9cb3" }),
         };
     }
 
@@ -479,35 +565,57 @@ export function deserializeObjectSnapshot(raw) {
             tubeCaps:
                 raw.tubeCaps && typeof raw.tubeCaps === "object" ? raw.tubeCaps : undefined,
             collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision ?? true),
-            shadowEnabled: !!raw.shadowEnabled,
-            shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
-            color: raw.color || "#00d1ff",
-            textureDataUrl: raw.textureDataUrl ?? legacy.texture ?? null,
-            normalTextureDataUrl: raw.normalTextureDataUrl || null,
-            textureTile: typeof raw.textureTile === "number" ? raw.textureTile : undefined,
-            normalScale: typeof raw.normalScale === "number" ? raw.normalScale : undefined,
-            roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
-            metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
-            opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
-            glass: !!raw.glass,
-            smooth: raw.smooth !== false,
-            glassRestore:
-                raw.glassRestore && typeof raw.glassRestore === "object"
-                    ? {
-                          opacity:
-                              typeof raw.glassRestore.opacity === "number"
-                                  ? raw.glassRestore.opacity
-                                  : undefined,
-                          roughness:
-                              typeof raw.glassRestore.roughness === "number"
-                                  ? raw.glassRestore.roughness
-                                  : undefined,
-                          metalness:
-                              typeof raw.glassRestore.metalness === "number"
-                                  ? raw.glassRestore.metalness
-                                  : undefined,
-                      }
+            ...deserializeObjectAppearance(raw),
+        };
+    }
+
+    if (kind === "architecture") {
+        const legacy = /** @type {{ collision?: boolean, texture?: string | null }} */ (raw);
+        return {
+            ...base,
+            kind: "architecture",
+            archLayout: normalizeArchLayout(raw.archLayout),
+            archLength: typeof raw.archLength === "number" ? raw.archLength : undefined,
+            archWidth: typeof raw.archWidth === "number" ? raw.archWidth : undefined,
+            archHeight: typeof raw.archHeight === "number" ? raw.archHeight : undefined,
+            archWall: typeof raw.archWall === "number" ? raw.archWall : undefined,
+            archWingA: typeof raw.archWingA === "number" ? raw.archWingA : undefined,
+            archWingB: typeof raw.archWingB === "number" ? raw.archWingB : undefined,
+            archFloors: typeof raw.archFloors === "number" ? raw.archFloors : undefined,
+            archCeiling: raw.archCeiling !== false,
+            archPlinth: !!raw.archPlinth,
+            archPlinthFloors: Array.isArray(raw.archPlinthFloors)
+                ? raw.archPlinthFloors
+                : raw.archPlinth
+                  ? [0]
+                  : [],
+            archOpenings: Array.isArray(raw.archOpenings) ? raw.archOpenings : [],
+            collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision ?? true),
+            ...deserializeObjectAppearance(raw, { defaultColor: "#c8c2b4" }),
+            archFaceTextures:
+                raw.archFaceTextures && typeof raw.archFaceTextures === "object"
+                    ? /** @type {Record<string, unknown>} */ (raw.archFaceTextures)
                     : undefined,
+        };
+    }
+
+    if (kind === "boat") {
+        return {
+            ...base,
+            boatLength: typeof raw.boatLength === "number" ? raw.boatLength : undefined,
+            boatWidth: typeof raw.boatWidth === "number" ? raw.boatWidth : undefined,
+            boatFloat: raw.boatFloat !== false,
+            boatDensity: typeof raw.boatDensity === "number" ? raw.boatDensity : undefined,
+            boatShell:
+                raw.boatShell === "imported" || raw.boatShell === "native"
+                    ? raw.boatShell
+                    : "procedural",
+            boatBaseKind: typeof raw.boatBaseKind === "string" ? raw.boatBaseKind : undefined,
+            importFormat: typeof raw.importFormat === "string" ? raw.importFormat : undefined,
+            importName: typeof raw.importName === "string" ? raw.importName : undefined,
+            importDataUrl: raw.importDataUrl || null,
+            collisionEnabled: !!(raw.collisionEnabled ?? true),
+            ...deserializeObjectAppearance(raw, { defaultColor: "#ffffff" }),
         };
     }
 
@@ -535,35 +643,7 @@ export function deserializeObjectSnapshot(raw) {
             ...base,
             csgGeometry: raw.csgGeometry && typeof raw.csgGeometry === "object" ? raw.csgGeometry : null,
             collisionEnabled: !!raw.collisionEnabled,
-            shadowEnabled: !!raw.shadowEnabled,
-            shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
-            color: raw.color || "#00d1ff",
-            textureDataUrl: raw.textureDataUrl || null,
-            normalTextureDataUrl: raw.normalTextureDataUrl || null,
-            textureTile: typeof raw.textureTile === "number" ? raw.textureTile : undefined,
-            normalScale: typeof raw.normalScale === "number" ? raw.normalScale : undefined,
-            roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
-            metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
-            opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
-            glass: !!raw.glass,
-            smooth: raw.smooth !== false,
-            glassRestore:
-                raw.glassRestore && typeof raw.glassRestore === "object"
-                    ? {
-                          opacity:
-                              typeof raw.glassRestore.opacity === "number"
-                                  ? raw.glassRestore.opacity
-                                  : undefined,
-                          roughness:
-                              typeof raw.glassRestore.roughness === "number"
-                                  ? raw.glassRestore.roughness
-                                  : undefined,
-                          metalness:
-                              typeof raw.glassRestore.metalness === "number"
-                                  ? raw.glassRestore.metalness
-                                  : undefined,
-                      }
-                    : undefined,
+            ...deserializeObjectAppearance(raw),
         };
     }
 
@@ -574,8 +654,18 @@ export function deserializeObjectSnapshot(raw) {
             importName: typeof raw.importName === "string" ? raw.importName : "Import",
             importDataUrl: typeof raw.importDataUrl === "string" ? raw.importDataUrl : null,
             collisionEnabled: !!raw.collisionEnabled,
-            shadowEnabled: !!raw.shadowEnabled,
-            shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
+            ...deserializeObjectAppearance(raw, { colorOptional: true, includeTextures: false }),
+            facePaint:
+                raw.facePaint && typeof raw.facePaint === "object" ? raw.facePaint : undefined,
+            facePbr:
+                raw.facePbr && typeof raw.facePbr === "object"
+                    ? /** @type {Record<string, object>} */ (raw.facePbr)
+                    : undefined,
+            importAppearance:
+                raw.importAppearance && typeof raw.importAppearance === "object"
+                    ? raw.importAppearance
+                    : undefined,
+            meshSolidify: Array.isArray(raw.meshSolidify) ? raw.meshSolidify : undefined,
         };
     }
 
@@ -583,49 +673,25 @@ export function deserializeObjectSnapshot(raw) {
     return {
         ...base,
         collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision),
-        shadowEnabled: !!raw.shadowEnabled,
-        shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
-        color: raw.color || "#00d1ff",
-        textureDataUrl: raw.textureDataUrl ?? legacy.texture ?? null,
-        normalTextureDataUrl: raw.normalTextureDataUrl || null,
-        textureTile: typeof raw.textureTile === "number" ? raw.textureTile : undefined,
-        normalScale: typeof raw.normalScale === "number" ? raw.normalScale : undefined,
-        roughness: typeof raw.roughness === "number" ? raw.roughness : undefined,
-        metalness: typeof raw.metalness === "number" ? raw.metalness : undefined,
-        opacity: typeof raw.opacity === "number" ? raw.opacity : undefined,
-        glass: !!raw.glass,
-        smooth: raw.smooth !== false,
-        glassRestore:
-            raw.glassRestore && typeof raw.glassRestore === "object"
-                ? {
-                      opacity:
-                          typeof raw.glassRestore.opacity === "number"
-                              ? raw.glassRestore.opacity
-                              : undefined,
-                      roughness:
-                          typeof raw.glassRestore.roughness === "number"
-                              ? raw.glassRestore.roughness
-                              : undefined,
-                      metalness:
-                          typeof raw.glassRestore.metalness === "number"
-                              ? raw.glassRestore.metalness
-                              : undefined,
-                  }
-                : undefined,
+        ...deserializeObjectAppearance(raw),
         facePaint:
             raw.facePaint && typeof raw.facePaint === "object"
                 ? /** @type {Record<string, string>} */ (raw.facePaint)
+                : undefined,
+        facePbr:
+            raw.facePbr && typeof raw.facePbr === "object"
+                ? /** @type {Record<string, object>} */ (raw.facePbr)
                 : undefined,
     };
 }
 
 /**
  * @param {ReturnType<typeof serializeObjectSnapshot>[]} objects
- * @param {{ name?: string, terrain?: object | null, ocean?: object | null, skybox?: object | null, vegetationAssets?: object | null }} [options]
+ * @param {{ name?: string, terrain?: object | null, ocean?: object | null, skybox?: object | null, vegetationAssets?: object | null, view?: object | null }} [options]
  */
 export function buildSceneDocument(
     objects,
-    { name = "", terrain = null, ocean = null, skybox = null, vegetationAssets = null } = {}
+    { name = "", terrain = null, ocean = null, skybox = null, vegetationAssets = null, view = null } = {}
 ) {
     return {
         version: SCENE_VERSION,
@@ -635,6 +701,7 @@ export function buildSceneDocument(
         ocean,
         skybox,
         vegetationAssets,
+        view,
     };
 }
 
@@ -738,16 +805,28 @@ export async function listSavedScenes() {
  */
 export async function saveSceneToLibrary(name, data) {
     const filename = normalizeFilename(name);
+    /** Clone JSON strict — IndexedDB refuse certains objets non structurés. */
+    let payload;
+    try {
+        payload = JSON.parse(serializeDocument(data));
+    } catch (error) {
+        throw new Error(
+            error instanceof Error
+                ? `Scène non enregistrable : ${error.message}`
+                : "Scène non sérialisable en JSON."
+        );
+    }
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readwrite");
         tx.objectStore(DB_STORE).put({
             name: filename,
-            data,
+            data: payload,
             updatedAt: Date.now(),
         });
         tx.oncomplete = () => resolve(filename);
-        tx.onerror = () => reject(tx.error);
+        tx.onerror = () =>
+            reject(tx.error ?? new Error("Échec d'écriture IndexedDB (quota ou navigateur)."));
     });
 }
 
@@ -876,21 +955,37 @@ function pickSceneJsonFileLegacy() {
         input.style.display = "none";
         document.body.appendChild(input);
 
+        let settled = false;
         const cleanup = () => {
             input.remove();
+            window.removeEventListener("focus", onWindowFocus);
+        };
+        const settle = (fn) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            fn();
+        };
+        // Certains navigateurs n’émettent jamais « cancel » : au retour du
+        // focus, si « change » n’arrive pas, on résout null (sinon l’await
+        // appelant resterait bloqué pour toujours).
+        const onWindowFocus = () => {
+            setTimeout(() => settle(() => resolve(null)), 800);
         };
 
         input.addEventListener("change", () => {
             const file = input.files?.[0];
             if (!file) {
-                cleanup();
-                resolve(null);
+                settle(() => resolve(null));
                 return;
             }
+            if (settled) return;
+            settled = true;
+            window.removeEventListener("focus", onWindowFocus);
 
             const reader = new FileReader();
             reader.onload = () => {
-                cleanup();
+                input.remove();
                 try {
                     diskFileHandle = null;
                     currentFileName = file.name;
@@ -903,17 +998,17 @@ function pickSceneJsonFileLegacy() {
                 }
             };
             reader.onerror = () => {
-                cleanup();
+                input.remove();
                 reject(new Error("Impossible de lire le fichier."));
             };
             reader.readAsText(file);
         });
 
         input.addEventListener("cancel", () => {
-            cleanup();
-            resolve(null);
+            settle(() => resolve(null));
         });
 
+        window.addEventListener("focus", onWindowFocus, { once: true });
         input.click();
     });
 }
@@ -935,8 +1030,13 @@ export async function writeSceneToLibrary(data, { saveAs = false, suggestedName 
     }
 
     await saveSceneToLibrary(filename, data);
-    downloadSceneJson(data, filename);
     currentFileName = filename;
+    // Téléchargement = copie de secours (peut être bloqué par le navigateur).
+    try {
+        downloadSceneJson(data, filename);
+    } catch (error) {
+        console.warn("[lab] téléchargement scène bloqué :", error);
+    }
     return { name: filename };
 }
 

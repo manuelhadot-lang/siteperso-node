@@ -566,6 +566,27 @@ app.use('/3D', express.static(path.join(__dirname, '3D'), {
     },
 }));
 app.use('/assets-3d', express.static(path.join(dirDocs, '3D'))); // Route pour les modèles 3D
+const textureRoot = path.join(__dirname, 'texture');
+app.use('/texture', express.static(textureRoot, {
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+    },
+}));
+app.get('/api/texture-library', (req, res) => {
+    try {
+        const { buildTextureLibraryCatalog } = require('./tools/texture-library-catalog.cjs');
+        const catalog = buildTextureLibraryCatalog(textureRoot, { urlBase: '/texture' });
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(catalog);
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            assets: [],
+            categories: [],
+            error: error instanceof Error ? error.message : 'Catalogue textures indisponible',
+        });
+    }
+});
 app.get('/api/version', (req, res) => {
     res.json({
         ok: true,

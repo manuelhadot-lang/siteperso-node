@@ -23,27 +23,51 @@ function ensureOverlay() {
 }
 
 /**
+ * Annulation du dialogue actuellement ouvert. Garantit qu’aucune promesse de
+ * dialogue ne reste pendante : ouvrir un nouveau dialogue ou appeler
+ * closeLabDialog() résout l’ancien en « annulé » au lieu de l’abandonner.
+ * @type {(() => void) | null}
+ */
+let cancelActiveDialog = null;
+
+/**
  * @param {string} html
  * @returns {Promise<"confirm" | "cancel">}
  */
 function showDialog(html) {
+    // Résout un éventuel dialogue déjà ouvert avant d’écraser son DOM.
+    cancelActiveDialog?.();
     const root = ensureOverlay();
     root.innerHTML = html;
     root.hidden = false;
 
     return new Promise((resolve) => {
+        let done = false;
         const finish = (result) => {
+            if (done) return;
+            done = true;
+            if (cancelActiveDialog === onCancel) cancelActiveDialog = null;
             root.hidden = true;
             root.innerHTML = "";
             root.removeEventListener("lab-dialog-cancel", onCancel);
+            document.removeEventListener("keydown", onKeydown, true);
             resolve(result);
         };
 
         const onCancel = () => finish("cancel");
+        const onKeydown = (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onCancel();
+            }
+        };
+        cancelActiveDialog = onCancel;
 
         root.querySelector("[data-dialog-cancel]")?.addEventListener("click", onCancel);
         root.querySelector("[data-dialog-confirm]")?.addEventListener("click", () => finish("confirm"));
         root.addEventListener("lab-dialog-cancel", onCancel);
+        document.addEventListener("keydown", onKeydown, true);
 
         root.querySelector("input[data-dialog-input]")?.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
@@ -89,6 +113,7 @@ export async function labPrompt(
         cancelLabel = "Annuler",
     } = {}
 ) {
+    cancelActiveDialog?.();
     const root = ensureOverlay();
     const safeValue = escapeAttr(defaultValue);
 
@@ -110,33 +135,36 @@ export async function labPrompt(
     input?.select();
 
     return new Promise((resolve) => {
-        const cleanup = () => {
+        let done = false;
+        const finish = (value) => {
+            if (done) return;
+            done = true;
+            if (cancelActiveDialog === onCancel) cancelActiveDialog = null;
+            root.removeEventListener("lab-dialog-cancel", onCancel);
             root.hidden = true;
             root.innerHTML = "";
+            resolve(value);
         };
 
-        root.querySelector("[data-dialog-cancel]")?.addEventListener("click", () => {
-            cleanup();
-            resolve(null);
-        });
+        const onCancel = () => finish(null);
+        cancelActiveDialog = onCancel;
 
+        root.querySelector("[data-dialog-cancel]")?.addEventListener("click", onCancel);
         root.querySelector("[data-dialog-confirm]")?.addEventListener("click", () => {
-            const value = input?.value.trim() ?? null;
-            cleanup();
-            resolve(value);
+            const value = input?.value.trim() || "";
+            finish(value ? value : null);
         });
+        root.addEventListener("lab-dialog-cancel", onCancel);
 
         input?.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
                 event.preventDefault();
-                const value = input.value.trim() ?? null;
-                cleanup();
-                resolve(value);
+                const value = input.value.trim() || "";
+                finish(value ? value : null);
             }
             if (event.key === "Escape") {
                 event.preventDefault();
-                cleanup();
-                resolve(null);
+                finish(null);
             }
         });
     });
@@ -148,6 +176,7 @@ export async function labPrompt(
  * @returns {Promise<string | null>} nom de la scène choisie
  */
 export async function labPickScene(scenes, options = {}) {
+    cancelActiveDialog?.();
     const root = ensureOverlay();
 
     const listHtml = scenes.length
@@ -175,13 +204,31 @@ export async function labPickScene(scenes, options = {}) {
     root.hidden = false;
 
     return new Promise((resolve) => {
+        let done = false;
         const finish = (name) => {
+            if (done) return;
+            done = true;
+            if (cancelActiveDialog === onCancel) cancelActiveDialog = null;
+            root.removeEventListener("lab-dialog-cancel", onCancel);
+            document.removeEventListener("keydown", onKeydown, true);
             root.hidden = true;
             root.innerHTML = "";
             resolve(name);
         };
 
-        root.querySelector("[data-dialog-cancel]")?.addEventListener("click", () => finish(null));
+        const onCancel = () => finish(null);
+        const onKeydown = (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onCancel();
+            }
+        };
+        cancelActiveDialog = onCancel;
+        root.addEventListener("lab-dialog-cancel", onCancel);
+        document.addEventListener("keydown", onKeydown, true);
+
+        root.querySelector("[data-dialog-cancel]")?.addEventListener("click", onCancel);
         root.querySelector("[data-dialog-open-disk]")?.addEventListener("click", () => {
             options.onPickDiskFile?.();
             finish(null);
@@ -258,6 +305,12 @@ export function isLabDialogOpen() {
 }
 
 export function closeLabDialog() {
+    // Résout la promesse pendante (en « annulé ») au lieu de masquer le DOM
+    // en laissant l’appelant coincé sur son await.
+    if (cancelActiveDialog) {
+        cancelActiveDialog();
+        return;
+    }
     if (overlay) {
         overlay.hidden = true;
         overlay.innerHTML = "";

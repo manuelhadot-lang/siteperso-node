@@ -44,22 +44,6 @@ function formatNumber(value, digits = 2) {
     return value.toFixed(digits).replace(".", ",");
 }
 
-/** Ctrl+Z (touche physique KeyZ ; sur AZERTY la touche Z produit « w »). */
-function isUndoShortcut(event) {
-    if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return false;
-    return event.code === "KeyZ" || event.key.toLowerCase() === "z";
-}
-
-function isRedoShortcut(event) {
-    if (!(event.ctrlKey || event.metaKey)) return false;
-    const key = event.key.toLowerCase();
-    return (
-        event.code === "KeyY" ||
-        key === "y" ||
-        (event.shiftKey && (event.code === "KeyZ" || key === "z"))
-    );
-}
-
 /**
  * @param {{
  *   scene: THREE.Scene,
@@ -922,6 +906,7 @@ export function initTerrainEditor(options) {
     function pushHistoryState() {
         const state = captureState();
         if (!state) return;
+        state.at = Date.now();
         undoStack.push(state);
         if (undoStack.length > MAX_HISTORY) undoStack.shift();
         redoStack.length = 0;
@@ -952,7 +937,12 @@ export function initTerrainEditor(options) {
         try {
             const current = captureState();
             const previous = undoStack.pop();
-            if (current) redoStack.push(current);
+            if (current) {
+                // L’entrée redo garde l’horodatage de l’action annulée : c’est
+                // lui qui sert à l’arbitrage chronologique scène / terrain.
+                current.at = previous?.at ?? Date.now();
+                redoStack.push(current);
+            }
             await restoreState(previous);
             updateHistoryUi();
             return true;
@@ -967,7 +957,10 @@ export function initTerrainEditor(options) {
         try {
             const current = captureState();
             const next = redoStack.pop();
-            if (current) undoStack.push(current);
+            if (current) {
+                current.at = next?.at ?? Date.now();
+                undoStack.push(current);
+            }
             await restoreState(next);
             updateHistoryUi();
             return true;
@@ -978,6 +971,7 @@ export function initTerrainEditor(options) {
 
     function commitStroke() {
         if (!strokeBefore) return;
+        strokeBefore.at = Date.now();
         undoStack.push(strokeBefore);
         if (undoStack.length > MAX_HISTORY) undoStack.shift();
         redoStack.length = 0;
@@ -1583,31 +1577,9 @@ export function initTerrainEditor(options) {
         void performTerrainRedo();
     });
 
-    function consumeUndoShortcut(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-    }
-
-    window.addEventListener(
-        "keydown",
-        (event) => {
-            if (!terrain || (undoStack.length === 0 && redoStack.length === 0)) return;
-            // Laisser Ctrl+Z au mode triangulation (sélection / texture triangles).
-            if (document.documentElement.classList.contains("lab-triangulation-mode")) return;
-            if (isRedoShortcut(event)) {
-                if (redoStack.length === 0) return;
-                consumeUndoShortcut(event);
-                void performTerrainRedo();
-                return;
-            }
-            if (!isUndoShortcut(event)) return;
-            if (undoStack.length === 0) return;
-            consumeUndoShortcut(event);
-            void performTerrainUndo();
-        },
-        true
-    );
+    // NB : plus d’écouteur clavier local — l’arbitrage Ctrl+Z / Ctrl+Y entre
+    // historique de scène et coups de pinceau terrain est centralisé dans
+    // l’éditeur (comparaison chronologique via getLastUndoAt / getLastRedoAt).
 
     function tryUndoShortcut() {
         if (undoInProgress || !terrain || undoStack.length === 0) return false;
@@ -1627,6 +1599,18 @@ export function initTerrainEditor(options) {
 
     function getRedoDepth() {
         return redoStack.length;
+    }
+
+    /** Horodatage du dernier coup de pinceau annulable (0 si aucun). */
+    function getLastUndoAt() {
+        const top = undoStack[undoStack.length - 1];
+        return typeof top?.at === "number" ? top.at : 0;
+    }
+
+    /** Horodatage du prochain coup de pinceau rétablissable (0 si aucun). */
+    function getLastRedoAt() {
+        const top = redoStack[redoStack.length - 1];
+        return typeof top?.at === "number" ? top.at : 0;
     }
 
     function isUndoInProgress() {
@@ -1882,6 +1866,8 @@ export function initTerrainEditor(options) {
         tryRedoShortcut,
         getUndoDepth,
         getRedoDepth,
+        getLastUndoAt,
+        getLastRedoAt,
         isUndoInProgress,
         /**
          * @param {((entry: { type: "terrain", before: object | null, after: object | null }) => void) | null} fn
@@ -1951,6 +1937,7 @@ export function initTerrainEditor(options) {
             radius = prevRadius;
             renderTerrainTexture();
             if (before) {
+                before.at = Date.now();
                 undoStack.push(before);
                 if (undoStack.length > MAX_HISTORY) undoStack.shift();
                 redoStack.length = 0;

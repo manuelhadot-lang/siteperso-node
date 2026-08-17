@@ -206,6 +206,17 @@ export function initQuadView(ctx) {
         scene.fog = fog;
     }
 
+    /** Libère les 3 renderers WebGL auxiliaires (contextes GPU + canvases). */
+    function disposeAuxRenderers() {
+        if (!auxRenderers) return;
+        for (const renderer of [auxRenderers.top, auxRenderers.right, auxRenderers.left]) {
+            renderer.dispose();
+            renderer.forceContextLoss?.();
+            renderer.domElement?.remove();
+        }
+        auxRenderers = null;
+    }
+
     function setEnabled(value) {
         if (enabled === value) return enabled;
         enabled = value;
@@ -217,6 +228,9 @@ export function initQuadView(ctx) {
             mainSlot.appendChild(mainRenderer.domElement);
             requestAnimationFrame(resizeAll);
         } else {
+            // Sans dispose, chaque activation/désactivation laissait fuir
+            // 3 contextes WebGL (le navigateur en limite le nombre total).
+            disposeAuxRenderers();
             viewport.appendChild(mainRenderer.domElement);
             requestAnimationFrame(() => {
                 const width = viewport.clientWidth;

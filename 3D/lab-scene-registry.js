@@ -15,6 +15,8 @@
  *   intensityMax?: number,
  *   intensityStep?: number,
  *   intensityTitle?: string,
+ *   getSpotPenumbra?: () => number,
+ *   setSpotPenumbra?: (value: number) => void,
  *   detail?: string,
  *   isIntensityEnabled?: () => boolean,
  *   isVisibleEnabled?: () => boolean,
@@ -24,6 +26,7 @@
  *   getShadowOpacity?: () => number,
  *   setShadowOpacity?: (value: number) => void,
  *   onDelete?: () => void,
+ *   onRename?: () => void,
  * }} SceneRegistryItem
  */
 
@@ -86,6 +89,13 @@ export function createSceneRegistry() {
         item.setIntensity(value);
     }
 
+    /** @param {string} id @param {number} value */
+    function setSpotPenumbra(id, value) {
+        const item = items.get(id);
+        if (!item?.setSpotPenumbra) return;
+        item.setSpotPenumbra(value);
+    }
+
     /** @param {string} id @param {boolean} enabled */
     function setShadow(id, enabled) {
         const item = items.get(id);
@@ -121,7 +131,20 @@ export function createSceneRegistry() {
         itemContextMenuHandler = fn;
     }
 
-    /** @param {string} id @param {MouseEvent} event */
+    /** @param {string} id @param {string} label */
+    function setLabel(id, label) {
+        const item = items.get(id);
+        const next = String(label || "").trim();
+        if (!item || !next || item.label === next) return;
+        item.label = next;
+        notify();
+    }
+
+    /** @param {string} id */
+    function renameItem(id) {
+        items.get(id)?.onRename?.();
+    }
+
     function openItemContextMenu(id, event) {
         itemContextMenuHandler?.(id, event);
     }
@@ -134,10 +157,13 @@ export function createSceneRegistry() {
         subscribe,
         setVisible,
         setIntensity,
+        setSpotPenumbra,
         setShadow,
         setShadowOpacity,
         selectItem,
         deleteItem,
+        setLabel,
+        renameItem,
         setItemContextMenuHandler,
         openItemContextMenu,
     };

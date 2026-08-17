@@ -2,16 +2,18 @@
 import * as THREE from "three";
 import { GRID_SIZE } from "./grid-constants.js";
 import { getStairStepMeshes, isLabStair, isLabLanding, isLabStairOrLanding, STAIR_AUTO_STEP_RISE } from "./lab-stair.js";
+import { getArchCollisionMeshes, isLabArchitecture } from "./lab-architecture.js";
+import { LAB_CSG_KEY } from "./lab-csg.js";
 
 export const COLLISION_KEY = "collisionEnabled";
-/** Rayon horizontal de la capsule (m). */
-export const PLAYER_RADIUS = 0.35;
-/** Hauteur yeux au-dessus des pieds (position.y = yeux). */
-export const PLAYER_HEIGHT = 1.5;
+/** Rayon horizontal de la capsule (m) — assez fin pour marcher dans une pièce ~3 m. */
+export const PLAYER_RADIUS = 0.32;
+/** Hauteur totale pieds → sommet de tête (m) — adulte ~1,78 m. */
+export const PLAYER_CAPSULE_HEIGHT = 1.78;
+/** Hauteur yeux au-dessus des pieds (position.y = yeux) — adulte debout ~1,62 m. */
+export const PLAYER_HEIGHT = 1.62;
 /** Espace tête au-dessus des yeux (m). */
-export const PLAYER_HEAD_CLEARANCE = 0.25;
-/** Hauteur totale pieds → sommet de tête (m). */
-export const PLAYER_CAPSULE_HEIGHT = PLAYER_HEIGHT + PLAYER_HEAD_CLEARANCE;
+export const PLAYER_HEAD_CLEARANCE = PLAYER_CAPSULE_HEIGHT - PLAYER_HEIGHT;
 export const COLLISION_MAX_ITER = 8;
 /** Gravité (m/s²) — proche du réel pour un vrai ressenti de chute libre. */
 export const GRAVITY = -9.81;
@@ -36,6 +38,8 @@ const collidableObjects = [];
 let playerRoot = null;
 let verticalVelocity = 0;
 let collisionDelta = 1 / 60;
+/** Après une téléportation avatar : ignore collisions le temps d’ancrer la pose. */
+let collisionSuppressUntil = 0;
 /** Quand false, seul le terrain (sol) bloque encore le joueur. */
 let objectCollisionEnabled = true;
 /** Quand false, pas de gravité ni d’accrochage au sol / terrain. */
@@ -51,6 +55,11 @@ const playerCapsuleBox = new THREE.Box3();
 const rayOrigin = new THREE.Vector3();
 const downDirection = new THREE.Vector3(0, -1, 0);
 const raycaster = new THREE.Raycaster();
+const csgRaycaster = new THREE.Raycaster();
+const csgRayOrigin = new THREE.Vector3();
+const csgRayDir = new THREE.Vector3();
+const CSG_RAY_DIRS = 12;
+const CSG_HEIGHT_SAMPLES = 4;
 const lastMoveDirXZ = new THREE.Vector2();
 const stairLocalPoint = new THREE.Vector3();
 const stairWorldPos = new THREE.Vector3();
@@ -79,6 +88,18 @@ export function isObjectCollisionEnabled() {
     return objectCollisionEnabled;
 }
 
+/**
+ * Ignore collisions joueur pendant un court délai (placement avatar, etc.).
+ * @param {number} [ms]
+ */
+export function suppressPlayerCollisionBriefly(ms = 500) {
+    collisionSuppressUntil = performance.now() + Math.max(0, ms);
+}
+
+function isPlayerCollisionSuppressed() {
+    return performance.now() < collisionSuppressUntil;
+}
+
 export function setGroundCollisionEnabled(enabled) {
     groundCollisionEnabled = !!enabled;
 }
@@ -93,6 +114,19 @@ export function resetPlayerVerticalMotion() {
 
 function isLabTerrain(object) {
     return !!object?.userData?.labTerrain;
+}
+
+function isLabCsg(object) {
+    return !!object?.userData?.[LAB_CSG_KEY];
+}
+
+function getLabCsgMesh(object) {
+    if (!object) return null;
+    if (object instanceof THREE.Mesh && object.name === "lab-csg-mesh") return object;
+    const named = object.children?.find?.((c) => c.name === "lab-csg-mesh");
+    if (named instanceof THREE.Mesh) return named;
+    const anyMesh = object.children?.find?.((c) => c instanceof THREE.Mesh);
+    return anyMesh instanceof THREE.Mesh ? anyMesh : object instanceof THREE.Mesh ? object : null;
 }
 
 /** @param {number} deltaTime secondes écoulées depuis la dernière frame */
@@ -473,9 +507,18 @@ function separatePlayerFromStepObb(stepMesh) {
     else if (minPen === penNear) stairPushLocal.set(0, 0, -penNear);
     else stairPushLocal.set(0, 0, penFar);
 
-    stairPushWorld.copy(stairPushLocal).transformDirection(stepMesh.matrixWorld);
+    // Appliquer la rotation/échelle sans normalize (transformDirection casse la magnitude).
+    const e = stepMesh.matrixWorld.elements;
+    stairPushWorld.set(
+        e[0] * stairPushLocal.x + e[4] * stairPushLocal.y + e[8] * stairPushLocal.z,
+        e[1] * stairPushLocal.x + e[5] * stairPushLocal.y + e[9] * stairPushLocal.z,
+        e[2] * stairPushLocal.x + e[6] * stairPushLocal.y + e[10] * stairPushLocal.z
+    );
     playerRoot.position.x += stairPushWorld.x;
     playerRoot.position.z += stairPushWorld.z;
+    // Obligatoire : resolvePlayerCollisions() réécrit ensuite la pose depuis
+    // playerCapsuleBox. Sans resync, le push OBB (murs / marches) est annulé.
+    clipPlayerCapsule(getFeetY(), playerCapsuleBox);
     return true;
 }
 
@@ -659,6 +702,12 @@ function canApproachObjectSurface(object, feetY) {
     if (isLabStair(object) || isLabLanding(object)) {
         return canApproachStair(object, feetY);
     }
+    // Pièce architecture : ne jamais désactiver le push des murs.
+    // (Sinon dès qu’on est à hauteur du sol dans l’empreinte, allowApproach
+    // devient true et on traverse les murs / on est éjecté en boucle.)
+    if (isLabArchitecture(object)) {
+        return false;
+    }
     if (!playerRoot) return false;
     const { x, z } = playerRoot.position;
     const objBox = updateObjectBox(object);
@@ -769,7 +818,52 @@ function separateBoxesHorizontal(boxMobile, boxFixed) {
     return true;
 }
 
+/**
+ * Collision mesh CSG (trous / portes) : l’AABB remplit encore l’ouverture,
+ * donc on pousse uniquement selon des rayons horizontaux vers le maillage réel.
+ * @param {THREE.Mesh} mesh
+ * @param {number} feetY
+ */
+function separatePlayerFromCsgMesh(mesh, feetY) {
+    if (!playerRoot || !(mesh instanceof THREE.Mesh) || !mesh.geometry) return false;
+    mesh.updateWorldMatrix(true, false);
+
+    let pushed = false;
+    const { x, z } = playerRoot.position;
+    const rayLen = PLAYER_RADIUS + 0.02;
+
+    for (let hi = 0; hi < CSG_HEIGHT_SAMPLES; hi++) {
+        const t = (hi + 0.5) / CSG_HEIGHT_SAMPLES;
+        const y = feetY + t * PLAYER_CAPSULE_HEIGHT * 0.98 + 0.02;
+
+        for (let i = 0; i < CSG_RAY_DIRS; i++) {
+            const angle = (i / CSG_RAY_DIRS) * Math.PI * 2;
+            csgRayDir.set(Math.cos(angle), 0, Math.sin(angle));
+            csgRayOrigin.set(x, y, z);
+            csgRaycaster.near = 0;
+            csgRaycaster.far = rayLen;
+            csgRaycaster.set(csgRayOrigin, csgRayDir);
+            const hits = csgRaycaster.intersectObject(mesh, false);
+            if (!hits.length) continue;
+            const hit = hits[0];
+            if (hit.distance >= PLAYER_RADIUS) continue;
+            const push = PLAYER_RADIUS - hit.distance + 0.002;
+            playerRoot.position.x -= csgRayDir.x * push;
+            playerRoot.position.z -= csgRayDir.z * push;
+            pushed = true;
+        }
+    }
+
+    if (!pushed) return false;
+    clipPlayerCapsule(getFeetY(), playerCapsuleBox);
+    return true;
+}
+
 function getCollisionParts(object) {
+    if (isLabCsg(object)) {
+        const mesh = getLabCsgMesh(object);
+        return mesh ? [mesh] : [object];
+    }
     if (isLabStair(object)) {
         const steps = getStairStepMeshes(object);
         return steps.length ? steps : [object];
@@ -777,6 +871,10 @@ function getCollisionParts(object) {
     if (isLabLanding(object)) {
         const deck = object.children?.find?.((c) => c.name === "landing-deck");
         return deck ? [deck] : [object];
+    }
+    if (isLabArchitecture(object)) {
+        const parts = getArchCollisionMeshes(object);
+        return parts.length ? parts : [object];
     }
     return [object];
 }
@@ -790,6 +888,13 @@ function separatePlayerFromCollider(owner, colliderBox, feetY, allowApproach, pa
 
     const { x, z } = playerRoot.position;
     const stepTop = colliderBox.max.y;
+
+    if (isLabCsg(owner) && part instanceof THREE.Mesh) {
+        if (!clipPlayerCapsule(feetY, playerCapsuleBox)) return false;
+        // Rejet rapide AABB (le trou reste « plein » dans la bbox — normal).
+        if (!playerCapsuleBox.intersectsBox(colliderBox)) return false;
+        return separatePlayerFromCsgMesh(part, feetY);
+    }
 
     if (isLabStair(owner) || isLabLanding(owner)) {
         if (feetY >= stepTop - GROUND_EPSILON) return false;
@@ -814,6 +919,33 @@ function separatePlayerFromCollider(owner, colliderBox, feetY, allowApproach, pa
             if (colliderBox.min.y >= feetY + PLAYER_CAPSULE_HEIGHT - GROUND_EPSILON) return false;
             return separatePlayerFromStepObb(part);
         }
+    }
+
+    // Murs de pièce (panneaux) : même séparation AABB que les props solides.
+    // Sol / plafond exclus (marchables). Ouvertures = absence de panneau.
+    if (isLabArchitecture(owner) && part instanceof THREE.Mesh) {
+        const name = String(part.name || "");
+        if (name === "arch-floor" || name === "arch-ceiling") return false;
+        if (!overlapsCapsuleVertical(colliderBox, feetY)) return false;
+        if (colliderBox.min.y >= feetY + PLAYER_CAPSULE_HEIGHT - GROUND_EPSILON) return false;
+        if (colliderBox.max.y <= feetY + GROUND_EPSILON) return false;
+
+        // Pièce tournée : OBB locale (l’AABB monde grossit et peut boucher une porte).
+        const rotated =
+            Math.abs(owner.rotation?.y || 0) > 0.02 ||
+            Math.abs(owner.rotation?.x || 0) > 0.02 ||
+            Math.abs(owner.rotation?.z || 0) > 0.02;
+        if (rotated) {
+            let pushed = separatePlayerFromStepObb(part);
+            if (!clipPlayerCapsule(feetY, playerCapsuleBox)) return pushed;
+            if (separatePlayerFromCsgMesh(part, feetY)) pushed = true;
+            return pushed;
+        }
+
+        if (!clipPlayerCapsule(feetY, playerCapsuleBox)) return false;
+        if (!clipObjectToCapsuleVertical(colliderBox, feetY, clippedObjectBox)) return false;
+        if (!playerCapsuleBox.intersectsBox(clippedObjectBox)) return false;
+        return separateBoxesHorizontal(playerCapsuleBox, clippedObjectBox);
     }
 
     const surfaceY = getSurfaceYAt(owner, x, z, feetY);
@@ -900,6 +1032,8 @@ function applyLandingOnSurfaces() {
 export function resolvePlayerCollisions() {
     if (!playerRoot) return;
     if (!groundCollisionEnabled && !objectCollisionEnabled) return;
+    // Téléportation avatar : ne pas pousser / rescinder la pose choisie.
+    if (isPlayerCollisionSuppressed()) return;
 
     if (
         !Number.isFinite(playerRoot.position.x) ||
@@ -972,6 +1106,10 @@ export function movePlayer(delta) {
  */
 export function updatePlayerVertical(deltaTime) {
     if (!playerRoot || !groundCollisionEnabled) return;
+    if (isPlayerCollisionSuppressed()) {
+        verticalVelocity = 0;
+        return;
+    }
 
     const dt = THREE.MathUtils.clamp(deltaTime, 0.001, 0.05);
     verticalVelocity += GRAVITY * dt;

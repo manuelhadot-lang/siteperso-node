@@ -1,19 +1,19 @@
 import { initGallery } from "./gallery.js";
-import { initFullscreenToggle } from "./fullscreen.js";
 import { initSidePanel } from "./side-panel.js";
 import { initCubeEditor } from "./cube-editor.js";
 import { initCollisionSystem } from "./lab-collision.js";
-import { initFileMenu } from "./lab-menu.js";
+import { initFileMenu, initFreeSitesMenu } from "./lab-menu.js";
 import { initExportMenu } from "./lab-export.js";
 import { initImportMenu } from "./lab-import.js";
 import { initHelpMenu } from "./lab-help.js";
-import { initFaceMenu } from "./lab-face-menu.js";
 import { initSkybox } from "./lab-skybox.js";
 import { initScenePanel } from "./lab-scene-panel.js";
 import { initTerrainEditor } from "./lab-terrain.js";
 import { initOcean } from "./lab-ocean.js";
+import { initTextureLibrary } from "./lab-texture-library.js";
+import { initObjectLibrary } from "./lab-object-library.js";
 
-export const LAB_BUILD = "20260719tubeundo";
+export const LAB_BUILD = "20260817bounds";
 
 initSidePanel();
 
@@ -21,10 +21,8 @@ if (typeof window !== "undefined") {
     window.__LAB_3D_BUILD__ = LAB_BUILD;
 }
 
-const workspace = document.getElementById("lab-workspace");
 const viewport = document.getElementById("lab-viewport");
 const blocker = document.getElementById("lab-blocker");
-const fullscreenBtn = document.getElementById("btn-fullscreen");
 const spawnCubeBtn = document.getElementById("btn-add-cube");
 const spawnSphereBtn = document.getElementById("btn-add-sphere");
 const spawnPyramidBtn = document.getElementById("btn-add-pyramid");
@@ -34,6 +32,11 @@ const spawnTorusBtn = document.getElementById("btn-add-torus");
 const spawnPanelBtn = document.getElementById("btn-add-panel");
 const spawnStairBtn = document.getElementById("btn-add-stair");
 const spawnTubeBtn = document.getElementById("btn-add-tube");
+const spawnBoatBtn = document.getElementById("btn-add-boat");
+const spawnArchitectureBtns = /** @type {NodeListOf<HTMLButtonElement>} */ (
+    document.querySelectorAll("[data-arch-layout]")
+);
+const placeAvatarBtn = document.getElementById("btn-place-avatar");
 const hoverTooltip = document.getElementById("lab-hover-tooltip");
 const lightSpotBtn = document.getElementById("btn-add-spot");
 const lightSunBtn = document.getElementById("btn-add-sun");
@@ -42,21 +45,12 @@ const quadViewBtn = document.getElementById("btn-quad-view");
 const drawBtn = document.getElementById("btn-face-draw-panel");
 const drawPanel = document.getElementById("lab-draw-panel-side");
 const drawColorInput = document.getElementById("lab-draw-color-side");
-const drawToolSelect = document.getElementById("lab-draw-tool-side");
 const drawSizeInput = document.getElementById("lab-draw-size-side");
 const drawOpacityInput = document.getElementById("lab-draw-opacity-side");
-const drawTextureBtn = document.getElementById("lab-draw-texture-side");
-const drawTextureClearBtn = document.getElementById("lab-draw-texture-clear-side");
 const drawTileXInput = document.getElementById("lab-draw-tile-x-side");
 const drawTileYInput = document.getElementById("lab-draw-tile-y-side");
 const drawOffsetXInput = document.getElementById("lab-draw-offset-x-side");
 const drawOffsetYInput = document.getElementById("lab-draw-offset-y-side");
-const drawFaceTextureBtn = document.getElementById("lab-draw-face-texture-side");
-const drawFaceTextureClearBtn = document.getElementById("lab-draw-face-texture-clear-side");
-const drawApplyTrianglesBtn = document.getElementById("lab-draw-apply-triangles-side");
-const drawClearTrianglesBtn = document.getElementById("lab-draw-clear-triangles-side");
-const drawDecalBtn = document.getElementById("lab-draw-decal-side");
-const drawDecalClearBtn = document.getElementById("lab-draw-decal-clear-side");
 const voiceBtn = document.getElementById("btn-voice-dimensions");
 const voicePanel = document.getElementById("lab-voice-panel");
 const voiceModeSelect = document.getElementById("lab-voice-mode");
@@ -89,10 +83,6 @@ function syncMovementModeUi(mode) {
         overviewModeBtn.classList.toggle("is-active", normalized === "overview");
         overviewModeBtn.setAttribute("aria-pressed", String(normalized === "overview"));
     }
-}
-
-if (workspace && fullscreenBtn) {
-    initFullscreenToggle(workspace, fullscreenBtn);
 }
 
 if (viewport && blocker) {
@@ -129,6 +119,7 @@ if (viewport && blocker) {
     }
 
     initHelpMenu();
+    initFreeSitesMenu();
 
     const scenePanelEl = document.getElementById("lab-scene-panel");
     const sceneRegistry = initScenePanel(scenePanelEl);
@@ -150,12 +141,35 @@ if (viewport && blocker) {
     });
 
     const showLabStatus = (msg) => {
-        const el = document.querySelector(".lab-viewport__status");
-        if (!el) return;
-        el.textContent = msg;
-        el.classList.add("is-visible");
-        window.setTimeout(() => el.classList.remove("is-visible"), 2200);
+        const el =
+            document.querySelector(".lab-viewport__status") ||
+            document.querySelector("#lab-viewport .lab-viewport__status");
+        if (el) {
+            el.textContent = msg;
+            el.classList.add("is-visible");
+            window.setTimeout(() => el.classList.remove("is-visible"), 3200);
+            return;
+        }
+        console.info("[LAB]", msg);
     };
+
+    let objectLibrary = null;
+    const objlibRoot =
+        document.getElementById("lab-section-objlib") ||
+        document.querySelector(".lab-objlib");
+    if (objlibRoot) {
+        try {
+            objectLibrary = initObjectLibrary({
+                root: objlibRoot,
+                viewport: document.getElementById("lab-viewport"),
+                showStatus: showLabStatus,
+            });
+        } catch (error) {
+            console.error("[LAB 3D] initObjectLibrary a échoué :", error);
+        }
+    } else {
+        console.warn("[LAB 3D] #lab-section-objlib introuvable");
+    }
 
     const oceanEditor = initOcean({
         scene: gallery.scene,
@@ -201,12 +215,16 @@ if (viewport && blocker) {
                 snapBtns,
                 objectInfoPanel,
                 focusOnObject: gallery.focusOnObject,
+                focusOnPoint: gallery.focusOnPoint,
                 setOrbitTarget: gallery.setOrbitTarget,
+                serializeView: gallery.serializeView,
+                restoreView: gallery.restoreView,
                 onGizmoDraggingChange: gallery.setGizmoDragging,
                 setCanvasRightClickHandler: gallery.setCanvasRightClickHandler,
                 setCanvasLeftClickHandler: gallery.setCanvasLeftClickHandler,
                 setCanvasDoubleClickHandler: gallery.setCanvasDoubleClickHandler,
                 setAfterRender: gallery.setAfterRender,
+                setBeforeRender: gallery.setBeforeRender,
                 getPointerRect: gallery.getPointerRect,
                 canInteractAt: gallery.canInteractAt,
                 sceneRegistry: sceneRegistry ?? undefined,
@@ -214,22 +232,15 @@ if (viewport && blocker) {
                 drawBtn,
                 drawPanel,
                 drawColorInput,
-                drawToolSelect,
                 drawSizeInput,
                 drawOpacityInput,
-                drawTextureBtn,
-                drawTextureClearBtn,
                 drawTileXInput,
                 drawTileYInput,
                 drawOffsetXInput,
                 drawOffsetYInput,
-                drawFaceTextureBtn,
-                drawFaceTextureClearBtn,
-                drawApplyTrianglesBtn,
-                drawClearTrianglesBtn,
-                drawDecalBtn,
-                drawDecalClearBtn,
                 setDrawModeActive: gallery.setDrawModeActive,
+                setPaintStrokeActive: gallery.setPaintStrokeActive,
+                cancelLookGesture: gallery.cancelLookGesture,
                 enterExplore: gallery.enterExplore,
                 voiceBtn,
                 voicePanel,
@@ -242,35 +253,13 @@ if (viewport && blocker) {
                 csgBtn,
                 spawnStairBtn,
                 spawnTubeBtn,
+                spawnBoatBtn,
+                spawnArchitectureBtns,
                 hoverTooltip,
-                vegetationUi: {
-                    typeButtons: document.querySelectorAll("[data-veg-type]"),
-                    heightInput: /** @type {HTMLInputElement | null} */ (
-                        document.getElementById("lab-veg-height")
-                    ),
-                    heightValue: document.getElementById("lab-veg-height-value"),
-                    paintGroundCheck: /** @type {HTMLInputElement | null} */ (
-                        document.getElementById("lab-veg-paint-ground")
-                    ),
-                    placeBtn: /** @type {HTMLButtonElement | null} */ (
-                        document.getElementById("btn-veg-place")
-                    ),
-                    applyBrushBtn: /** @type {HTMLButtonElement | null} */ (
-                        document.getElementById("btn-veg-apply-brush")
-                    ),
-                    importBtn: /** @type {HTMLButtonElement | null} */ (
-                        document.getElementById("btn-veg-import")
-                    ),
-                    fileInput: /** @type {HTMLInputElement | null} */ (
-                        document.getElementById("lab-veg-file")
-                    ),
-                    modelNameEl: document.getElementById("lab-veg-model-name"),
-                    brightnessInput: /** @type {HTMLInputElement | null} */ (
-                        document.getElementById("lab-veg-brightness")
-                    ),
-                    brightnessValue: document.getElementById("lab-veg-brightness-value"),
-                },
-                setVegetationPlaceModeActive: gallery.setVegetationPlaceModeActive,
+                setAvatarPlaceModeActive: gallery.setAvatarPlaceModeActive,
+                setLightPlaceModeActive: gallery.setLightPlaceModeActive,
+                placePlayerAt: gallery.placePlayerAt,
+                placeAvatarBtn,
                 terrainController: terrainEditor,
                 oceanController: oceanEditor,
                 skyboxController: skyboxController ?? undefined,
@@ -289,11 +278,32 @@ if (viewport && blocker) {
         }
 
         if (editor) {
-            initFaceMenu({
-                isTriangulationMode: () => !!editor.isTriangulationMode?.(),
-                onToggleTriangulation: (next) => editor.setTriangulationMode?.(next),
-                onClearTriangleSelection: () => editor.clearTriangleSelection?.(),
-            });
+            const texlibRoot = document.getElementById("lab-section-textures");
+            if (texlibRoot) {
+                try {
+                    initTextureLibrary({
+                        root: texlibRoot,
+                        viewport: document.getElementById("lab-viewport"),
+                        showStatus: showLabStatus,
+                        onDropTexture: async (payload) => {
+                            await editor.applyTextureDrop?.(payload);
+                        },
+                        onTransformChange: (transform, meta) => {
+                            editor.applyTextureTransformLive?.(transform, meta);
+                        },
+                        onModeChange: (mode) => {
+                            editor.setTextureApplyMode?.(mode);
+                        },
+                        onClearTriangles: () => {
+                            editor.clearTriangleSelection?.();
+                            showLabStatus("Sélection de triangles vidée");
+                        },
+                    });
+                } catch (error) {
+                    console.error("[LAB 3D] initTextureLibrary a échoué :", error);
+                }
+            }
+
             if (typeof window !== "undefined") {
                 window.__LAB_3D_MENU_READY__ = true;
             }
@@ -305,8 +315,9 @@ if (viewport && blocker) {
 
             initFileMenu({
                 onNew: async () => {
-                    await editor.newScene();
-                    gallery.resetViewForNewScene();
+                    const created = await editor.newScene();
+                    // Ne pas toucher à la caméra si l’utilisateur a annulé le dialogue.
+                    if (created) gallery.resetViewForNewScene();
                 },
                 onOpen: () => editor.openScene(),
                 onOpenDisk: () => editor.openSceneFromDisk(),
@@ -314,8 +325,8 @@ if (viewport && blocker) {
                 onSaveAs: () => editor.saveSceneAs(),
                 onSaveDisk: () => editor.saveSceneToDisk(),
                 onClose: async () => {
-                    await editor.closeScene();
-                    gallery.resetViewForNewScene();
+                    const closed = await editor.closeScene();
+                    if (closed) gallery.resetViewForNewScene();
                 },
             });
 
@@ -323,9 +334,30 @@ if (viewport && blocker) {
                 getScene: () => gallery.scene,
                 showStatus: showLabStatus,
             });
+        }
 
+        if (objectLibrary?.bind) {
+            objectLibrary.bind({
+                showStatus: showLabStatus,
+                onSpawnAsset: async (asset, clientX, clientY) => {
+                    if (!editor?.spawnImportedLibraryAssetAtClient) {
+                        showLabStatus("Éditeur non prêt — réessayez");
+                        return;
+                    }
+                    await editor.spawnImportedLibraryAssetAtClient(asset, clientX, clientY);
+                },
+            });
+        }
+
+        if (editor) {
             initImportMenu({
-                onImportFile: (file) => editor.spawnImportedModelFile(file),
+                onImportFile: async (file) => {
+                    if (objectLibrary?.addFiles) {
+                        await objectLibrary.addFiles([file]);
+                        return;
+                    }
+                    await editor.spawnImportedModelFile(file);
+                },
                 showStatus: showLabStatus,
             });
         }

@@ -7,6 +7,8 @@ import {
 } from "./grid-constants.js";
 
 const bounds = new THREE.Box3();
+const worldSize = new THREE.Vector3();
+const meshBounds = new THREE.Box3();
 
 /**
  * @param {THREE.Object3D} mesh
@@ -83,5 +85,52 @@ export function formatObjectTransform(mesh) {
         position: `${p.x.toFixed(1)} · ${p.y.toFixed(1)} · ${p.z.toFixed(1)} m`,
         rotation: `${THREE.MathUtils.radToDeg(r.x).toFixed(0)}° · ${THREE.MathUtils.radToDeg(r.y).toFixed(0)}° · ${THREE.MathUtils.radToDeg(r.z).toFixed(0)}°`,
         scale: `${s.x.toFixed(1)} · ${s.y.toFixed(1)} · ${s.z.toFixed(1)} m`,
+        size: formatObjectWorldSize(mesh),
     };
+}
+
+/**
+ * Cube englobant aligné sur la scène (mètres) : H = Y, L = X, W = Z.
+ * @param {THREE.Object3D} object
+ */
+export function formatObjectWorldSize(object) {
+    const size = getObjectWorldSize(object);
+    if (!size) return "—";
+    return `H ${fmtMeters(size.y)} · L ${fmtMeters(size.x)} · W ${fmtMeters(size.z)}`;
+}
+
+/**
+ * @param {THREE.Object3D} object
+ * @returns {{ x: number, y: number, z: number } | null}
+ */
+export function getObjectWorldSize(object) {
+    if (!object || object.userData?.lightType) return null;
+    object.updateWorldMatrix(true, true);
+    bounds.makeEmpty();
+    const lightMarker = object.userData?.lightMarker;
+    object.traverse((child) => {
+        if (!(child instanceof THREE.Mesh) || !child.visible || !child.geometry) return;
+        if (child === lightMarker) return;
+        const name = child.name || "";
+        if (name === "shadow-overlay") return;
+        if (child.userData?.isHelper || child.userData?.shadowOverlay) return;
+        if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+        const geoBox = child.geometry.boundingBox;
+        if (!geoBox || geoBox.isEmpty()) return;
+        meshBounds.copy(geoBox).applyMatrix4(child.matrixWorld);
+        bounds.union(meshBounds);
+    });
+    if (bounds.isEmpty()) return null;
+    bounds.getSize(worldSize);
+    const x = Math.abs(worldSize.x);
+    const y = Math.abs(worldSize.y);
+    const z = Math.abs(worldSize.z);
+    if (![x, y, z].every((n) => Number.isFinite(n))) return null;
+    return { x, y, z };
+}
+
+/** @param {number} n */
+function fmtMeters(n) {
+    const v = Math.abs(n) < 0.005 ? 0 : n;
+    return `${v.toFixed(2).replace(".", ",")} m`;
 }

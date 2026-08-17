@@ -4,13 +4,17 @@ import { CSG } from "three-csg-ts";
 import Module from "manifold-3d";
 import { mergeBufferGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { disposeFacePaint } from "./lab-face-draw.js";
-import { ensureObjectMaterial, weldGeometryForSmoothNormals } from "./lab-object-textures.js";
+import { ensureObjectMaterial } from "./lab-object-textures.js";
 import { disposeShadowOverlay } from "./lab-shadows.js";
 
 export const LAB_CSG_KEY = "labCsg";
 
 const MAX_CSG_TRIANGLES = 80000;
 const WELD_TOLERANCE = 1e-4;
+/** Scale interne : les panneaux (~4 cm) sont trop fins pour un booléen float fiable. */
+const MANIFOLD_SCALE = 1000;
+/** Légère inflation du cutter pour éviter les faces coplanaires / trous ouverts. */
+const CUTTER_INFLATE = 1.0025;
 
 /** @type {null | Promise<{ Mesh: any, Manifold: any }>} */
 let manifoldReady = null;
@@ -239,6 +243,55 @@ function manifoldToGeometry(manifold) {
 }
 
 /**
+ * Agrandit légèrement une géométrie autour de son centre (évite les coplanarités).
+ * @param {THREE.BufferGeometry} geometry
+ * @param {number} factor
+ * @returns {THREE.BufferGeometry}
+ */
+function inflateGeometryInPlace(geometry, factor) {
+    if (!geometry?.attributes?.position || !(factor > 1)) return geometry;
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    if (!box) return geometry;
+    const cx = (box.min.x + box.max.x) * 0.5;
+    const cy = (box.min.y + box.max.y) * 0.5;
+    const cz = (box.min.z + box.max.z) * 0.5;
+    const pos = geometry.attributes.position;
+    for (let i = 0; i < pos.count; i += 1) {
+        pos.setXYZ(
+            i,
+            cx + (pos.getX(i) - cx) * factor,
+            cy + (pos.getY(i) - cy) * factor,
+            cz + (pos.getZ(i) - cz) * factor
+        );
+    }
+    pos.needsUpdate = true;
+    geometry.computeBoundingBox();
+    return geometry;
+}
+
+/**
+ * UV planaires de secours (XZ) pour texturer après CSG.
+ * @param {THREE.BufferGeometry} geometry
+ */
+function ensurePlanarUv(geometry) {
+    if (geometry.attributes?.uv) return;
+    const pos = geometry.attributes?.position;
+    if (!pos) return;
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox;
+    if (!bbox) return;
+    const sizeX = Math.max(1e-6, bbox.max.x - bbox.min.x);
+    const sizeY = Math.max(1e-6, bbox.max.y - bbox.min.y);
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i += 1) {
+        uv[i * 2] = (pos.getX(i) - bbox.min.x) / sizeX;
+        uv[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / sizeY;
+    }
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+}
+
+/**
  * Booléen Manifold (haute qualité).
  * @param {THREE.BufferGeometry} geomA
  * @param {THREE.BufferGeometry} geomB
@@ -247,8 +300,17 @@ function manifoldToGeometry(manifold) {
 async function subtractWithManifold(geomA, geomB) {
     const { Mesh, Manifold } = await ensureManifold();
 
-    const meshA = geometryToManifoldMesh(Mesh, geomA);
-    const meshB = geometryToManifoldMesh(Mesh, geomB);
+    // Scale up pour fiabiliser les parois fines (panneau 4 cm, etc.)
+    const scaledA = geomA.clone();
+    const scaledB = geomB.clone();
+    scaledA.scale(MANIFOLD_SCALE, MANIFOLD_SCALE, MANIFOLD_SCALE);
+    scaledB.scale(MANIFOLD_SCALE, MANIFOLD_SCALE, MANIFOLD_SCALE);
+    inflateGeometryInPlace(scaledB, CUTTER_INFLATE);
+
+    const meshA = geometryToManifoldMesh(Mesh, scaledA);
+    const meshB = geometryToManifoldMesh(Mesh, scaledB);
+    scaledA.dispose();
+    scaledB.dispose();
 
     let manA = null;
     let manB = null;
@@ -264,13 +326,13 @@ async function subtractWithManifold(geomA, geomB) {
         }
 
         let geometry = manifoldToGeometry(manResult);
+        geometry.scale(1 / MANIFOLD_SCALE, 1 / MANIFOLD_SCALE, 1 / MANIFOLD_SCALE);
         geometry = finalizeCsgGeometry(geometry);
         return geometry;
     } finally {
         manResult?.delete?.();
         manA?.delete?.();
         manB?.delete?.();
-        // Mesh objects from manifold-3d may also need delete in some versions
         meshA?.delete?.();
         meshB?.delete?.();
     }
@@ -284,11 +346,12 @@ async function subtractWithManifold(geomA, geomB) {
  * @returns {THREE.BufferGeometry}
  */
 function subtractWithThreeCsg(geomA, geomB, material) {
-    const CSG_SCALE = 200;
+    const CSG_SCALE = 1000;
     const a = geomA.clone();
     const b = geomB.clone();
     a.scale(CSG_SCALE, CSG_SCALE, CSG_SCALE);
     b.scale(CSG_SCALE, CSG_SCALE, CSG_SCALE);
+    inflateGeometryInPlace(b, CUTTER_INFLATE);
     a.computeVertexNormals();
     b.computeVertexNormals();
     if (!a.attributes.uv) {
@@ -322,18 +385,20 @@ function subtractWithThreeCsg(geomA, geomB, material) {
 }
 
 /**
+ * Post-traitement léger : ne pas reconstruire les normales à plis
+ * (ça ouvrait les parois internes des trous sur panneaux fins).
  * @param {THREE.BufferGeometry} geometry
  * @returns {THREE.BufferGeometry}
  */
 function finalizeCsgGeometry(geometry) {
-    let geo = removeDegenerateTriangles(geometry, 1e-12);
+    let geo = removeDegenerateTriangles(geometry, 1e-14);
     if (geo !== geometry) geometry.dispose();
 
-    const welded = weldGeometryForSmoothNormals(geo, WELD_TOLERANCE * 2, {
-        creaseAngle: (48 * Math.PI) / 180,
-    });
+    const welded = mergeVertices(geo, WELD_TOLERANCE);
     if (welded !== geo) geo.dispose();
 
+    welded.computeVertexNormals();
+    ensurePlanarUv(welded);
     welded.computeBoundingBox();
     welded.computeBoundingSphere();
     return welded;
@@ -365,6 +430,8 @@ export async function subtractLabObjects(target, cutter) {
 
     const material = ensureObjectMaterial(srcTarget).clone();
     material.flatShading = false;
+    // DoubleSide : les faces internes du trou restent visibles même si une normale est ambiguë.
+    material.side = THREE.DoubleSide;
     material.needsUpdate = true;
 
     /** @type {THREE.BufferGeometry} */
@@ -504,10 +571,10 @@ export function serializeCsgGeometry(object) {
 export function createCsgPivotFromGeometry(geometryJSON, materialOpts = {}) {
     const loader = new THREE.BufferGeometryLoader();
     let geometry = loader.parse(geometryJSON);
-    const welded = weldGeometryForSmoothNormals(geometry, WELD_TOLERANCE);
-    if (welded !== geometry) {
+    const cleaned = finalizeCsgGeometry(geometry);
+    if (cleaned !== geometry) {
         geometry.dispose();
-        geometry = welded;
+        geometry = cleaned;
     }
 
     const pivot = new THREE.Group();
@@ -518,6 +585,7 @@ export function createCsgPivotFromGeometry(geometryJSON, materialOpts = {}) {
             roughness: typeof materialOpts.roughness === "number" ? materialOpts.roughness : 0.65,
             metalness: typeof materialOpts.metalness === "number" ? materialOpts.metalness : 0.05,
             flatShading: false,
+            side: THREE.DoubleSide,
             envMapIntensity: 1.15,
         })
     );

@@ -56,7 +56,9 @@ export function initFileMenu(handlers) {
             const action = item.dataset.fileAction;
             closePanel();
             const handler = actions[action];
-            if (handler) preserveFullscreenDuring(() => handler());
+            if (handler) {
+                void preserveFullscreenDuring(async () => handler());
+            }
         });
     });
 
@@ -86,10 +88,48 @@ export function initFileMenu(handlers) {
         } else if (key === "s") {
             event.preventDefault();
             preserveFullscreenDuring(() => handlers.onSave?.());
-        } else if (event.code === "KeyW" && !event.shiftKey) {
-            // Ctrl+W ferme (touche physique W uniquement — évite de voler Ctrl+Z AZERTY).
+        } else if (key === "w" && !event.shiftKey) {
+            // Ctrl+W ferme — basé sur le caractère (QWERTY + AZERTY).
+            // Ne pas utiliser event.code === KeyW : sur AZERTY, Ctrl+Z (touche « Z »)
+            // a code KeyW et ouvrait à tort la boîte « Fermer ».
             event.preventDefault();
             preserveFullscreenDuring(() => handlers.onClose?.());
         }
     }, { capture: true });
+}
+
+/**
+ * Menu « Free Site 3D » — liens externes (ressources libres).
+ */
+export function initFreeSitesMenu() {
+    const menuRoot = document.querySelector('[data-menu="freesites"]');
+    if (!menuRoot) return;
+
+    const trigger = menuRoot.querySelector(".lab-menu__trigger");
+    const panel = menuRoot.querySelector(".lab-menu__panel");
+    if (!trigger || !panel) return;
+
+    function closePanel() {
+        panel.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+    }
+
+    trigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const willOpen = panel.hidden;
+        panel.hidden = !willOpen;
+        trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+
+    panel.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (event.target instanceof HTMLAnchorElement) {
+            closePanel();
+        }
+    });
+
+    document.addEventListener("click", () => closePanel());
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closePanel();
+    });
 }

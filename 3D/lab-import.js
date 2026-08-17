@@ -9,6 +9,8 @@ import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { pickFilePreservingFullscreen } from "./fullscreen.js";
 
 export const LAB_IMPORTED_KEY = "labImported";
+/** Index DFS stable d’un mesh importé (survit au reload de scène). */
+export const LAB_MESH_PERSIST_ID_KEY = "_labMeshPersistId";
 
 /** @typedef {"glb" | "gltf" | "fbx" | "obj" | "stl" | "dae" | "ply" | "blend"} ImportFormat */
 
@@ -102,7 +104,7 @@ export function fileToDataUrl(file) {
  * @param {File} file
  * @returns {Promise<ArrayBuffer>}
  */
-function fileToArrayBuffer(file) {
+export function fileToArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -153,6 +155,22 @@ function dataUrlToBuffer(dataUrl) {
 }
 
 /**
+ * Assigne un id de persistence stable (ordre DFS) à chaque mesh du modèle.
+ * @param {THREE.Object3D} root
+ */
+export function ensureImportedMeshPersistIds(root) {
+    if (!root) return;
+    let index = 0;
+    root.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        if (child.userData?._labNoPaintPick) return;
+        if (typeof child.name === "string" && child.name.startsWith("lab-")) return;
+        child.userData[LAB_MESH_PERSIST_ID_KEY] = index;
+        index += 1;
+    });
+}
+
+/**
  * @param {THREE.Object3D} root
  */
 export function prepareImportedContent(root) {
@@ -182,10 +200,21 @@ export function prepareImportedContent(root) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((mat) => {
             if (!mat) return;
+            // CAD / SolidWorks : forcer opaque sauf alpha GLTF explicite.
+            const alphaMode = mat.userData?.gltf?.alphaMode || mat.userData?.alphaMode;
+            const wantsBlend = alphaMode === "BLEND" || alphaMode === "MASK";
+            if (!wantsBlend) {
+                mat.opacity = 1;
+                mat.transparent = false;
+                mat.depthWrite = true;
+                if ("alphaMap" in mat) mat.alphaMap = null;
+            }
+            delete mat.userData?._labGlass;
             mat.side = mat.side ?? THREE.FrontSide;
             mat.needsUpdate = true;
         });
     });
+    ensureImportedMeshPersistIds(root);
 }
 
 /**

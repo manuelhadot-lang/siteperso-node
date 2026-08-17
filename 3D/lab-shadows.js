@@ -1,10 +1,15 @@
 /** Ombres Three.js natives — la lumière projette ; chaque objet peut couper les siennes. */
 import * as THREE from "three";
-import { LIGHT_TYPE } from "./lab-lights.js";
+import {
+    LIGHT_INTENSITY_KEY,
+    LIGHT_TYPE,
+    registerLightIntensityHook,
+} from "./lab-lights.js";
 import { bindRangeSliderWheel } from "./wheel-utils.js";
 
 export const SHADOW_KEY = "shadowEnabled";
 export const SHADOW_OPACITY_KEY = "shadowOpacity";
+export const SHADOW_FILL_LIGHT_KEY = "_labShadowFillLight";
 export const SHADOW_OPACITY_MAX = 1;
 export const SHADOW_OPACITY_STEP = 0.05;
 export const DEFAULT_SHADOW_OPACITY = 0.85;
@@ -259,6 +264,185 @@ export function getLightShadowOpacity(pivot) {
 }
 
 /**
+ * shadow.intensity n’existe dans le shader qu’à partir de r166.
+ * Ne pas tester `typeof light.shadow.intensity === "number"` : une ancienne
+ * assignation JS rendrait le test vrai alors que r132 ignore la propriété.
+ * @param {THREE.Light} light
+ * @returns {boolean}
+ */
+function supportsNativeShadowIntensity(light) {
+    if (!light?.shadow) return false;
+    const rev = parseInt(String(THREE.REVISION), 10);
+    return Number.isFinite(rev) && rev >= 166;
+}
+
+/**
+ * Ajouter / retirer une lumière change le nombre de slots dans le shader :
+ * sans needsUpdate, la fill est ignorée et la densité d’ombre ne fait rien.
+ * @param {THREE.Object3D | null | undefined} fromObject
+ */
+function markMaterialsNeedLightRebuild(fromObject) {
+    let root = fromObject;
+    while (root?.parent) root = root.parent;
+    if (!root) return;
+    root.traverse((obj) => {
+        const mat = obj.material;
+        if (!mat) return;
+        const list = Array.isArray(mat) ? mat : [mat];
+        for (const m of list) {
+            if (m?.isMaterial) m.needsUpdate = true;
+        }
+    });
+}
+
+/**
+ * @param {THREE.Light} fill
+ * @param {THREE.Light} light
+ */
+function syncShadowFillFromMain(fill, light) {
+    if (!fill || !light) return;
+    fill.color.copy(light.color);
+    fill.position.copy(light.position);
+    fill.visible = light.visible;
+    if (fill.isSpotLight && light.isSpotLight) {
+        fill.angle = light.angle;
+        fill.penumbra = light.penumbra;
+        fill.distance = light.distance;
+        fill.decay = light.decay;
+        fill.target = light.target;
+    } else if (fill.isDirectionalLight && light.isDirectionalLight) {
+        fill.target = light.target;
+    } else if (fill.isPointLight && light.isPointLight) {
+        fill.distance = light.distance;
+        fill.decay = light.decay;
+    }
+}
+
+/**
+ * @param {THREE.Group} pivot
+ * @param {THREE.Light} light
+ * @returns {THREE.Light | null}
+ */
+function ensureShadowFillLight(pivot, light) {
+    let fill = /** @type {THREE.Light | undefined} */ (pivot.userData[SHADOW_FILL_LIGHT_KEY]);
+    if (fill) {
+        syncShadowFillFromMain(fill, light);
+        return fill;
+    }
+
+    if (light.isSpotLight) {
+        fill = new THREE.SpotLight(
+            light.color.getHex(),
+            0,
+            light.distance,
+            light.angle,
+            light.penumbra,
+            light.decay
+        );
+        fill.target = light.target;
+    } else if (light.isDirectionalLight) {
+        fill = new THREE.DirectionalLight(light.color.getHex(), 0);
+        fill.target = light.target;
+    } else if (light.isPointLight) {
+        fill = new THREE.PointLight(light.color.getHex(), 0, light.distance, light.decay);
+    } else {
+        return null;
+    }
+
+    fill.castShadow = false;
+    fill.position.copy(light.position);
+    fill.name = "lab-shadow-fill";
+    fill.userData._labShadowFill = true;
+    fill.userData._labNoPaintPick = true;
+    pivot.add(fill);
+    pivot.userData[SHADOW_FILL_LIGHT_KEY] = fill;
+    markMaterialsNeedLightRebuild(pivot);
+    return fill;
+}
+
+/**
+ * @param {THREE.Group} pivot
+ */
+export function removeShadowFillLight(pivot) {
+    const fill = pivot?.userData?.[SHADOW_FILL_LIGHT_KEY];
+    if (!fill) return;
+    pivot.remove(fill);
+    try {
+        fill.dispose?.();
+    } catch {
+        /* ignore */
+    }
+    delete pivot.userData[SHADOW_FILL_LIGHT_KEY];
+    markMaterialsNeedLightRebuild(pivot);
+}
+
+/**
+ * Répartit l’intensité entre lumière qui projette et lumière de remplissage
+ * (contournement Three r132 sans shadow.intensity).
+ * Zones éclairées ≈ base ; zones d’ombre ≈ base × (1 − densité).
+ * @param {THREE.Group} pivot
+ * @param {THREE.Light} light
+ * @param {number} opacity 0 = ombre invisible, 1 = ombre max
+ * @param {number} [baseIntensity]
+ */
+function redistributeShadowSplit(pivot, light, opacity, baseIntensity) {
+    const value = THREE.MathUtils.clamp(opacity, 0, SHADOW_OPACITY_MAX);
+    const base =
+        typeof baseIntensity === "number"
+            ? Math.max(0, baseIntensity)
+            : typeof pivot.userData[LIGHT_INTENSITY_KEY] === "number"
+              ? pivot.userData[LIGHT_INTENSITY_KEY]
+              : light.intensity + (pivot.userData[SHADOW_FILL_LIGHT_KEY]?.intensity || 0);
+    pivot.userData[LIGHT_INTENSITY_KEY] = base;
+    pivot.userData[SHADOW_OPACITY_KEY] = value;
+
+    if (supportsNativeShadowIntensity(light)) {
+        light.shadow.intensity = value;
+        removeShadowFillLight(pivot);
+        light.intensity = base;
+        return;
+    }
+
+    // Ne jamais écrire shadow.intensity sur r132 : ça fausse la détection native.
+    if (light.shadow && "intensity" in light.shadow) {
+        try {
+            delete light.shadow.intensity;
+        } catch {
+            /* ignore */
+        }
+    }
+
+    if (!light.castShadow) {
+        removeShadowFillLight(pivot);
+        light.intensity = base;
+        return;
+    }
+
+    // Garder la fill même à densité ≈ 1 (intensité ~0) pour un nombre de
+    // lumières stable dans le shader.
+    const fill = ensureShadowFillLight(pivot, light);
+    if (!fill) {
+        light.intensity = base;
+        return;
+    }
+    syncShadowFillFromMain(fill, light);
+    light.intensity = base * value;
+    fill.intensity = base * (1 - value);
+}
+
+registerLightIntensityHook((pivot, intensity) => {
+    const light = pivot?.userData?.mainLight;
+    if (!light?.castShadow) return false;
+    if (supportsNativeShadowIntensity(light)) {
+        light.intensity = intensity;
+        return true;
+    }
+    redistributeShadowSplit(pivot, light, readShadowOpacity(pivot), intensity);
+    invalidateLabShadows();
+    return true;
+});
+
+/**
  * @param {THREE.Group} pivot
  * @param {boolean} enabled
  */
@@ -277,7 +461,14 @@ export function setLightShadowEnabled(pivot, enabled) {
     light.castShadow = enabled && canCast;
     if (light.castShadow) {
         configureLightShadowMap(light);
-        applyLightShadowOpacity(light, readShadowOpacity(pivot));
+        redistributeShadowSplit(pivot, light, readShadowOpacity(pivot));
+    } else {
+        removeShadowFillLight(pivot);
+        const base =
+            typeof pivot.userData[LIGHT_INTENSITY_KEY] === "number"
+                ? pivot.userData[LIGHT_INTENSITY_KEY]
+                : light.intensity;
+        light.intensity = base;
     }
     invalidateLabShadows();
 }
@@ -291,21 +482,7 @@ export function enableLightShadowsByDefault(pivot) {
 }
 
 /**
- * @param {THREE.Light} light
- * @param {number} opacity
- */
-function applyLightShadowOpacity(light, opacity) {
-    const value = THREE.MathUtils.clamp(opacity, 0, SHADOW_OPACITY_MAX);
-    if ("shadowIntensity" in light) {
-        light.shadowIntensity = value;
-        return;
-    }
-    if (light.shadow) {
-        light.shadow.intensity = value;
-    }
-}
-
-/**
+ * Densité / noirceur de l’ombre projetée par la lumière (0 = douce, 1 = max).
  * @param {THREE.Group} pivot
  * @param {number} opacity
  */
@@ -314,7 +491,7 @@ export function setLightShadowOpacity(pivot, opacity) {
     pivot.userData[SHADOW_OPACITY_KEY] = value;
     const light = pivot.userData.mainLight;
     if (light?.castShadow) {
-        applyLightShadowOpacity(light, value);
+        redistributeShadowSplit(pivot, light, value);
         invalidateLabShadows();
     }
 }

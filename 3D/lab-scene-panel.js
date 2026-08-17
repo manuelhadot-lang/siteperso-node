@@ -2,8 +2,12 @@
 import { createSceneRegistry } from "./lab-scene-registry.js";
 import {
     bindIntensitySliderWheel,
+    bindSpotPenumbraSliderWheel,
     LIGHT_INTENSITY_MAX,
     LIGHT_INTENSITY_STEP,
+    SPOT_PENUMBRA_MAX,
+    SPOT_PENUMBRA_MIN,
+    SPOT_PENUMBRA_STEP,
 } from "./lab-lights.js";
 import {
     bindShadowOpacitySliderWheel,
@@ -96,8 +100,11 @@ export function initScenePanel(panel) {
 
             const labelBtn = document.createElement("button");
             labelBtn.type = "button";
-            labelBtn.className = "lab-scene-list__label lab-scene-list__label--icon";
-            labelBtn.title = item.detail ? `${item.label} — ${item.detail}` : item.label;
+            labelBtn.className = "lab-scene-list__label";
+            const renameHint = item.onRename ? " — Double-clic pour renommer" : "";
+            labelBtn.title = item.detail
+                ? `${item.label} — ${item.detail}${renameHint}`
+                : `${item.label}${renameHint}`;
             labelBtn.setAttribute("aria-label", item.detail ? `${item.label}, ${item.detail}` : item.label);
 
             const iconSpan = document.createElement("span");
@@ -105,9 +112,21 @@ export function initScenePanel(panel) {
             iconSpan.setAttribute("aria-hidden", "true");
             labelBtn.appendChild(iconSpan);
 
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "lab-scene-list__name";
+            nameSpan.textContent = item.label;
+            labelBtn.appendChild(nameSpan);
+
             labelBtn.addEventListener("click", () => {
                 registry.selectItem(item.id);
             });
+            if (item.onRename) {
+                labelBtn.addEventListener("dblclick", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    item.onRename();
+                });
+            }
 
             labelWrap.appendChild(labelBtn);
 
@@ -176,10 +195,47 @@ export function initScenePanel(panel) {
                 row.appendChild(intensityWrap);
             }
 
+            if (item.getSpotPenumbra && item.setSpotPenumbra) {
+                const penumbraWrap = document.createElement("label");
+                penumbraWrap.className = "lab-scene-list__penumbra";
+                penumbraWrap.title = "Pénombre du spot (0 = bord net, 1 = bord doux)";
+
+                const penumbraSlider = document.createElement("input");
+                penumbraSlider.type = "range";
+                penumbraSlider.min = String(SPOT_PENUMBRA_MIN);
+                penumbraSlider.max = String(SPOT_PENUMBRA_MAX);
+                penumbraSlider.step = String(SPOT_PENUMBRA_STEP);
+                penumbraSlider.value = String(item.getSpotPenumbra());
+
+                const penumbraValue = document.createElement("span");
+                penumbraValue.className = "lab-scene-list__penumbra-value";
+                penumbraValue.textContent = Number(penumbraSlider.value).toFixed(2).replace(".", ",");
+
+                const penumbraLabel = document.createElement("span");
+                penumbraLabel.className = "lab-scene-list__penumbra-label";
+                penumbraLabel.textContent = "Pénombre";
+
+                const applyPenumbra = (value) => {
+                    registry.setSpotPenumbra(item.id, value);
+                    penumbraValue.textContent = value.toFixed(2).replace(".", ",");
+                };
+
+                penumbraSlider.addEventListener("click", (e) => e.stopPropagation());
+                penumbraSlider.addEventListener("input", () => {
+                    applyPenumbra(Number(penumbraSlider.value));
+                });
+                bindSpotPenumbraSliderWheel(penumbraSlider, applyPenumbra);
+
+                penumbraWrap.appendChild(penumbraLabel);
+                penumbraWrap.appendChild(penumbraSlider);
+                penumbraWrap.appendChild(penumbraValue);
+                row.appendChild(penumbraWrap);
+            }
+
             if (item.getShadowOpacity && item.setShadowOpacity) {
                 const shadowOpacityWrap = document.createElement("label");
                 shadowOpacityWrap.className = "lab-scene-list__shadow-opacity";
-                shadowOpacityWrap.title = "Opacité de l'ombre";
+                shadowOpacityWrap.title = "Densité de l'ombre (0 = claire, 1 = foncée)";
 
                 const shadowOpacitySlider = document.createElement("input");
                 shadowOpacitySlider.type = "range";

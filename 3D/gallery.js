@@ -1,10 +1,10 @@
 /** Galerie Three.js — grille, navigation ZQSD sans verrouillage souris (panneau toujours accessible). */
 import * as THREE from "three";
-import { movePlayer, moveSpeed, setMoveSpeed, jump, updatePlayerVertical, getGroundEyeY, setCollisionDeltaTime, setObjectCollisionEnabled, setGroundCollisionEnabled, resetPlayerVerticalMotion, snapPlayerToGroundNow, isPlayerGrounded, PLAYER_HEIGHT } from "./lab-collision.js";
+import { movePlayer, moveSpeed, setMoveSpeed, jump, updatePlayerVertical, getGroundEyeY, setCollisionDeltaTime, setObjectCollisionEnabled, setGroundCollisionEnabled, resetPlayerVerticalMotion, snapPlayerToGroundNow, isPlayerGrounded, PLAYER_HEIGHT, suppressPlayerCollisionBriefly } from "./lab-collision.js";
 import { GRID_SIZE, formatGridSizeMeters } from "./grid-constants.js";
 import { initQuadView } from "./lab-quad-view.js";
 import { createEnvironmentItem } from "./lab-scene-registry.js";
-import { configureRendererShadows, configureLightShadowMap, getObjectShadowEnabled, getObjectShadowOpacity, setObjectShadowEnabled, setObjectShadowOpacity } from "./lab-shadows.js";
+import { configureRendererShadows, getObjectShadowEnabled, getObjectShadowOpacity, setObjectShadowEnabled, setObjectShadowOpacity } from "./lab-shadows.js";
 import { applyStudioEnvironment } from "./lab-studio-env.js";
 import { normalizeWheelDelta } from "./wheel-utils.js";
 
@@ -29,8 +29,20 @@ const BREATH_FREQ = 1.35;
 const BREATH_AMP = 0.007;
 /** Vue d’ensemble — hauteur / distance adaptées à la taille du monde. */
 const DEFAULT_OVERVIEW_PITCH = -0.42;
-/** FOV vertical — ~50° ≈ vision humaine à l’écran ; 58° élargissait trop l’espace. */
-const CAMERA_FOV = 50;
+/** FOV conception / vue d’ensemble (plus serré pour cadrer les objets). */
+const CAMERA_FOV_DESIGN = 50;
+/**
+ * FOV FPS (vertical, Three.js).
+ * 70° restait trop « télé » : peu de périphérie, pièce 4×3 m peu lisible.
+ * ~85° ≈ champ confortable écran pour sentir murs / plafond / profondeur 1:1.
+ */
+const CAMERA_FOV_FPS = 85;
+/** Plan near caméra FPS : assez bas pour les murs proches, sans z-fighting excessif. */
+const CAMERA_NEAR_FPS = 0.08;
+const CAMERA_NEAR_DESIGN = 0.02;
+/** Brouillard : near > 0 pour ne pas aplatir le contraste dans une pièce. */
+const SCENE_FOG_NEAR = 14;
+const SCENE_FOG_FAR = 90;
 const CLICK_THRESHOLD_PX = 8;
 const FOCUS_DISTANCE = 1.35;
 
@@ -74,6 +86,8 @@ export function initGallery(container, ui) {
     let drawModeActive = false;
     let terrainSculptModeActive = false;
     let vegetationPlaceModeActive = false;
+    let avatarPlaceModeActive = false;
+    let lightPlaceModeActive = false;
     let rightLookActive = false;
     /** @type {"fps" | "design" | "overview"} */
     let movementMode = "design";
@@ -88,27 +102,23 @@ export function initGallery(container, ui) {
     let breathPhase = 0;
     /** @type {(() => void) | null} */
     let afterRender = null;
+    /** @type {(() => void) | null} */
+    let beforeRender = null;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a1a);
-    scene.fog = new THREE.Fog(0x1a1a1a, 0, 60);
+    scene.fog = new THREE.Fog(0x1a1a1a, SCENE_FOG_NEAR, SCENE_FOG_FAR);
 
-    const defaultAmbient = new THREE.AmbientLight(0xffffff, 0.28);
+    const defaultAmbient = new THREE.AmbientLight(0xffffff, 0.42);
     defaultAmbient.userData.labDefaultLight = true;
-    const defaultHemisphere = new THREE.HemisphereLight(0xdceeff, 0x2a3824, 0.34);
+    const defaultHemisphere = new THREE.HemisphereLight(0xdceeff, 0x2a3824, 0.38);
     defaultHemisphere.position.set(0, 40, 0);
     defaultHemisphere.userData.labDefaultLight = true;
-    const defaultSun = new THREE.DirectionalLight(0xfff2df, 0.95);
-    defaultSun.position.set(16, 26, 10);
-    defaultSun.castShadow = true;
-    configureLightShadowMap(defaultSun);
-    if ("shadowIntensity" in defaultSun) {
-        defaultSun.shadowIntensity = 0.85;
-    }
-    defaultSun.userData.labDefaultLight = true;
-    scene.add(defaultAmbient, defaultHemisphere, defaultSun);
+    // Pas de soleil directionnel « fantôme » : les ombres / faisceaux
+    // n’apparaissent qu’avec les lumières placées par l’utilisateur.
+    scene.add(defaultAmbient, defaultHemisphere);
 
-    camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.02, 1000);
+    camera = new THREE.PerspectiveCamera(CAMERA_FOV_DESIGN, 1, CAMERA_NEAR_DESIGN, 1000);
     pitch.add(camera);
     yaw.add(pitch);
     scene.add(yaw);
@@ -221,6 +231,18 @@ export function initGallery(container, ui) {
         orbitPhi = Math.asin(THREE.MathUtils.clamp(dy / orbitDistance, -0.99, 0.99));
     }
 
+    /**
+     * Hauteur mini caméra en inspection (près du sol/objet), pas la hauteur d’œil FPS (1,62 m).
+     * @param {number} x
+     * @param {number} z
+     */
+    function getInspectMinCamY(x, z) {
+        return getGroundEyeY(x, z) - PLAYER_HEIGHT + 0.08;
+    }
+
+    /** Distance orbite sous laquelle on autorise une caméra basse (cadrage face / objet). */
+    const INSPECT_ORBIT_CLOSE = 4.5;
+
     function applyOrbitCamera() {
         const cosPhi = Math.cos(orbitPhi);
         yaw.position.set(
@@ -228,27 +250,49 @@ export function initGallery(container, ui) {
             orbitTarget.y + orbitDistance * Math.sin(orbitPhi),
             orbitTarget.z + orbitDistance * Math.cos(orbitTheta) * cosPhi
         );
-        const minEye = getGroundEyeY(yaw.position.x, yaw.position.z);
-        // En inspection rapprochée, ne pas bloquer le zoom par la hauteur « œil ».
-        const floorPad = orbitDistance < 2.2 ? -0.55 : 0.2;
-        yaw.position.y = Math.max(yaw.position.y, minEye + floorPad);
+        const minCamY =
+            orbitDistance < INSPECT_ORBIT_CLOSE
+                ? getInspectMinCamY(yaw.position.x, yaw.position.z)
+                : getGroundEyeY(yaw.position.x, yaw.position.z) + 0.15;
+        yaw.position.y = Math.max(yaw.position.y, minCamY);
         aimAtWorldTarget(orbitTarget);
     }
 
     /**
+     * Met à jour le pivot d’orbite (mode Conception).
+     * Par défaut : ne déplace pas la caméra — seul `frame: true` recentre la vue.
+     * Sans frame : met à jour le pivot + angles (caméra fixe). Pas de réorientation
+     * pendant un drag gizmo (sinon le TranslateControls « glisse » bizarrement).
      * @param {THREE.Vector3 | { x: number, y: number, z: number } | null} target
      * @param {{ frame?: boolean }} [opts]
      */
     function setOrbitTarget(target, opts = {}) {
         if (target) {
             orbitTarget.set(target.x, target.y, target.z);
-        } else {
-            orbitTarget.set(0, 0.5, 0);
         }
-        if (opts.frame !== false && movementMode === "design") {
-            syncOrbitFromCamera();
+        if (!target || movementMode !== "design") return;
+        // Recalcule angles/distance pour le prochain orbit, sans bouger la caméra.
+        syncOrbitFromCamera();
+        if (opts.frame === true) {
             applyOrbitCamera();
         }
+        // Pas d’aimAtWorldTarget ici : réorienter le regard après un drag
+        // (surtout spot) donne l’impression que l’objet « saute ».
+    }
+
+    function syncCameraFovForMode() {
+        const nextFov = movementMode === "fps" ? CAMERA_FOV_FPS : CAMERA_FOV_DESIGN;
+        const nextNear = movementMode === "fps" ? CAMERA_NEAR_FPS : CAMERA_NEAR_DESIGN;
+        let dirty = false;
+        if (Math.abs(camera.fov - nextFov) >= 0.01) {
+            camera.fov = nextFov;
+            dirty = true;
+        }
+        if (Math.abs(camera.near - nextNear) >= 0.001) {
+            camera.near = nextNear;
+            dirty = true;
+        }
+        if (dirty) camera.updateProjectionMatrix();
     }
 
     function applyMovementMode(mode) {
@@ -257,6 +301,7 @@ export function initGallery(container, ui) {
         container.classList.toggle("lab-viewport--fps", movementMode === "fps");
         container.classList.toggle("lab-viewport--design", movementMode === "design");
         container.classList.toggle("lab-viewport--overview", movementMode === "overview");
+        syncCameraFovForMode();
 
         if (movementMode === "overview") {
             setObjectCollisionEnabled(false);
@@ -291,6 +336,201 @@ export function initGallery(container, ui) {
         const groundEyeY = getGroundEyeY(yaw.position.x, yaw.position.z);
         yaw.position.y = Math.max(eyeY, groundEyeY + 2.5);
         clampPosition({ allowFly: true });
+    }
+
+    /**
+     * Téléporte l’avatar (pieds sur le point, yeux à PLAYER_HEIGHT au-dessus).
+     * @param {number | THREE.Vector3} x
+     * @param {number} [y]
+     * @param {number} [z]
+     * @param {{ yaw?: number, switchToFps?: boolean, snapGround?: boolean, exact?: boolean }} [opts]
+     */
+    function placePlayerAt(x, y, z, opts = {}) {
+        let px;
+        let py;
+        let pz;
+        if (x && typeof x === "object" && "x" in x) {
+            px = Number(x.x);
+            py = Number(x.y);
+            pz = Number(x.z);
+            opts = y && typeof y === "object" ? y : opts;
+        } else {
+            px = Number(x);
+            py = Number(y);
+            pz = Number(z);
+        }
+        if (![px, py, pz].every(Number.isFinite)) return false;
+
+        const wantFps = opts.switchToFps !== false;
+        // Placement curseur rouge : ne jamais re-snaper / clamper hors du point choisi.
+        const exact = opts.exact === true;
+        const snapGround = !exact && opts.snapGround !== false;
+
+        // Évite que les collisions / la gravité éjectent l’avatar du point cliqué.
+        suppressPlayerCollisionBriefly(exact ? 600 : 350);
+        resetPlayerVerticalMotion();
+        yaw.position.set(px, py + PLAYER_HEIGHT, pz);
+        if (typeof opts.yaw === "number" && Number.isFinite(opts.yaw)) {
+            yaw.rotation.y = opts.yaw;
+        }
+        // Regard un peu horizontal (le mode Conception regarde souvent vers le bas).
+        if (exact || wantFps) {
+            const halfPi = Math.PI / 2 - 0.01;
+            pitch.rotation.x = THREE.MathUtils.clamp(-0.12, -halfPi, halfPi);
+        }
+        resetHeadBob(true);
+
+        if (wantFps && movementMode !== "fps") {
+            // Activer le FPS sans snaper (on gère le sol juste après).
+            movementMode = "fps";
+            enterExplore();
+            container.classList.toggle("lab-viewport--fps", true);
+            container.classList.toggle("lab-viewport--design", false);
+            container.classList.toggle("lab-viewport--overview", false);
+            setObjectCollisionEnabled(true);
+            setGroundCollisionEnabled(true);
+            resetHeadBob(true);
+            syncCameraFovForMode();
+            onMovementModeChange?.(movementMode);
+        }
+
+        if (snapGround && movementMode === "fps") {
+            snapPlayerToGroundNow();
+            // Conserver le XZ du curseur (le snap ne touche que Y).
+            yaw.position.x = px;
+            yaw.position.z = pz;
+        } else {
+            yaw.position.set(px, py + PLAYER_HEIGHT, pz);
+            resetPlayerVerticalMotion();
+        }
+
+        if (exact) {
+            // Pas de clamp XZ : le curseur rouge est la source de vérité.
+            yaw.position.set(px, py + PLAYER_HEIGHT, pz);
+        } else {
+            clampPosition({ allowFly: movementMode !== "fps" });
+            yaw.position.x = px;
+            yaw.position.z = pz;
+        }
+        return true;
+    }
+
+    /**
+     * État caméra / orbite pour enregistrement de scène.
+     * @returns {{
+     *   mode: "fps" | "design" | "overview",
+     *   yaw: { x: number, y: number, z: number, ry: number },
+     *   pitch: number,
+     *   orbitTarget: { x: number, y: number, z: number },
+     *   orbitDistance: number,
+     *   orbitTheta: number,
+     *   orbitPhi: number,
+     * }}
+     */
+    function serializeView() {
+        return {
+            mode: movementMode,
+            yaw: {
+                x: yaw.position.x,
+                y: yaw.position.y,
+                z: yaw.position.z,
+                ry: yaw.rotation.y,
+            },
+            pitch: pitch.rotation.x,
+            orbitTarget: {
+                x: orbitTarget.x,
+                y: orbitTarget.y,
+                z: orbitTarget.z,
+            },
+            orbitDistance,
+            orbitTheta,
+            orbitPhi,
+        };
+    }
+
+    /**
+     * Restaure la caméra / orbite après ouverture de scène (sans recentrer).
+     * @param {unknown} view
+     * @returns {boolean}
+     */
+    function restoreView(view) {
+        if (!view || typeof view !== "object") return false;
+        const raw = /** @type {Record<string, unknown>} */ (view);
+        const mode = normalizeMode(typeof raw.mode === "string" ? raw.mode : "design");
+
+        const ot = raw.orbitTarget && typeof raw.orbitTarget === "object"
+            ? /** @type {Record<string, unknown>} */ (raw.orbitTarget)
+            : null;
+        if (ot) {
+            orbitTarget.set(
+                Number(ot.x) || 0,
+                Number.isFinite(Number(ot.y)) ? Number(ot.y) : 0.5,
+                Number(ot.z) || 0
+            );
+        }
+        if (typeof raw.orbitDistance === "number" && Number.isFinite(raw.orbitDistance)) {
+            orbitDistance = Math.max(0.08, raw.orbitDistance);
+        }
+        if (typeof raw.orbitTheta === "number" && Number.isFinite(raw.orbitTheta)) {
+            orbitTheta = raw.orbitTheta;
+        }
+        if (typeof raw.orbitPhi === "number" && Number.isFinite(raw.orbitPhi)) {
+            orbitPhi = THREE.MathUtils.clamp(raw.orbitPhi, -1.2, 1.2);
+        }
+
+        const yawData = raw.yaw && typeof raw.yaw === "object"
+            ? /** @type {Record<string, unknown>} */ (raw.yaw)
+            : null;
+        if (yawData) {
+            yaw.position.set(
+                Number(yawData.x) || 0,
+                Number.isFinite(Number(yawData.y)) ? Number(yawData.y) : getOverviewEyeY(),
+                Number(yawData.z) || 0
+            );
+            if (typeof yawData.ry === "number" && Number.isFinite(yawData.ry)) {
+                yaw.rotation.y = yawData.ry;
+            }
+        }
+        if (typeof raw.pitch === "number" && Number.isFinite(raw.pitch)) {
+            const halfPi = Math.PI / 2 - 0.01;
+            pitch.rotation.x = THREE.MathUtils.clamp(raw.pitch, -halfPi, halfPi);
+        }
+
+        // Appliquer le mode sans écraser la pose : ne pas passer par applyMovementMode
+        // (design y force applyOrbitCamera depuis des angles potentiellement incomplets).
+        movementMode = mode;
+        enterExplore();
+        container.classList.toggle("lab-viewport--fps", movementMode === "fps");
+        container.classList.toggle("lab-viewport--design", movementMode === "design");
+        container.classList.toggle("lab-viewport--overview", movementMode === "overview");
+        syncCameraFovForMode();
+
+        if (movementMode === "overview") {
+            setObjectCollisionEnabled(false);
+            setGroundCollisionEnabled(false);
+            resetPlayerVerticalMotion();
+            clampPosition({ allowFly: true });
+        } else if (movementMode === "fps") {
+            setObjectCollisionEnabled(true);
+            setGroundCollisionEnabled(true);
+            resetPlayerVerticalMotion();
+            snapPlayerToGroundNow();
+            resetHeadBob(true);
+        } else {
+            setObjectCollisionEnabled(true);
+            setGroundCollisionEnabled(true);
+            resetPlayerVerticalMotion();
+            resetHeadBob();
+            // Pose explicite déjà restaurée : resynchroniser angles ↔ caméra sans jump.
+            if (yawData) {
+                syncOrbitFromCamera();
+            } else {
+                applyOrbitCamera();
+            }
+        }
+
+        onMovementModeChange?.(movementMode);
+        return true;
     }
 
     if (moveSpeedInput) {
@@ -553,14 +793,49 @@ export function initGallery(container, ui) {
         onViewportContextMenu(event);
     }, true);
 
+    function cancelLookGesture() {
+        leftLookActive = false;
+        rightLookActive = false;
+        rightClickHandledThisGesture = false;
+        pendingLeftClick = null;
+        pendingRightClick = null;
+        container.classList.remove("lab-viewport--look");
+    }
+
+    /** Trait de peinture en cours : bloque toute orbite/regard (même clic droit). */
+    let paintStrokeActive = false;
+
     container.addEventListener("mousedown", (event) => {
         if (!canInteractAt(event.clientX, event.clientY)) return;
         if (isViewportUiTarget(event.target)) return;
 
-        if (terrainSculptModeActive) {
+        // Peinture / triangulation / terrain / placement avatar : clic gauche = outil, jamais look/orbite.
+        // (Doit être avant !exploreActive, sinon le 1er clic armé leftLookActive.)
+        if (drawModeActive || terrainSculptModeActive || paintStrokeActive || avatarPlaceModeActive || lightPlaceModeActive) {
+            if (event.button === 0) {
+                leftLookActive = false;
+                pendingLeftClick = null;
+                if (!rightLookActive) container.classList.remove("lab-viewport--look");
+                // Placement avatar / lumière : clic = pose immédiate (pas besoin de court-glisser).
+                if ((avatarPlaceModeActive || lightPlaceModeActive) && exploreActive && !gizmoDragging) {
+                    emitCanvasLeftClick(event);
+                }
+                return;
+            }
             if (event.button === 2) {
+                // Pendant un trait de peinture : pas d’orbite (sinon la vue « tourne » en peignant).
+                if (paintStrokeActive) {
+                    event.preventDefault();
+                    return;
+                }
                 rightLookActive = true;
-                pendingRightClick = null;
+                pendingRightClick = terrainSculptModeActive
+                    ? null
+                    : {
+                          startX: event.clientX,
+                          startY: event.clientY,
+                          event,
+                      };
                 container.classList.add("lab-viewport--look");
                 event.preventDefault();
             }
@@ -592,7 +867,6 @@ export function initGallery(container, ui) {
             return;
         }
         if (gizmoDragging) return;
-        if (drawModeActive) return;
 
         if (event.button === 0) {
             leftLookActive = true;
@@ -631,7 +905,7 @@ export function initGallery(container, ui) {
     window.addEventListener("mouseup", (event) => {
         if (event.button === 0) {
             leftLookActive = false;
-            container.classList.remove("lab-viewport--look");
+            if (!rightLookActive) container.classList.remove("lab-viewport--look");
 
             if (pendingLeftClick) {
                 const dx = event.clientX - pendingLeftClick.startX;
@@ -661,12 +935,32 @@ export function initGallery(container, ui) {
             rightLookActive = false;
             rightClickHandledThisGesture = false;
             pendingRightClick = null;
-            container.classList.remove("lab-viewport--look");
+            if (!leftLookActive) container.classList.remove("lab-viewport--look");
         }
     });
 
+    // Filet : si preventDefault() sur pointerdown (peinture) coupe les mouseup,
+    // pointerup doit quand même désarmer le look/orbite — sinon la caméra
+    // reste en rotation tant que la souris bouge.
+    // Ne pas toucher pendingLeft/RightClick : mouseup gère encore les clics courts.
+    window.addEventListener("pointerup", (event) => {
+        if (event.button === 0) {
+            leftLookActive = false;
+            if (!rightLookActive) container.classList.remove("lab-viewport--look");
+        }
+        if (event.button === 2) {
+            rightLookActive = false;
+            rightClickHandledThisGesture = false;
+            if (!leftLookActive) container.classList.remove("lab-viewport--look");
+        }
+    });
+    window.addEventListener("pointercancel", () => {
+        cancelLookGesture();
+        paintStrokeActive = false;
+    });
+
     window.addEventListener("mousemove", (event) => {
-        const terrainRightLook = terrainSculptModeActive && rightLookActive;
+        const usingRightLook = rightLookActive && !gizmoDragging && !paintStrokeActive;
 
         // Tant que le déplacement reste sous le seuil, c’est un clic potentiel :
         // ne pas démarrer look / orbite (sinon la désélection « clic vide » rate souvent).
@@ -678,12 +972,25 @@ export function initGallery(container, ui) {
             }
             pendingLeftClick = null;
         }
+        if (pendingRightClick && usingRightLook) {
+            const dx = event.clientX - pendingRightClick.startX;
+            const dy = event.clientY - pendingRightClick.startY;
+            if (dx * dx + dy * dy < CLICK_THRESHOLD_PX * CLICK_THRESHOLD_PX) {
+                return;
+            }
+            pendingRightClick = null;
+        }
 
         const normalLeftLook =
-            leftLookActive && !gizmoDragging && !drawModeActive && !terrainSculptModeActive && exploreActive;
-        if (!terrainRightLook && !normalLeftLook) return;
+            leftLookActive &&
+            !gizmoDragging &&
+            !drawModeActive &&
+            !paintStrokeActive &&
+            !terrainSculptModeActive &&
+            exploreActive;
+        if (!usingRightLook && !normalLeftLook) return;
 
-        if (movementMode === "design" && !terrainRightLook) {
+        if (movementMode === "design") {
             orbitTheta -= event.movementX * ORBIT_SENSITIVITY;
             orbitPhi = THREE.MathUtils.clamp(
                 orbitPhi + event.movementY * ORBIT_SENSITIVITY,
@@ -718,11 +1025,11 @@ export function initGallery(container, ui) {
         const groundEyeY = getGroundEyeY(yaw.position.x, yaw.position.z);
 
         if (observeMode || movementMode === "design") {
-            // Vue / conception : monter librement.
-            // En conception rapprochée, autoriser de descendre près de la surface.
-            const closeInspect = movementMode === "design" && orbitDistance < 2.2;
+            // Conception : en cadrage proche, autoriser la hauteur de la face / du centre objet
+            // (sinon getGroundEyeY ≈ 1,62 m remonte toujours la caméra).
+            const closeInspect = movementMode === "design" && orbitDistance < INSPECT_ORBIT_CLOSE;
             const minY = closeInspect
-                ? Math.max(-0.2, groundEyeY - 0.55)
+                ? Math.max(-0.2, getInspectMinCamY(yaw.position.x, yaw.position.z))
                 : Math.max(0.5, groundEyeY);
             yaw.position.y = THREE.MathUtils.clamp(yaw.position.y, minY, maxY);
         } else if (allowFly) {
@@ -752,7 +1059,7 @@ export function initGallery(container, ui) {
     }
 
     /**
-     * Positionne et oriente la caméra devant un objet (double-clic).
+     * Positionne et oriente la caméra devant un objet (double-clic / sélection).
      * @param {THREE.Object3D} object
      */
     function focusOnObject(object) {
@@ -764,25 +1071,83 @@ export function initGallery(container, ui) {
         focusBox.getCenter(focusTarget);
 
         const objectSize = focusBox.getSize(focusSize).length();
-        const distance = Math.max(FOCUS_DISTANCE, objectSize * 1.25);
+        const distance = Math.max(FOCUS_DISTANCE, objectSize * 1.05);
 
+        // Approche horizontale (même hauteur que le centre → objet bien cadré).
         focusViewDir.copy(focusTarget).sub(yaw.position);
+        focusViewDir.y = 0;
         if (focusViewDir.lengthSq() < 1e-6) focusViewDir.set(0, 0, -1);
         else focusViewDir.normalize();
 
         focusDesiredPos.copy(focusTarget).addScaledVector(focusViewDir, -distance);
-        const focusMaxEye = Math.max(MAX_EYE_HEIGHT, Math.min(MAX_FLY_HEIGHT, objectSize * 0.35));
-        focusDesiredPos.y = THREE.MathUtils.clamp(
-            focusTarget.y + Math.max(0.3, objectSize * 0.08),
-            getGroundEyeY(focusDesiredPos.x, focusDesiredPos.z),
-            focusMaxEye
-        );
+        focusDesiredPos.y = focusTarget.y;
+        const minCamY = getInspectMinCamY(focusDesiredPos.x, focusDesiredPos.z);
+        if (focusDesiredPos.y < minCamY) focusDesiredPos.y = minCamY;
 
         yaw.position.copy(focusDesiredPos);
         aimAtWorldTarget(focusTarget);
         orbitTarget.copy(focusTarget);
         if (movementMode === "design") {
             syncOrbitFromCamera();
+            // Forcer un cadrage horizontal (pas de plongée).
+            orbitPhi = 0;
+            applyOrbitCamera();
+        }
+    }
+
+    /**
+     * Rapproche la caméra d’un point (face / mur cliqué), face à la normale.
+     * @param {THREE.Vector3 | { x: number, y: number, z: number }} point
+     * @param {{ normal?: THREE.Vector3 | { x: number, y: number, z: number } | null, distance?: number }} [opts]
+     */
+    function focusOnPoint(point, opts = {}) {
+        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) {
+            return;
+        }
+        enterExplore();
+        focusTarget.set(point.x, point.y, point.z);
+
+        const distance = THREE.MathUtils.clamp(
+            typeof opts.distance === "number" ? opts.distance : FOCUS_DISTANCE * 1.15,
+            0.55,
+            14
+        );
+
+        const n = opts.normal;
+        if (n && Number.isFinite(n.x) && Number.isFinite(n.y) && Number.isFinite(n.z)) {
+            focusViewDir.set(n.x, n.y, n.z);
+            if (focusViewDir.lengthSq() > 1e-8) focusViewDir.normalize();
+            else focusViewDir.set(0, 0, 1).normalize();
+            // Murs / faces verticales : rester à hauteur du point (pas monter le long de la normale).
+            if (Math.abs(focusViewDir.y) < 0.85) {
+                focusViewDir.y = 0;
+                if (focusViewDir.lengthSq() < 1e-8) focusViewDir.set(0, 0, 1);
+                else focusViewDir.normalize();
+            }
+        } else {
+            focusViewDir.copy(yaw.position).sub(focusTarget);
+            focusViewDir.y = 0;
+            if (focusViewDir.lengthSq() < 1e-6) focusViewDir.set(0, 0, 1);
+            focusViewDir.normalize();
+        }
+
+        focusDesiredPos.copy(focusTarget).addScaledVector(focusViewDir, distance);
+        // Même hauteur que le point cliqué → face centrée dans le viseur.
+        if (Math.abs(focusViewDir.y) < 0.85) {
+            focusDesiredPos.y = focusTarget.y;
+        }
+        const minCamY = getInspectMinCamY(focusDesiredPos.x, focusDesiredPos.z);
+        if (focusDesiredPos.y < minCamY) focusDesiredPos.y = minCamY;
+
+        yaw.position.copy(focusDesiredPos);
+        aimAtWorldTarget(focusTarget);
+        orbitTarget.copy(focusTarget);
+        if (movementMode === "design") {
+            syncOrbitFromCamera();
+            if (Math.abs(focusViewDir.y) < 0.85) {
+                orbitPhi = 0;
+                applyOrbitCamera();
+            }
         }
     }
 
@@ -868,6 +1233,20 @@ export function initGallery(container, ui) {
     window.addEventListener("resize", resize);
     resize();
 
+    // Fenêtre qui perd le focus (Alt+Tab, dialogue OS…) : le keyup n’arrivera
+    // jamais, on relâche tout pour éviter un déplacement « touche collée ».
+    function releaseMovementKeys() {
+        moveForward = false;
+        moveBackward = false;
+        moveLeft = false;
+        moveRight = false;
+        sprinting = false;
+    }
+    window.addEventListener("blur", releaseMovementKeys);
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) releaseMovementKeys();
+    });
+
     function animate() {
         requestAnimationFrame(animate);
 
@@ -928,9 +1307,37 @@ export function initGallery(container, ui) {
         }
 
         prevTime = time;
-        renderer.render(scene, camera);
-        quadView.renderAuxViews();
-        afterRender?.();
+        // Chaque étape est isolée : un callback qui throw (flottaison, helper
+        // orphelin…) ne doit jamais figer le rendu des frames suivantes.
+        try {
+            beforeRender?.();
+        } catch (err) {
+            reportRenderError("beforeRender", err);
+        }
+        try {
+            renderer.render(scene, camera);
+            quadView.renderAuxViews();
+        } catch (err) {
+            reportRenderError("render", err);
+        }
+        try {
+            afterRender?.();
+        } catch (err) {
+            reportRenderError("afterRender", err);
+        }
+    }
+
+    let lastRenderErrorLog = 0;
+    /**
+     * Log throttlé (1×/2 s) pour éviter de saturer la console si l’erreur revient chaque frame.
+     * @param {string} stage
+     * @param {unknown} err
+     */
+    function reportRenderError(stage, err) {
+        const now = performance.now();
+        if (now - lastRenderErrorLog < 2000) return;
+        lastRenderErrorLog = now;
+        console.error(`[LAB] erreur pendant ${stage} :`, err);
     }
 
     animate();
@@ -954,23 +1361,50 @@ export function initGallery(container, ui) {
         },
         setOrbitTarget,
         getOrbitTarget: () => orbitTarget.clone(),
+        serializeView,
+        restoreView,
         resetViewForNewScene,
+        placePlayerAt,
         setGizmoDragging(value) {
-            gizmoDragging = value;
-            if (value) leftLookActive = false;
+            gizmoDragging = !!value;
+            if (value) {
+                leftLookActive = false;
+            } else {
+                // Fin de drag (ou reset scène) : libérer les clics / orbites.
+                pendingLeftClick = null;
+                leftLookActive = false;
+                if (!rightLookActive) container.classList.remove("lab-viewport--look");
+            }
         },
         setDrawModeActive(value) {
             drawModeActive = value;
-            if (value) leftLookActive = false;
+            if (value) {
+                cancelLookGesture();
+            } else {
+                paintStrokeActive = false;
+                rightLookActive = false;
+                rightClickHandledThisGesture = false;
+                pendingRightClick = null;
+                container.classList.remove("lab-viewport--look");
+            }
             container.classList.toggle("lab-viewport--draw", value);
         },
+        setPaintStrokeActive(value) {
+            paintStrokeActive = !!value;
+            if (paintStrokeActive) cancelLookGesture();
+        },
+        cancelLookGesture,
         setTerrainSculptModeActive(value) {
             terrainSculptModeActive = value;
             if (value) {
                 leftLookActive = false;
                 pendingLeftClick = null;
                 vegetationPlaceModeActive = false;
+                avatarPlaceModeActive = false;
+                lightPlaceModeActive = false;
                 container.classList.remove("lab-viewport--veg-place");
+                container.classList.remove("lab-viewport--avatar-place");
+                container.classList.remove("lab-viewport--light-place");
             } else {
                 rightLookActive = false;
                 rightClickHandledThisGesture = false;
@@ -984,11 +1418,43 @@ export function initGallery(container, ui) {
             if (value) {
                 leftLookActive = false;
                 pendingLeftClick = null;
+                avatarPlaceModeActive = false;
+                lightPlaceModeActive = false;
                 container.classList.remove("lab-viewport--look");
+                container.classList.remove("lab-viewport--avatar-place");
+                container.classList.remove("lab-viewport--light-place");
             }
             container.classList.toggle("lab-viewport--veg-place", vegetationPlaceModeActive);
         },
         isVegetationPlaceModeActive: () => vegetationPlaceModeActive,
+        setAvatarPlaceModeActive(value) {
+            avatarPlaceModeActive = !!value;
+            if (value) {
+                leftLookActive = false;
+                pendingLeftClick = null;
+                vegetationPlaceModeActive = false;
+                lightPlaceModeActive = false;
+                container.classList.remove("lab-viewport--look");
+                container.classList.remove("lab-viewport--veg-place");
+                container.classList.remove("lab-viewport--light-place");
+            }
+            container.classList.toggle("lab-viewport--avatar-place", avatarPlaceModeActive);
+        },
+        isAvatarPlaceModeActive: () => avatarPlaceModeActive,
+        setLightPlaceModeActive(value) {
+            lightPlaceModeActive = !!value;
+            if (value) {
+                leftLookActive = false;
+                pendingLeftClick = null;
+                vegetationPlaceModeActive = false;
+                avatarPlaceModeActive = false;
+                container.classList.remove("lab-viewport--look");
+                container.classList.remove("lab-viewport--veg-place");
+                container.classList.remove("lab-viewport--avatar-place");
+            }
+            container.classList.toggle("lab-viewport--light-place", lightPlaceModeActive);
+        },
+        isLightPlaceModeActive: () => lightPlaceModeActive,
         isDrawModeActive: () => drawModeActive,
         setCanvasRightClickHandler(fn) {
             canvasRightClickHandler = fn;
@@ -1001,6 +1467,9 @@ export function initGallery(container, ui) {
         },
         setAfterRender(fn) {
             afterRender = fn;
+        },
+        setBeforeRender(fn) {
+            beforeRender = fn;
         },
         toggleQuadView() {
             return quadView.toggle();
@@ -1015,6 +1484,7 @@ export function initGallery(container, ui) {
         getPointerRect: () => renderer.domElement.getBoundingClientRect(),
         registerEnvironmentItems,
         focusOnObject,
+        focusOnPoint,
         focusOnTerrainRelief,
     };
 }

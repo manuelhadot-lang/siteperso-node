@@ -8,12 +8,18 @@ export const LAB_LIGHT_KEY = "labLight";
 export const LIGHT_MARKER_VISIBLE_KEY = "lightMarkerVisible";
 export const LIGHT_INTENSITY_KEY = "lightIntensity";
 export const LIGHT_SPOT_ANGLE_KEY = "lightSpotAngleDeg";
+export const LIGHT_SPOT_PENUMBRA_KEY = "lightSpotPenumbra";
 export const SCENE_ITEM_ID_KEY = "sceneItemId";
 
 export const DEFAULT_SPOT_ANGLE_DEG = 48;
 export const SPOT_ANGLE_MIN = 5;
 export const SPOT_ANGLE_MAX = 90;
 export const SPOT_ANGLE_STEP = 1;
+
+export const DEFAULT_SPOT_PENUMBRA = 0.45;
+export const SPOT_PENUMBRA_MIN = 0;
+export const SPOT_PENUMBRA_MAX = 1;
+export const SPOT_PENUMBRA_STEP = 0.01;
 
 export const LIGHT_TYPE = {
     SPOT: "spot",
@@ -38,9 +44,22 @@ export function isLabLight(object) {
  * @param {THREE.Group} pivot
  */
 export function getLightIntensity(pivot) {
+    const stored = pivot?.userData?.[LIGHT_INTENSITY_KEY];
+    if (typeof stored === "number") return stored;
     const light = pivot?.userData?.mainLight;
     if (light) return light.intensity;
-    return pivot?.userData?.[LIGHT_INTENSITY_KEY] ?? 1;
+    return 1;
+}
+
+/** @type {null | ((pivot: THREE.Group, intensity: number) => boolean)} */
+let lightIntensityHook = null;
+
+/**
+ * Hook ombres (split cast / fill) — enregistré par lab-shadows.js.
+ * @param {null | ((pivot: THREE.Group, intensity: number) => boolean)} fn
+ */
+export function registerLightIntensityHook(fn) {
+    lightIntensityHook = fn;
 }
 
 /**
@@ -50,6 +69,7 @@ export function getLightIntensity(pivot) {
 export function setLightIntensity(pivot, intensity) {
     const value = Math.max(0, intensity);
     pivot.userData[LIGHT_INTENSITY_KEY] = value;
+    if (lightIntensityHook?.(pivot, value)) return;
     const light = pivot.userData.mainLight;
     if (light) light.intensity = value;
 }
@@ -88,6 +108,37 @@ export function setLightSpotAngleDeg(pivot, degrees) {
         light.shadow.camera.fov = value * 1.05;
         light.shadow.camera.updateProjectionMatrix();
     }
+    const fill = pivot.userData._labShadowFillLight;
+    if (fill?.isSpotLight) fill.angle = light.angle;
+    const helper = pivot.userData.lightHelper;
+    if (helper?.visible) helper.update?.();
+}
+
+/**
+ * @param {THREE.Group} pivot
+ * @returns {number} 0 = bord net, 1 = bord très doux
+ */
+export function getLightSpotPenumbra(pivot) {
+    const light = pivot?.userData?.mainLight;
+    if (light?.isSpotLight && typeof light.penumbra === "number") {
+        return light.penumbra;
+    }
+    const stored = pivot?.userData?.[LIGHT_SPOT_PENUMBRA_KEY];
+    return typeof stored === "number" ? stored : DEFAULT_SPOT_PENUMBRA;
+}
+
+/**
+ * @param {THREE.Group} pivot
+ * @param {number} penumbra
+ */
+export function setLightSpotPenumbra(pivot, penumbra) {
+    const value = THREE.MathUtils.clamp(penumbra, SPOT_PENUMBRA_MIN, SPOT_PENUMBRA_MAX);
+    pivot.userData[LIGHT_SPOT_PENUMBRA_KEY] = value;
+    const light = pivot.userData.mainLight;
+    if (!light?.isSpotLight) return;
+    light.penumbra = value;
+    const fill = pivot.userData._labShadowFillLight;
+    if (fill?.isSpotLight) fill.penumbra = value;
     const helper = pivot.userData.lightHelper;
     if (helper?.visible) helper.update?.();
 }
@@ -107,6 +158,9 @@ export function isLightSceneVisible(pivot) {
 export function setLightSceneVisible(pivot, visible) {
     const light = pivot.userData.mainLight;
     if (light) light.visible = visible;
+
+    const fill = pivot.userData._labShadowFillLight;
+    if (fill) fill.visible = visible;
 
     const marker = pivot.userData.lightMarker;
     if (marker) {
@@ -149,20 +203,31 @@ export function createLightPivot(type) {
         );
         light.position.set(0, 0, 0);
         light.castShadow = true;
-        target.position.set(0, -4, 0);
+        // Axe local -Z : yaw (Y) et pitch (X) orientent le faisceau comme une caméra.
+        target.position.set(0, 0, -4);
         light.target = target;
 
         const marker = new THREE.Mesh(
             new THREE.SphereGeometry(0.14, 14, 14),
             new THREE.MeshLambertMaterial({ color: 0xffcc66, emissive: 0x553300 })
         );
+        const nose = new THREE.Mesh(
+            new THREE.ConeGeometry(0.07, 0.24, 10),
+            new THREE.MeshLambertMaterial({ color: 0xffb347, emissive: 0x553300 })
+        );
+        nose.rotation.x = Math.PI / 2;
+        nose.position.z = -0.24;
+        marker.add(nose);
         pivot.add(marker);
         pivot.userData.lightMarker = marker;
         helper = new THREE.SpotLightHelper(light, 0xffcc66);
+        // Faisceau vers le bas au spawn (local -Z → monde -Y).
+        pivot.rotation.x = -Math.PI / 2;
+        pivot.userData.lightAim = "negZ";
     } else if (type === LIGHT_TYPE.SUN) {
         light = new THREE.DirectionalLight(0xfff8e7, intensity);
         light.position.set(0, 0, 0);
-        target.position.set(0, -4, 0);
+        target.position.set(0, 0, -4);
         light.target = target;
 
         const marker = new THREE.Mesh(
@@ -172,6 +237,8 @@ export function createLightPivot(type) {
         pivot.add(marker);
         pivot.userData.lightMarker = marker;
         helper = new THREE.DirectionalLightHelper(light, 1.2, 0xffdd44);
+        pivot.rotation.x = -Math.PI / 2;
+        pivot.userData.lightAim = "negZ";
     } else {
         light = new THREE.PointLight(0xffffee, intensity, 28, 1.2);
         light.position.set(0, 0, 0);
@@ -196,6 +263,7 @@ export function createLightPivot(type) {
     pivot.userData.shadowOpacity = 0.85;
     if (type === LIGHT_TYPE.SPOT) {
         pivot.userData[LIGHT_SPOT_ANGLE_KEY] = DEFAULT_SPOT_ANGLE_DEG;
+        pivot.userData[LIGHT_SPOT_PENUMBRA_KEY] = DEFAULT_SPOT_PENUMBRA;
     }
     // Ombres activées par défaut (soleil / spot / lampe) — réglables dans le panneau scène.
     light.castShadow = type === LIGHT_TYPE.SPOT || type === LIGHT_TYPE.SUN || type === LIGHT_TYPE.LAMP;
@@ -253,12 +321,40 @@ export function detachLightHelper(pivot, scene) {
  */
 export function disposeLightPivot(pivot, scene) {
     detachLightHelper(pivot, scene);
+    const fill = pivot.userData?._labShadowFillLight;
+    if (fill) {
+        pivot.remove(fill);
+        try {
+            fill.dispose?.();
+        } catch {
+            /* ignore */
+        }
+        delete pivot.userData._labShadowFillLight;
+    }
     pivot.traverse((child) => {
         if (child instanceof THREE.Mesh) {
             child.geometry?.dispose();
             child.material?.dispose();
         }
+        // Libérer la shadow map GPU de la lumière (sinon fuite à chaque suppression).
+        if (child instanceof THREE.Light && child.shadow?.map) {
+            child.shadow.map.dispose();
+            child.shadow.map = null;
+        }
     });
+}
+
+/**
+ * Met à jour la cible / l’helper après un déplacement ou une rotation.
+ * @param {THREE.Object3D} pivot
+ */
+export function syncLightAim(pivot) {
+    if (!isLabLight(pivot)) return;
+    pivot.updateMatrixWorld(true);
+    const target = pivot.userData.lightTarget;
+    target?.updateMatrixWorld?.(true);
+    const helper = pivot.userData.lightHelper;
+    if (helper?.visible) helper.update?.();
 }
 
 /**
@@ -267,9 +363,24 @@ export function disposeLightPivot(pivot, scene) {
 export function updateLightHelpers(objects) {
     for (const object of objects) {
         if (!isLabLight(object)) continue;
-        const helper = object.userData.lightHelper;
-        if (helper?.visible) helper.update?.();
+        syncLightAim(object);
     }
+}
+
+/**
+ * Oriente le pivot pour que le faisceau (axe local −Z) pointe dans `worldDirection`.
+ * @param {THREE.Object3D} pivot
+ * @param {THREE.Vector3} worldDirection
+ */
+export function orientLightPivotToward(pivot, worldDirection) {
+    if (!pivot || !worldDirection) return;
+    const dir = worldDirection.clone();
+    if (dir.lengthSq() < 1e-10) return;
+    dir.normalize();
+    const localAim = new THREE.Vector3(0, 0, -1);
+    pivot.quaternion.setFromUnitVectors(localAim, dir);
+    pivot.userData.lightAim = "negZ";
+    syncLightAim(pivot);
 }
 
 /**
@@ -310,6 +421,19 @@ export function bindSpotAngleSliderWheel(slider, onChange) {
     bindRangeSliderWheel(slider, onChange, {
         step: SPOT_ANGLE_STEP,
         wheelFactor: 0.025,
+        shiftMultiplier: 2,
+        host: slider.closest(".lab-context-menu__intensity") ?? slider.closest("label") ?? slider,
+    });
+}
+
+/**
+ * @param {HTMLInputElement} slider
+ * @param {(value: number) => void} onChange
+ */
+export function bindSpotPenumbraSliderWheel(slider, onChange) {
+    bindRangeSliderWheel(slider, onChange, {
+        step: SPOT_PENUMBRA_STEP,
+        wheelFactor: 0.02,
         shiftMultiplier: 2,
         host: slider.closest(".lab-context-menu__intensity") ?? slider.closest("label") ?? slider,
     });

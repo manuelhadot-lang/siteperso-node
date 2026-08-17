@@ -27,7 +27,8 @@ const CUBE_FACE_RULES = [
 ];
 
 const DEFAULT_BACKGROUND = new THREE.Color(0x1a1a1a);
-const DEFAULT_FOG = new THREE.Fog(0x1a1a1a, 0, 60);
+/** near > 0 : évite d’aplatir le contraste / la profondeur en FPS dans une pièce. */
+const DEFAULT_FOG = new THREE.Fog(0x1a1a1a, 14, 90);
 
 /** @type {{ kind: "equirect" | "cubemap", texture: THREE.Texture } | null} */
 let loadedSkybox = null;

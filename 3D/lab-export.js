@@ -45,18 +45,45 @@ function collectExportMeshes(scene) {
 /**
  * Matériau propre pour l'export : sans shader personnalisé, avec le dessin
  * des faces fusionné dans la texture couleur (sinon il serait perdu).
+ * Conserve le verre physique (transmission) quand il est actif.
  * @param {THREE.Material} material
  * @returns {THREE.MeshStandardMaterial}
  */
 function createBakedMaterial(material) {
-    const out = new THREE.MeshStandardMaterial({
-        color: material.color?.clone?.() ?? new THREE.Color(0xffffff),
-        roughness: typeof material.roughness === "number" ? material.roughness : 0.8,
-        metalness: typeof material.metalness === "number" ? material.metalness : 0,
-        transparent: material.transparent === true,
-        opacity: typeof material.opacity === "number" ? material.opacity : 1,
-        side: material.side ?? THREE.FrontSide,
-    });
+    if (!material) {
+        return new THREE.MeshStandardMaterial({ color: 0xffffff });
+    }
+    const glass =
+        !!material.userData?._labGlass ||
+        (material.isMeshPhysicalMaterial &&
+            typeof material.transmission === "number" &&
+            material.transmission > 0.02);
+    const color = material.color?.clone?.() ?? new THREE.Color(0xffffff);
+    const roughness = typeof material.roughness === "number" ? material.roughness : 0.8;
+    const metalness = typeof material.metalness === "number" ? material.metalness : 0;
+    const side = material.side ?? THREE.FrontSide;
+
+    /** @type {THREE.MeshStandardMaterial} */
+    const out = glass
+        ? new THREE.MeshPhysicalMaterial({
+              color,
+              roughness,
+              metalness,
+              transparent: true,
+              opacity: 1,
+              side,
+              transmission:
+                  typeof material.transmission === "number" ? material.transmission : 0.82,
+              thickness: typeof material.thickness === "number" ? material.thickness : 0.45,
+          })
+        : new THREE.MeshStandardMaterial({
+              color,
+              roughness,
+              metalness,
+              transparent: material.transparent === true,
+              opacity: typeof material.opacity === "number" ? material.opacity : 1,
+              side,
+          });
 
     const paintCanvas = material.userData?._labPaintUniform?.value?.image ?? null;
     const baseMap =
@@ -100,28 +127,91 @@ function createBakedMaterial(material) {
 
 /**
  * Scène jetable pour l'export : clones des meshes avec transformations
- * monde appliquées et matériaux « cuits ».
- * @param {THREE.Scene} scene
+ * relatives à `root` et matériaux « cuits ».
+ * @param {THREE.Object3D} root
+ * @param {{
+ *   keepWorldRotationScale?: boolean,
+ *   bakeTransform?: boolean,
+ * }} [opts]
  * @returns {THREE.Scene}
  */
-export function buildExportScene(scene) {
-    scene.updateMatrixWorld(true);
+function cloneExportableMeshes(root, opts = {}) {
+    root.updateMatrixWorld(true);
     const exportScene = new THREE.Scene();
+    const relative = new THREE.Matrix4();
+    if (opts.keepWorldRotationScale) {
+        // Recale à l'origine sans perdre rotation / échelle du pivot.
+        const rootPos = new THREE.Vector3().setFromMatrixPosition(root.matrixWorld);
+        relative.makeTranslation(-rootPos.x, -rootPos.y, -rootPos.z);
+    } else {
+        relative.copy(root.matrixWorld).invert();
+    }
+    const local = new THREE.Matrix4();
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const scl = new THREE.Vector3();
     let counter = 0;
 
-    for (const mesh of collectExportMeshes(scene)) {
+    for (const mesh of collectExportMeshes(root)) {
         const materials = Array.isArray(mesh.material)
             ? mesh.material.map((entry) => createBakedMaterial(entry))
             : createBakedMaterial(mesh.material);
-        const clone = new THREE.Mesh(mesh.geometry, materials);
+        local.multiplyMatrices(relative, mesh.matrixWorld);
+
+        /** @type {THREE.BufferGeometry} */
+        let geometry = mesh.geometry;
+        const clone = new THREE.Mesh(geometry, materials);
         counter += 1;
         clone.name = mesh.name || `Objet_${counter}`;
-        mesh.matrixWorld.decompose(clone.position, clone.quaternion, clone.scale);
+
+        if (opts.bakeTransform && geometry) {
+            geometry = geometry.clone();
+            geometry.applyMatrix4(local);
+            if (geometry.attributes.normal) {
+                geometry.normalizeNormals();
+            }
+            geometry.computeBoundingBox();
+            geometry.computeBoundingSphere();
+            clone.geometry = geometry;
+            clone.position.set(0, 0, 0);
+            clone.quaternion.identity();
+            clone.scale.set(1, 1, 1);
+        } else {
+            local.decompose(pos, quat, scl);
+            clone.position.copy(pos);
+            clone.quaternion.copy(quat);
+            clone.scale.copy(scl);
+        }
         exportScene.add(clone);
     }
 
     exportScene.updateMatrixWorld(true);
     return exportScene;
+}
+
+/**
+ * Scène jetable pour l'export : clones des meshes avec transformations
+ * monde appliquées et matériaux « cuits ».
+ * @param {THREE.Scene} scene
+ * @returns {THREE.Scene}
+ */
+export function buildExportScene(scene) {
+    return cloneExportableMeshes(scene);
+}
+
+/**
+ * @param {string} name
+ * @returns {string}
+ */
+function sanitizeExportBasename(name) {
+    const cleaned = String(name || "objet")
+        .replace(/\.(glb|gltf)$/i, "")
+        .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 80);
+    return cleaned || "objet";
 }
 
 /**
@@ -139,26 +229,85 @@ function downloadBlob(blob, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+function parseGlbArrayBuffer(exportScene) {
+    return new Promise((resolve, reject) => {
+        try {
+            new GLTFExporter().parse(
+                exportScene,
+                (result) => {
+                    if (result instanceof ArrayBuffer) {
+                        resolve(result);
+                        return;
+                    }
+                    const json = JSON.stringify(result);
+                    resolve(new TextEncoder().encode(json).buffer);
+                },
+                { binary: true }
+            );
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+/**
+ * @param {THREE.Scene} exportScene
+ * @param {string} filename
+ * @returns {Promise<void>}
+ */
+function parseAndDownloadGlb(exportScene, filename) {
+    return parseGlbArrayBuffer(exportScene).then((buffer) => {
+        downloadBlob(new Blob([buffer], { type: "model/gltf-binary" }), filename);
+    });
+}
+
+/**
+ * GLB en data-URL (pour figer un import après séparation de pièces).
+ * @param {THREE.Object3D} root
+ * @returns {Promise<string>}
+ */
+export async function objectToGlbDataUrl(root) {
+    const exportScene = cloneExportableMeshes(root);
+    if (!exportScene.children.length) {
+        throw new Error("Aucun mesh à encoder");
+    }
+    const buffer = await parseGlbArrayBuffer(exportScene);
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return `data:model/gltf-binary;base64,${btoa(binary)}`;
+}
+
 /**
  * @param {THREE.Scene} scene
  * @returns {Promise<void>}
  */
 export function exportSceneGltf(scene) {
-    const exportScene = buildExportScene(scene);
-    return new Promise((resolve) => {
-        new GLTFExporter().parse(
-            exportScene,
-            (result) => {
-                const blob =
-                    result instanceof ArrayBuffer
-                        ? new Blob([result], { type: "model/gltf-binary" })
-                        : new Blob([JSON.stringify(result)], { type: "model/gltf+json" });
-                downloadBlob(blob, `${EXPORT_BASENAME}.glb`);
-                resolve();
-            },
-            { binary: true }
-        );
+    return parseAndDownloadGlb(buildExportScene(scene), `${EXPORT_BASENAME}.glb`);
+}
+
+/**
+ * Exporte un objet lab (cube, import, architecture…) en fichier .glb.
+ * L’objet est recalé à l’origine, rotation et échelle conservées.
+ * @param {THREE.Object3D} object
+ * @param {string} [name]
+ * @returns {Promise<string>} nom du fichier téléchargé
+ */
+export async function exportObjectGltf(object, name) {
+    if (!object) throw new Error("Aucun objet à exporter");
+    const exportScene = cloneExportableMeshes(object, {
+        keepWorldRotationScale: true,
+        bakeTransform: true,
     });
+    if (!exportScene.children.length) {
+        throw new Error("Cet objet n’a pas de mesh exportable");
+    }
+    const filename = `${sanitizeExportBasename(name)}.glb`;
+    await parseAndDownloadGlb(exportScene, filename);
+    return filename;
 }
 
 /**

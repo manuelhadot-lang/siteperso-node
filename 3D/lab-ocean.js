@@ -12,20 +12,37 @@ const SEGMENTS = 280;
 const DEFAULTS = {
     size: GRID_SIZE * 3.6,
     level: -0.05,
-    color: "#0a3d4d",
-    sunColor: "#fff4e0",
+    color: "#074455",
+    sunColor: "#fff1d6",
     opacity: 5,
-    waveHeight: 0.48,
-    waveScale: 0.095,
+    waveHeight: 0.42,
+    waveScale: 0.1,
     waveSpeed: 1.0,
-    choppiness: 1.05,
+    choppiness: 0.95,
     /** Intensité des rides / vagues de détail sur la surface (normal map). */
-    surfaceWaves: 1.0,
+    surfaceWaves: 1.15,
     /** Échelle des rides de surface (plus haut = rides plus petites / denses). */
-    surfaceScale: 1.0,
-    distortion: 2.4,
-    foam: 0.85,
+    surfaceScale: 1.1,
+    distortion: 1.35,
+    foam: 0.8,
 };
+
+/** Bias du plan de coupe miroir : léger, pour garder la coque à la flottaison
+ * dans le reflet sans créer d’artefacts latéraux. */
+const MIRROR_CLIP_BIAS = 0.005;
+
+/** Trains de Gerstner — doivent rester identiques au vertex shader. */
+const WAVE_TRAINS = [
+    { amp: 0.42, freq: 0.95, speed: 1.05, dir: [1.0, 0.22], steep: 0.9, timeMul: 1 },
+    { amp: 0.28, freq: 1.65, speed: 0.88, dir: [-0.6, 1.0], steep: 0.75, timeMul: 1.08 },
+    { amp: 0.16, freq: 2.85, speed: 1.35, dir: [0.4, -0.85], steep: 0.55, timeMul: 0.92 },
+    { amp: 0.1, freq: 4.6, speed: 1.72, dir: [-0.9, -0.35], steep: 0.4, timeMul: 1.18 },
+    { amp: 0.055, freq: 7.8, speed: 2.15, dir: [0.15, 0.98], steep: 0.28, timeMul: 1.4 },
+    { amp: 0.03, freq: 12.5, speed: 2.55, dir: [-0.72, 0.55], steep: 0.18, timeMul: 1.65 },
+].map((wave) => {
+    const len = Math.hypot(wave.dir[0], wave.dir[1]) || 1;
+    return { ...wave, dir: [wave.dir[0] / len, wave.dir[1] / len] };
+});
 
 /** Texture 1×1 neutre quand aucun terrain n’est lié. */
 function createDummyHeightTexture() {
@@ -128,6 +145,8 @@ void main() {
 
   vec4 world = modelMatrix * vec4(pos, 1.0);
   vWorldPosition = world;
+  // Projection miroir classique sur la position déplacée (comme Water de
+  // three.js) : le reflet reste accroché à la coque des objets flottants.
   vMirrorCoord = textureMatrix * world;
   vNormalW = normalize(mat3(modelMatrix) * n);
   vWaveElev = disp.y / max(h * shoreDamp, 0.001);
@@ -142,6 +161,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 uniform sampler2D mirrorSampler;
 uniform sampler2D normalSampler;
 uniform sampler2D uTerrainHeight;
+uniform mat4 textureMatrix;
 uniform float alpha;
 uniform float time;
 uniform float size;
@@ -195,22 +215,53 @@ void main() {
   vec3 geoN = normalize(vNormalW);
   vec4 noise = getNoise(vWorldPosition.xz * size * max(uSurfaceScale, 0.05));
   float detailStrength = clamp(uSurfaceDetail, 0.0, 2.5);
-  float detailMix = mix(0.2, 0.82, vShoreDamp) * detailStrength;
-  vec3 detailN = normalize(noise.xzy * vec3(1.8, 1.0, 1.8));
-  vec3 surfaceNormal = normalize(mix(geoN, normalize(geoN + detailN * (0.45 + detailStrength * 0.35)), clamp(detailMix, 0.0, 1.0)));
+  float detailMix = mix(0.18, 0.78, vShoreDamp) * detailStrength;
+  vec3 detailN = normalize(noise.xzy * vec3(1.6, 1.0, 1.6));
+  vec3 surfaceNormal = normalize(mix(geoN, normalize(geoN + detailN * (0.4 + detailStrength * 0.32)), clamp(detailMix, 0.0, 1.0)));
 
   vec3 worldToEye = eye - vWorldPosition.xyz;
   vec3 eyeDirection = normalize(worldToEye);
   float distance = length(worldToEye);
 
-  vec2 distortion = surfaceNormal.xz * (0.001 + 1.0 / max(distance, 1.0)) * distortionScale * mix(0.45, 1.0, vShoreDamp);
-  vec3 reflectionSample = texture2D(mirrorSampler, vMirrorCoord.xy / vMirrorCoord.w + distortion).rgb;
-
   float ndotv = max(dot(eyeDirection, surfaceNormal), 0.0);
-  float fresnel = 0.02 + 0.98 * pow(1.0 - ndotv, 5.0);
+  float grazing = 1.0 - ndotv;
+  float nearCalm = smoothstep(2.0, 16.0, distance);
+  float contactZone = 1.0 - smoothstep(1.5, 9.0, distance);
+
+  // Distorsion : calme au contact des objets (coque lisible), plus vive au large.
+  float distortGain = distortionScale
+    * mix(0.12, 1.0, nearCalm)
+    * mix(0.5, 1.0, vShoreDamp)
+    * mix(0.55, 1.0, 1.0 - contactZone * 0.65);
+  vec2 warpN = mix(geoN.xz, surfaceNormal.xz, mix(0.22, 0.62, nearCalm));
+  float invDist = 1.0 / max(distance, 8.0);
+  vec2 distortion = warpN * (0.00045 + invDist * 0.42) * distortGain;
+
+  vec2 mirrorUV = vMirrorCoord.xy / max(vMirrorCoord.w, 1e-4);
+  float mirrorEdge = smoothstep(0.0, 0.04, mirrorUV.x) * smoothstep(1.0, 0.96, mirrorUV.x)
+    * smoothstep(0.0, 0.04, mirrorUV.y) * smoothstep(1.0, 0.96, mirrorUV.y);
+  mirrorUV = clamp(mirrorUV + distortion, 0.001, 0.999);
+  vec3 reflectionSample = texture2D(mirrorSampler, mirrorUV).rgb;
+  // Léger adoucissement du reflet (moins « pixel miroir »).
+  vec3 reflectionSoft = (
+    reflectionSample
+    + texture2D(mirrorSampler, clamp(mirrorUV + vec2(0.0015, 0.0), 0.001, 0.999)).rgb
+    + texture2D(mirrorSampler, clamp(mirrorUV + vec2(-0.0015, 0.0), 0.001, 0.999)).rgb
+    + texture2D(mirrorSampler, clamp(mirrorUV + vec2(0.0, 0.0015), 0.001, 0.999)).rgb
+  ) * 0.25;
+  reflectionSample = mix(reflectionSample, reflectionSoft, mix(0.15, 0.45, nearCalm));
+
+  // Fresnel Schlick approx. : reflet fort en rasance, plus présent près des coques.
+  float F0 = 0.045;
+  float fresnel = F0 + (1.0 - F0) * pow(grazing, mix(3.6, 4.8, nearCalm));
+  fresnel = mix(fresnel, max(fresnel, 0.55), contactZone * 0.45);
+  float reflectMix = fresnel
+    * mix(0.78, 0.94, nearCalm)
+    * mix(0.55, 1.0, vShoreDamp)
+    * mix(0.55, 1.0, mirrorEdge);
 
   vec3 reflectDir = reflect(-sunDirection, surfaceNormal);
-  float spec = pow(max(dot(eyeDirection, reflectDir), 0.0), 180.0);
+  float spec = pow(max(dot(eyeDirection, reflectDir), 0.0), 220.0);
   float diffuse = max(dot(sunDirection, surfaceNormal), 0.0);
 
   float waterDepth = 4.0;
@@ -244,21 +295,24 @@ void main() {
     shoreFoam = max(shoreFoam, lip * uFoamAmount * 1.1);
   }
 
-  float depthTint = mix(0.35, 1.0, ndotv);
+  float depthTint = mix(0.32, 1.0, ndotv);
   float shallowTint = shoreMask * 0.7 + max(vWaveElev, 0.0) * 0.12;
-  vec3 scatter = mix(waterColor, uShallowColor, depthTint * 0.4 + shallowTint);
-  scatter *= (0.45 + diffuse * 0.55);
+  vec3 deepColor = waterColor * vec3(0.72, 0.88, 1.05);
+  vec3 scatter = mix(deepColor, uShallowColor, depthTint * 0.42 + shallowTint);
+  scatter *= (0.42 + diffuse * 0.58);
 
-  vec3 albedo = mix(scatter, reflectionSample, fresnel * 0.9 * mix(0.55, 1.0, vShoreDamp));
-  albedo += sunColor * spec * 1.25 * vShoreDamp;
-  albedo += sunColor * diffuse * 0.08;
+  vec3 albedo = mix(scatter, reflectionSample, reflectMix);
+  // Reflet un peu plus saturé / contrasté pour coller aux objets.
+  albedo = mix(albedo, reflectionSample * vec3(1.02, 1.03, 1.06), reflectMix * 0.18);
+  albedo += sunColor * spec * mix(0.7, 1.35, nearCalm) * vShoreDamp;
+  albedo += sunColor * diffuse * 0.07;
 
-  float crestFoam = smoothstep(0.4, 0.88, vFoam) * uFoamAmount * 0.5 * vShoreDamp;
+  float crestFoam = smoothstep(0.42, 0.9, vFoam) * uFoamAmount * 0.48 * vShoreDamp;
   float foamMask = max(crestFoam, shoreFoam);
   vec3 foamColor = mix(vec3(0.78, 0.9, 0.95), vec3(1.0), foamMask);
   albedo = mix(albedo, foamColor, clamp(foamMask, 0.0, 1.0));
 
-  float a = clamp(alpha * (0.78 + fresnel * 0.3) * edgeFade, 0.0, 1.0);
+  float a = clamp(alpha * (0.8 + fresnel * 0.28) * edgeFade, 0.0, 1.0);
   a = max(a, foamMask * 0.4 * edgeFade);
   // Plus transparent dans l’eau très peu profonde.
   a *= mix(0.55, 1.0, smoothstep(0.0, 0.35, max(waterDepth, 0.0)));
@@ -403,6 +457,54 @@ class RealisticOcean extends THREE.Mesh {
         this.material = material;
         this.userData.oceanRenderTarget = renderTarget;
         this.userData.dummyHeightTexture = dummyHeight;
+        this.userData.oceanClipBias = MIRROR_CLIP_BIAS;
+        renderTarget.texture.wrapS = THREE.ClampToEdgeWrapping;
+        renderTarget.texture.wrapT = THREE.ClampToEdgeWrapping;
+        /** @type {THREE.Object3D[]} */
+        const mirrorHidden = [];
+
+        /**
+         * Masque gizmo / helpers / marqueurs pendant la passe miroir
+         * (sinon ils polluent le reflet des objets flottants).
+         * @param {THREE.Scene} scn
+         */
+        const hideMirrorClutter = (scn) => {
+            mirrorHidden.length = 0;
+            scn.traverse((obj) => {
+                if (!obj.visible || obj === this) return;
+                const name = obj.name || "";
+                const type = obj.type || "";
+                const ud = obj.userData || {};
+                const hide =
+                    ud.labNoMirror === true ||
+                    ud.labHelper === true ||
+                    name === "lab-avatar-place-marker" ||
+                    name.startsWith("avatar-place-") ||
+                    type === "BoxHelper" ||
+                    obj.isTransformControls === true ||
+                    /^TransformControls/.test(type) ||
+                    /Helper$/.test(type);
+                if (!hide) {
+                    let p = obj.parent;
+                    while (p) {
+                        if (p.isTransformControls) {
+                            mirrorHidden.push(obj);
+                            obj.visible = false;
+                            return;
+                        }
+                        p = p.parent;
+                    }
+                } else {
+                    mirrorHidden.push(obj);
+                    obj.visible = false;
+                }
+            });
+        };
+
+        const restoreMirrorClutter = () => {
+            for (const obj of mirrorHidden) obj.visible = true;
+            mirrorHidden.length = 0;
+        };
 
         this.onBeforeRender = (renderer, scene, camera) => {
             mirrorWorldPosition.setFromMatrixPosition(this.matrixWorld);
@@ -414,6 +516,13 @@ class RealisticOcean extends THREE.Mesh {
 
             view.subVectors(mirrorWorldPosition, cameraWorldPosition);
             if (view.dot(normal) > 0) return;
+
+            // Plan miroir = niveau moyen de l’océan (pas de décalage vertical :
+            // un offset bas faisait apparaître les reflets « au-dessus » des objets).
+            const clipBias =
+                typeof this.userData.oceanClipBias === "number"
+                    ? this.userData.oceanClipBias
+                    : MIRROR_CLIP_BIAS;
 
             view.reflect(normal).negate();
             view.add(mirrorWorldPosition);
@@ -432,6 +541,7 @@ class RealisticOcean extends THREE.Mesh {
             mirrorCamera.up.applyMatrix4(rotationMatrix);
             mirrorCamera.up.reflect(normal);
             mirrorCamera.lookAt(target);
+            mirrorCamera.near = camera.near;
             mirrorCamera.far = camera.far;
             mirrorCamera.updateMatrixWorld();
             mirrorCamera.projectionMatrix.copy(camera.projectionMatrix);
@@ -452,7 +562,7 @@ class RealisticOcean extends THREE.Mesh {
             clipPlane.multiplyScalar(2 / clipPlane.dot(q));
             projectionMatrix.elements[2] = clipPlane.x;
             projectionMatrix.elements[6] = clipPlane.y;
-            projectionMatrix.elements[10] = clipPlane.z + 1;
+            projectionMatrix.elements[10] = clipPlane.z + 1.0 - clipBias;
             projectionMatrix.elements[14] = clipPlane.w;
 
             eye.setFromMatrixPosition(camera.matrixWorld);
@@ -462,21 +572,27 @@ class RealisticOcean extends THREE.Mesh {
             const currentXrEnabled = renderer.xr.enabled;
             const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
 
+            // try/finally : si la passe miroir throw, on restaure quand même la
+            // visibilité (océan / gizmos) et le render target — sinon la scène
+            // resterait « morte » (océan invisible, rendu détourné vers le RT).
             this.visible = false;
+            hideMirrorClutter(scene);
             renderer.xr.enabled = false;
             renderer.shadowMap.autoUpdate = false;
-            renderer.setRenderTarget(renderTarget);
-            renderer.state.buffers.depth.setMask(true);
-            if (renderer.autoClear === false) renderer.clear();
-            renderer.render(scene, mirrorCamera);
-            this.visible = true;
-
-            renderer.xr.enabled = currentXrEnabled;
-            renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
-            renderer.setRenderTarget(currentRenderTarget);
-
-            if (camera.viewport !== undefined) {
-                renderer.state.viewport(camera.viewport);
+            try {
+                renderer.setRenderTarget(renderTarget);
+                renderer.state.buffers.depth.setMask(true);
+                if (renderer.autoClear === false) renderer.clear();
+                renderer.render(scene, mirrorCamera);
+            } finally {
+                restoreMirrorClutter();
+                this.visible = true;
+                renderer.xr.enabled = currentXrEnabled;
+                renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
+                renderer.setRenderTarget(currentRenderTarget);
+                if (camera.viewport !== undefined) {
+                    renderer.state.viewport(camera.viewport);
+                }
             }
         };
     }
@@ -654,6 +770,7 @@ export function initOcean({
         u.sunDirection.value.copy(sunDir);
         mesh.material.transparent = true;
         mesh.position.y = state.level;
+        mesh.userData.oceanClipBias = MIRROR_CLIP_BIAS;
         syncTerrainToOcean();
     }
 
@@ -702,7 +819,7 @@ export function initOcean({
                 sunDirection: sunDir.clone(),
                 sunColor: new THREE.Color(state.sunColor).getHex(),
                 waterColor: new THREE.Color(state.color).getHex(),
-                shallowColor: 0x4ec4d4,
+                shallowColor: 0x4ec8d8,
                 distortionScale: state.distortion,
                 alpha: state.opacity,
                 textureWidth: 1024,
@@ -716,9 +833,8 @@ export function initOcean({
             const mirrorPass = mesh.onBeforeRender.bind(mesh);
             mesh.onBeforeRender = (rend, scn, cam) => {
                 if (!mesh) return;
-                const dt = 1 / 60;
-                mesh.material.uniforms.time.value += dt * state.waveSpeed;
-                mesh.material.uniforms.uTime.value += dt;
+                // Le temps est avancé via tick() (beforeRender) pour rester
+                // synchronisé avec la flottaison — pas ici.
                 syncTerrainToOcean();
                 mirrorPass(rend, scn, cam);
             };
@@ -749,7 +865,7 @@ export function initOcean({
     /**
      * @param {{ recordHistory?: boolean }} [opts]
      */
-    function removeOcean({ recordHistory = true } = {}) {
+    function removeOcean({ recordHistory = true, resetSettings = false } = {}) {
         if (!mesh) return;
         const before = recordHistory ? serializeState() : null;
         scene.remove(mesh);
@@ -757,6 +873,9 @@ export function initOcean({
         mesh = null;
         restoreFog();
         sceneRegistry?.unregister(OCEAN_SCENE_ITEM_ID);
+        if (resetSettings) {
+            Object.assign(state, DEFAULTS);
+        }
         syncUiFromState();
         showStatus("Océan retiré");
         if (recordHistory && before) {
@@ -863,6 +982,62 @@ export function initOcean({
         }, { step: 1 });
     }
 
+    /**
+     * Altitude de la surface en (x, z) monde — même houle que le shader.
+     * Deux itérations pour compenser le déplacement horizontal de Gerstner.
+     * @param {number} x
+     * @param {number} z
+     * @returns {number | null}
+     */
+    function getWaveHeightAt(x, z) {
+        if (!mesh) return null;
+        const half = Math.max(0.5, state.size * 0.5 - 0.25);
+        // Clamp dans le domaine plutôt que null : sinon la flottaison
+        // s’arrête dès qu’un coin de barque sort du disque océan.
+        const sx = THREE.MathUtils.clamp(x, -half, half);
+        const sz = THREE.MathUtils.clamp(z, -half, half);
+
+        const time = (mesh.material?.uniforms?.uTime?.value ?? 0) * state.waveSpeed;
+        const height = state.waveHeight;
+        const scale = state.waveScale;
+        const steep = Math.max(0, Math.min(2.5, state.choppiness));
+
+        let baseX = sx;
+        let baseZ = sz;
+        let elevation = 0;
+        for (let pass = 0; pass < 2; pass += 1) {
+            let dx = 0;
+            let dy = 0;
+            let dz = 0;
+            for (const wave of WAVE_TRAINS) {
+                const amp = height * wave.amp;
+                const freq = scale * wave.freq;
+                const phase =
+                    (wave.dir[0] * baseX + wave.dir[1] * baseZ) * freq +
+                    time * wave.timeMul * wave.speed;
+                const qa = steep * wave.steep * amp;
+                dx += wave.dir[0] * qa * Math.cos(phase);
+                dz += wave.dir[1] * qa * Math.cos(phase);
+                dy += amp * Math.sin(phase);
+            }
+            elevation = dy;
+            baseX = sx - dx;
+            baseZ = sz - dz;
+        }
+        return mesh.position.y + elevation;
+    }
+
+    /**
+     * Avance le temps de l’océan (houle + rides) — indépendant du rendu miroir.
+     * @param {number} dt
+     */
+    function tick(dt) {
+        if (!mesh?.material?.uniforms) return;
+        const d = THREE.MathUtils.clamp(Number(dt) || 1 / 60, 0.001, 0.1);
+        mesh.material.uniforms.time.value += d * state.waveSpeed;
+        mesh.material.uniforms.uTime.value += d;
+    }
+
     syncUiFromState();
 
     return {
@@ -870,6 +1045,8 @@ export function initOcean({
         remove: removeOcean,
         isActive: () => !!mesh,
         getMesh: () => mesh,
+        getWaveHeightAt,
+        tick,
         serialize: serializeState,
         /**
          * @param {Partial<typeof DEFAULTS> & { visible?: boolean } | null | undefined} data

@@ -7,9 +7,21 @@ export function createHistory({ maxSize = 50 } = {}) {
     const redoStack = [];
 
     function push(entry) {
+        // Horodatage : permet d’arbitrer chronologiquement avec d’autres piles
+        // (ex. coups de pinceau terrain) au moment du Ctrl+Z.
+        if (entry && typeof entry === "object") {
+            /** @type {{ at?: number }} */ (entry).at = Date.now();
+        }
         undoStack.push(entry);
         if (undoStack.length > maxSize) undoStack.shift();
         redoStack.length = 0;
+    }
+
+    /** @param {unknown[]} stack */
+    function peekAt(stack) {
+        if (!stack.length) return 0;
+        const top = /** @type {{ at?: number } | null} */ (stack[stack.length - 1]);
+        return typeof top?.at === "number" ? top.at : 0;
     }
 
     function undo() {
@@ -26,12 +38,23 @@ export function createHistory({ maxSize = 50 } = {}) {
         return entry;
     }
 
+    /** Vide les deux piles (nouvelle scène / ouverture) : évite de ressusciter l’ancienne scène. */
+    function clear() {
+        undoStack.length = 0;
+        redoStack.length = 0;
+    }
+
     return {
         push,
         undo,
         redo,
+        clear,
         canUndo: () => undoStack.length > 0,
         canRedo: () => redoStack.length > 0,
+        /** Horodatage de la prochaine entrée annulable (0 si vide). */
+        peekUndoAt: () => peekAt(undoStack),
+        /** Horodatage de la prochaine entrée rétablissable (0 si vide). */
+        peekRedoAt: () => peekAt(redoStack),
     };
 }
 

@@ -252,9 +252,13 @@ export function pickFilePreservingFullscreen(input) {
     armFocusFullscreenRestore();
 
     return new Promise((resolve) => {
+        let done = false;
         const finish = () => {
+            if (done) return;
+            done = true;
             input.removeEventListener("change", onChange);
             input.removeEventListener("cancel", finish);
+            window.removeEventListener("focus", onWindowFocus);
             filePickerPending = false;
             ensureCssFullscreen();
             void restoreFullscreenNow().finally(() => {
@@ -263,8 +267,15 @@ export function pickFilePreservingFullscreen(input) {
             });
         };
         const onChange = () => finish();
+        // Filet de sécurité : certains navigateurs n’émettent pas « cancel ».
+        // Au retour du focus (picker fermé), on laisse le temps à « change »
+        // d’arriver, puis on libère l’état pour ne pas bloquer le plein écran.
+        const onWindowFocus = () => {
+            setTimeout(finish, 800);
+        };
         input.addEventListener("change", onChange, { once: true });
         input.addEventListener("cancel", finish, { once: true });
+        window.addEventListener("focus", onWindowFocus, { once: true });
         input.click();
     });
 }
