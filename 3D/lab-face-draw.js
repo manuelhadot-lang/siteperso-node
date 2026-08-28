@@ -2,9 +2,9 @@
 import * as THREE from "three";
 import { prepareTileSource } from "./texture-tile-utils.js";
 import { getArchSurfaceId, getArchSurfaceMeshes, isLabArchitecture, prepareArchSurfaceMeshForTexture, applyArchMeshPlanarUvs, ARCH_SURFACE_TEX_KEY, ARCH_SURFACE_TEXTURED_KEY } from "./lab-architecture.js";
-import { reflectionToPbr, syncMirrorOnBoxFace } from "./lab-mirror.js";
+import { reflectionToPbr, envMapIntensityForMaterial, syncMirrorOnBoxFace } from "./lab-mirror.js";
 import { LAB_IMPORTED_KEY, LAB_MESH_PERSIST_ID_KEY } from "./lab-import.js";
-import { groupTrianglesByIslands } from "./lab-mesh-split.js";
+import { groupTrianglesByIslands, listTriangleRecords } from "./lab-mesh-split.js";
 
 export const FACE_PAINT_KEY = "facePaint";
 export const FACE_CANVAS_SIZE = 256;
@@ -940,7 +940,7 @@ function createFreshOpaqueStandardMaterial(source, props = {}) {
         typeof props.envMapIntensity === "number"
             ? props.envMapIntensity
             : typeof props.reflection === "number"
-              ? 1.05 + props.reflection * 2.9
+              ? envMapIntensityForMaterial(source, props.reflection)
               : typeof source?.envMapIntensity === "number"
                 ? source.envMapIntensity
                 : 1;
@@ -1187,12 +1187,12 @@ function applyPropsToStandardMaterial(mat, props, opts = {}) {
     if (typeof props.metalness === "number") {
         mat.metalness = THREE.MathUtils.clamp(props.metalness, 0, 1);
     }
-    if (typeof props.envMapIntensity === "number") {
+    if (typeof props.reflection === "number") {
+        mat.envMapIntensity = envMapIntensityForMaterial(mat, props.reflection);
+    } else if (typeof props.envMapIntensity === "number") {
         mat.envMapIntensity = props.envMapIntensity;
-    } else if (typeof props.reflection === "number" || typeof props.metalness === "number") {
-        const metal = typeof props.metalness === "number" ? props.metalness : mat.metalness || 0;
-        const refl = typeof props.reflection === "number" ? props.reflection : metal;
-        mat.envMapIntensity = 1.05 + refl * 2.9;
+    } else if (typeof props.metalness === "number") {
+        mat.envMapIntensity = envMapIntensityForMaterial(mat, props.metalness);
     }
     if (typeof props.opacity === "number") {
         const opacity = THREE.MathUtils.clamp(props.opacity, 0, 1);
@@ -1288,6 +1288,7 @@ function resolveMaterialPropsUpdate(nextProps, props, prev, defaults) {
         return out;
     }
     if (props.metalPreset) {
+        const pbr = reflectionToPbr(0.82);
         out = {
             ...out,
             glass: false,
@@ -1295,7 +1296,7 @@ function resolveMaterialPropsUpdate(nextProps, props, prev, defaults) {
             roughness: 0.18,
             opacity: 1,
             reflection: 0.82,
-            envMapIntensity: 1.05 + 0.82 * 2.9,
+            envMapIntensity: pbr.envMapIntensity,
         };
         delete prev.glassRestore;
         return out;
@@ -1756,15 +1757,35 @@ export async function applyMeshSlotTextureMaps(
     if (!object.userData[FACE_PBR_STORE_KEY]) object.userData[FACE_PBR_STORE_KEY] = {};
     const storeKey = `${mesh.uuid}:${slot.index}`;
     const pbr = object.userData[FACE_PBR_STORE_KEY];
+    const prev = pbr[storeKey] || {};
     pbr[storeKey] = {
-        ...(pbr[storeKey] || {}),
+        ...prev,
         tileX: tx,
         tileY: ty,
         offsetX,
         offsetY,
         opacity: 1,
         glass: false,
-        colorDataUrl: typeof maps.color === "string" ? maps.color : pbr[storeKey]?.colorDataUrl,
+        color: maps.color ? mat.map : prev.color,
+        normal: maps.normal ? mat.normalMap : prev.normal,
+        specular: maps.specular ? mat.metalnessMap : prev.specular,
+        roughnessMap: maps.roughness ? mat.roughnessMap : prev.roughnessMap,
+        colorDataUrl: persistableTextureUrl(
+            typeof maps.color === "string" ? maps.color : prev.colorDataUrl,
+            mat.map
+        ),
+        normalDataUrl: persistableTextureUrl(
+            typeof maps.normal === "string" ? maps.normal : prev.normalDataUrl,
+            mat.normalMap
+        ),
+        specularDataUrl: persistableTextureUrl(
+            typeof maps.specular === "string" ? maps.specular : prev.specularDataUrl,
+            mat.metalnessMap
+        ),
+        roughnessDataUrl: persistableTextureUrl(
+            typeof maps.roughness === "string" ? maps.roughness : prev.roughnessDataUrl,
+            mat.roughnessMap
+        ),
     };
     return true;
 }
@@ -2102,12 +2123,18 @@ export async function applyArchSurfaceTextureMaps(
         faceIndex,
         surfaceId,
         // Data URLs stables pour rebuild / save (évite toDataURL canvas tainted).
-        colorDataUrl:
-            (typeof maps.color === "string" && maps.color) || prev.colorDataUrl || null,
-        normalDataUrl:
-            (typeof maps.normal === "string" && maps.normal) || prev.normalDataUrl || null,
-        specularDataUrl:
-            (typeof maps.specular === "string" && maps.specular) || prev.specularDataUrl || null,
+        colorDataUrl: persistableTextureUrl(
+            (typeof maps.color === "string" && maps.color) || prev.colorDataUrl,
+            finalColor
+        ),
+        normalDataUrl: persistableTextureUrl(
+            (typeof maps.normal === "string" && maps.normal) || prev.normalDataUrl,
+            finalNormal
+        ),
+        specularDataUrl: persistableTextureUrl(
+            (typeof maps.specular === "string" && maps.specular) || prev.specularDataUrl,
+            finalSpecular
+        ),
         tileX,
         tileY,
         offsetX,
@@ -2121,6 +2148,16 @@ export async function applyArchSurfaceTextureMaps(
     };
 
     return meshes.length;
+}
+
+/**
+ * @param {THREE.Texture | null | undefined} texture
+ * @returns {string | null}
+ */
+function persistableTextureUrl(url, texture) {
+    if (typeof url === "string" && url.startsWith("data:")) return url;
+    // blob: / http: meurent au rechargement — rasteriser l’image live.
+    return textureImageToDataUrl(texture);
 }
 
 /**
@@ -2171,15 +2208,9 @@ export function serializeArchSurfaceTextures(room) {
         if (!entry || typeof entry !== "object") continue;
         // Ignorer l’ancien format sans face (« south ») — désormais « south:4 ».
         if (!String(key).includes(":")) continue;
-        const color =
-            (typeof entry.colorDataUrl === "string" && entry.colorDataUrl) ||
-            textureImageToDataUrl(entry.color);
-        const normal =
-            (typeof entry.normalDataUrl === "string" && entry.normalDataUrl) ||
-            textureImageToDataUrl(entry.normal);
-        const specular =
-            (typeof entry.specularDataUrl === "string" && entry.specularDataUrl) ||
-            textureImageToDataUrl(entry.specular);
+        const color = persistableTextureUrl(entry.colorDataUrl, entry.color);
+        const normal = persistableTextureUrl(entry.normalDataUrl, entry.normal);
+        const specular = persistableTextureUrl(entry.specularDataUrl, entry.specular);
         const hasMaterial =
             typeof entry.roughness === "number" ||
             typeof entry.metalness === "number" ||
@@ -2445,10 +2476,6 @@ export async function applyFaceMapsToSurface(
     // Conserver les scalaires (rugosité / réflexion…) : ne pas écraser avec la texture map.
     store[storeKey] = {
         ...prev,
-        colorDataUrl,
-        normalDataUrl,
-        specularDataUrl,
-        roughnessDataUrl,
         color: colorTex,
         normal: normalTex,
         specular: specularTex,
@@ -2479,6 +2506,14 @@ export async function applyFaceMapsToSurface(
                   ? oldMat.userData._labReflection
                   : undefined,
         glassRestore: prev.glassRestore || undefined,
+        colorDataUrl: persistableTextureUrl(albedoSnapshot || colorDataUrl, colorTex),
+        normalDataUrl: persistableTextureUrl(normalDataUrl, normalTex),
+        specularDataUrl: persistableTextureUrl(specularDataUrl, specularTex),
+        roughnessDataUrl: persistableTextureUrl(roughnessDataUrl, roughnessTex),
+        tileX,
+        tileY,
+        offsetX,
+        offsetY,
     };
 
     // Nouvelle albedo → blanc (couleurs vraies). Empilement N/S/R → garder la teinte.
@@ -2685,11 +2720,15 @@ export function applyFaceAlbedoTexture(
     }
     object.userData[FACE_PBR_STORE_KEY][storeKey] = {
         ...prevStore,
-        colorDataUrl: colorDataUrl || prevStore.colorDataUrl || null,
+        colorDataUrl: persistableTextureUrl(colorDataUrl || prevStore.colorDataUrl, colorTex),
         color: colorTex,
         normal: next.userData[FACE_NORMAL_MAP_KEY] || prevStore.normal || null,
         specular: next.userData[FACE_SPECULAR_MAP_KEY] || prevStore.specular || null,
-        roughness: next.userData[FACE_ROUGHNESS_MAP_KEY] || prevStore.roughness || null,
+        roughnessMap: next.userData[FACE_ROUGHNESS_MAP_KEY] || prevStore.roughnessMap || null,
+        tileX,
+        tileY,
+        offsetX,
+        offsetY,
     };
 
     detachPaintOverlay(oldMat);
@@ -2910,6 +2949,7 @@ function getTriangleUvFromHit(hit) {
         pb,
         pc,
         triId: `${ia}:${ib}:${ic}`,
+        faceIndex: Number.isInteger(hit.faceIndex) ? hit.faceIndex : null,
         materialIndex: hit.face?.materialIndex ?? 0,
     };
 }
@@ -3650,20 +3690,17 @@ export function serializeFacePbrStore(object) {
         const mat = /** @type {THREE.MeshStandardMaterial | undefined} */ (materials[slotIndex]);
 
         const color =
-            (typeof entry.colorDataUrl === "string" && entry.colorDataUrl) ||
-            textureImageToDataUrl(entry.color) ||
-            textureImageToDataUrl(mat?.userData?.[FACE_ALBEDO_MAP_KEY]) ||
-            textureImageToDataUrl(mat?.map);
+            persistableTextureUrl(entry.colorDataUrl, entry.color) ||
+            persistableTextureUrl(null, mat?.userData?.[FACE_ALBEDO_MAP_KEY]) ||
+            persistableTextureUrl(null, mat?.map);
         const normal =
-            (typeof entry.normalDataUrl === "string" && entry.normalDataUrl) ||
-            textureImageToDataUrl(entry.normal) ||
-            textureImageToDataUrl(mat?.userData?.[FACE_NORMAL_MAP_KEY]) ||
-            textureImageToDataUrl(mat?.normalMap);
+            persistableTextureUrl(entry.normalDataUrl, entry.normal) ||
+            persistableTextureUrl(null, mat?.userData?.[FACE_NORMAL_MAP_KEY]) ||
+            persistableTextureUrl(null, mat?.normalMap);
         const specular =
-            (typeof entry.specularDataUrl === "string" && entry.specularDataUrl) ||
-            textureImageToDataUrl(entry.specular) ||
-            textureImageToDataUrl(mat?.userData?.[FACE_SPECULAR_MAP_KEY]) ||
-            textureImageToDataUrl(mat?.metalnessMap);
+            persistableTextureUrl(entry.specularDataUrl, entry.specular) ||
+            persistableTextureUrl(null, mat?.userData?.[FACE_SPECULAR_MAP_KEY]) ||
+            persistableTextureUrl(null, mat?.metalnessMap);
         const roughnessMapTex =
             entry.roughnessMap ||
             (entry.roughness && entry.roughness.isTexture ? entry.roughness : null) ||
@@ -3671,8 +3708,7 @@ export function serializeFacePbrStore(object) {
             mat?.roughnessMap ||
             null;
         const roughnessMap =
-            (typeof entry.roughnessDataUrl === "string" && entry.roughnessDataUrl) ||
-            textureImageToDataUrl(roughnessMapTex);
+            persistableTextureUrl(entry.roughnessDataUrl, roughnessMapTex);
 
         const roughness =
             typeof entry.roughness === "number"
@@ -4135,6 +4171,7 @@ function buildBrushTile(image) {
  *   setPaintStrokeActive?: (active: boolean) => void,
  *   cancelLookGesture?: () => void,
  *   isTriangulationMode?: () => boolean,
+ *   isFaceApplyMode?: () => boolean,
  *   exitTriangulationForPaint?: () => void,
  *   enterExplore?: () => void,
  *   setSelectionOnlyMode?: () => void,
@@ -4162,6 +4199,7 @@ export function initFaceDrawController(options) {
         setPaintStrokeActive,
         cancelLookGesture,
         isTriangulationMode,
+        isFaceApplyMode,
         exitTriangulationForPaint,
         enterExplore,
         setSelectionOnlyMode,
@@ -4292,6 +4330,52 @@ export function initFaceDrawController(options) {
 
         if (!fillPoints.length) return null;
         return { fillPoints, linePoints };
+    }
+
+    /**
+     * Triangles d’une face / d’un slot, au format attendu par l’extracteur mesh.
+     * @param {THREE.Object3D} object
+     * @param {THREE.Mesh} mesh
+     * @param {number} faceIndex
+     */
+    function collectMeshFaceTriangleEntries(object, mesh, faceIndex) {
+        if (!(mesh instanceof THREE.Mesh) || !mesh.geometry) return [];
+        if (isPaintableBoxMesh(mesh)) ensurePaintReady(mesh);
+        const records = listTriangleRecords(mesh.geometry);
+        const pos = mesh.geometry.attributes?.position;
+        if (!records.length || !pos) return [];
+        const groups = mesh.geometry.groups || [];
+        const group =
+            groups.find((g) => g.materialIndex === faceIndex) ||
+            (faceIndex >= 0 && faceIndex < groups.length ? groups[faceIndex] : null);
+        /** @type {typeof selectedTriangles} */
+        const out = [];
+        for (const rec of records) {
+            let include = false;
+            if (group && group.count > 0) {
+                const j = rec.t * 3;
+                include = j >= group.start && j < group.start + group.count;
+            } else if (!groups.length) {
+                include = true;
+            } else {
+                include = rec.materialIndex === faceIndex;
+            }
+            if (!include) continue;
+            out.push({
+                entity: object,
+                mesh,
+                triId: rec.id,
+                faceIndex: rec.t,
+                materialIndex: rec.materialIndex,
+                a: new THREE.Vector2(),
+                b: new THREE.Vector2(),
+                c: new THREE.Vector2(),
+                pa: new THREE.Vector3(pos.getX(rec.verts[0]), pos.getY(rec.verts[0]), pos.getZ(rec.verts[0])),
+                pb: new THREE.Vector3(pos.getX(rec.verts[1]), pos.getY(rec.verts[1]), pos.getZ(rec.verts[1])),
+                pc: new THREE.Vector3(pos.getX(rec.verts[2]), pos.getY(rec.verts[2]), pos.getZ(rec.verts[2])),
+            });
+        }
+        return out;
     }
 
     /**
@@ -4532,6 +4616,16 @@ export function initFaceDrawController(options) {
         return !!isTriangulationMode?.();
     }
 
+    function isFaceMode() {
+        return !!isFaceApplyMode?.();
+    }
+
+    function clearFaceSelection(showMessage = true) {
+        liveFaceTextureTargets = [];
+        clearFaceSelectionOverlays();
+        if (showMessage) showStatus?.("Face désélectionnée");
+    }
+
     function releaseCapturedPointer(pointerId = capturedPointerId) {
         if (pointerId == null) return;
         try {
@@ -4554,7 +4648,7 @@ export function initFaceDrawController(options) {
             setSelectionOnlyMode?.();
             showStatus?.(
                 isTriMode()
-                    ? "Triangulation — glisser = sélection, clic droit = regarder (Ctrl+Z annule)"
+                    ? "Triangulation — glisser = sélection, clic droit = vider (glisser droit = caméra)"
                     : "Crayon — clic gauche = dessiner, clic droit = regarder"
             );
         } else {
@@ -5142,7 +5236,7 @@ export function initFaceDrawController(options) {
         selectedTriangles.push(entry);
         refreshTriangleSelectionOverlay();
         showStatus?.(
-            `Triangles sélectionnés : ${selectedTriangles.length} (Ctrl+Z pour annuler)`
+            `Triangles sélectionnés : ${selectedTriangles.length} (clic droit pour vider)`
         );
     }
 
@@ -5155,6 +5249,7 @@ export function initFaceDrawController(options) {
             entity: picked.entity,
             mesh: picked.mesh,
             triId: triHit.triId,
+            faceIndex: triHit.faceIndex,
             materialIndex: triHit.materialIndex,
             a: triHit.a,
             b: triHit.b,
@@ -5505,6 +5600,53 @@ export function initFaceDrawController(options) {
         toggle();
     });
 
+    /**
+     * Clic droit : vider la sélection triangles (mode △) ou la face ciblée (mode Face).
+     * (Le pipeline caméra / menu du viewport avale sinon le clic.)
+     * @param {MouseEvent | PointerEvent} event
+     * @returns {boolean}
+     */
+    function consumeRightClickToClearSelection(event) {
+        const clearTriangles = isTriMode() && selectedTriangles.length > 0;
+        const clearFace = isFaceMode() && liveFaceTextureTargets.length > 0;
+        if (!clearTriangles && !clearFace) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        cancelLookGesture?.();
+        setPaintStrokeActive?.(false);
+        triDragActive = false;
+        triDragLastKey = null;
+        triDragSnapshot = null;
+        if (clearTriangles) clearTriangleSelection(true);
+        if (clearFace) clearFaceSelection(true);
+        return true;
+    }
+
+    canvas.addEventListener(
+        "pointerdown",
+        (event) => {
+            if (event.button === 2) consumeRightClickToClearSelection(event);
+        },
+        true
+    );
+    canvas.addEventListener(
+        "mousedown",
+        (event) => {
+            if (event.button === 2) consumeRightClickToClearSelection(event);
+        },
+        true
+    );
+    canvas.addEventListener(
+        "contextmenu",
+        (event) => {
+            if (!isTriMode() && !isFaceMode()) return;
+            event.preventDefault();
+            event.stopPropagation();
+            consumeRightClickToClearSelection(event);
+        },
+        true
+    );
+
     canvas.addEventListener("pointerdown", (event) => {
         if (!active || event.button !== 0) return;
         // Ne pas preventDefault ici : ça coupe mouseup et laisse l’orbite
@@ -5597,6 +5739,29 @@ export function initFaceDrawController(options) {
         },
         hasTriangleSelection: () => selectedTriangles.length > 0,
         getSelectedTriangles: () => selectedTriangles.slice(),
+        hasLiveFaceTarget: () => {
+            const entry = liveFaceTextureTargets[liveFaceTextureTargets.length - 1];
+            return !!(entry?.object && Number.isInteger(entry.faceIndex));
+        },
+        getLiveFaceTriangleEntries: () => {
+            const entry = liveFaceTextureTargets[liveFaceTextureTargets.length - 1];
+            if (!entry?.object || !Number.isInteger(entry.faceIndex)) return [];
+            /** @type {THREE.Mesh[]} */
+            let meshes = [];
+            if (entry.surfaceId && isLabArchitecture(entry.object)) {
+                meshes = getArchSurfaceMeshes(entry.object, entry.surfaceId).filter(
+                    (m) => m instanceof THREE.Mesh
+                );
+            } else if (entry.mesh instanceof THREE.Mesh) {
+                meshes = [entry.mesh];
+            }
+            /** @type {typeof selectedTriangles} */
+            const out = [];
+            for (const mesh of meshes) {
+                out.push(...collectMeshFaceTriangleEntries(entry.object, mesh, entry.faceIndex));
+            }
+            return out;
+        },
         /**
          * Étend la sélection au(x) îlot(s) des triangles déjà choisis.
          * @returns {number}
@@ -5614,16 +5779,21 @@ export function initFaceDrawController(options) {
             for (const [mesh, entries] of byMesh.entries()) {
                 const seeds = new Set(entries.map((e) => e.triId));
                 const islands = groupTrianglesByIslands(mesh);
+                const records = listTriangleRecords(mesh.geometry);
+                const recById = new Map(records.map((r) => [r.id, r]));
                 const pos = mesh.geometry.attributes.position;
                 const entity = entries[0].entity;
                 const materialIndex = entries[0].materialIndex;
                 for (const island of islands) {
                     if (!island.some((t) => seeds.has(t.join(":")))) continue;
                     for (const tri of island) {
+                        const id = tri.join(":");
+                        const rec = recById.get(id);
                         next.push({
                             entity,
                             mesh,
-                            triId: tri.join(":"),
+                            triId: id,
+                            faceIndex: typeof rec?.t === "number" ? rec.t : undefined,
                             materialIndex,
                             a: new THREE.Vector2(),
                             b: new THREE.Vector2(),
@@ -5867,9 +6037,8 @@ export function initFaceDrawController(options) {
             refreshFaceSelectionOverlay();
             return true;
         },
-        clearFaceSelectionHighlight: () => {
-            liveFaceTextureTargets = [];
-            clearFaceSelectionOverlays();
+        clearFaceSelectionHighlight: (showMessage = false) => {
+            clearFaceSelection(!!showMessage);
         },
         /**
          * Teinte uniquement la dernière face / le dernier mur ciblé.

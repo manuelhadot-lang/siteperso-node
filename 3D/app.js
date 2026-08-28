@@ -12,8 +12,10 @@ import { initTerrainEditor } from "./lab-terrain.js";
 import { initOcean } from "./lab-ocean.js";
 import { initTextureLibrary } from "./lab-texture-library.js";
 import { initObjectLibrary } from "./lab-object-library.js";
+import * as THREE from "three";
 
-export const LAB_BUILD = "20260817bounds";
+export const LAB_BUILD =
+    "20260819ignOsmRoadTexture_overpassProxy";
 
 initSidePanel();
 
@@ -127,19 +129,6 @@ if (viewport && blocker) {
         gallery.registerEnvironmentItems(sceneRegistry);
     }
 
-    const terrainEditor = initTerrainEditor({
-        scene: gallery.scene,
-        camera: gallery.camera,
-        renderer: gallery.renderer,
-        setTerrainSculptModeActive: gallery.setTerrainSculptModeActive,
-        gridHelper: gallery.gridHelper,
-        floor: gallery.floor,
-        setFloorCoveredByTerrain: gallery.setFloorCoveredByTerrain,
-        sceneRegistry,
-        focusOnTerrain: gallery.focusOnTerrainRelief,
-        setWorldSize: gallery.setWorldSize,
-    });
-
     const showLabStatus = (msg) => {
         const el =
             document.querySelector(".lab-viewport__status") ||
@@ -152,6 +141,21 @@ if (viewport && blocker) {
         }
         console.info("[LAB]", msg);
     };
+
+    const terrainEditor = initTerrainEditor({
+        scene: gallery.scene,
+        camera: gallery.camera,
+        renderer: gallery.renderer,
+        setTerrainSculptModeActive: gallery.setTerrainSculptModeActive,
+        gridHelper: gallery.gridHelper,
+        floor: gallery.floor,
+        setFloorCoveredByTerrain: gallery.setFloorCoveredByTerrain,
+        sceneRegistry,
+        focusOnTerrain: gallery.focusOnTerrainRelief,
+        setWorldSize: gallery.setWorldSize,
+        showStatus: showLabStatus,
+        setMovementMode: gallery.setMovementMode,
+    });
 
     let objectLibrary = null;
     const objlibRoot =
@@ -278,6 +282,141 @@ if (viewport && blocker) {
         }
 
         if (editor) {
+            const jungleMountainBtn = document.getElementById("btn-import-jungle-mountain");
+            if (jungleMountainBtn) {
+                let busy = false;
+                jungleMountainBtn.addEventListener("click", async (event) => {
+                    event.stopPropagation();
+                    if (busy) return;
+                    busy = true;
+                    try {
+                        showLabStatus?.("Chargement “Jungle Mountain”…");
+                        const objUrl =
+                            "/3D/montagne/Jungle%2BMountain/Jungle%20Mountain.obj";
+                        const albedoUrl =
+                            "/3D/montagne/Jungle%2BMountain/Base%20Color.jpg";
+
+                        const objRes = await fetch(objUrl, { cache: "no-store" });
+                        if (!objRes.ok) throw new Error(`OBJ indisponible : ${objUrl}`);
+                        const objBuffer = await objRes.arrayBuffer();
+
+                        const colorRes = await fetch(albedoUrl, { cache: "no-store" });
+                        if (!colorRes.ok) throw new Error(`Base color indisponible : ${albedoUrl}`);
+                        const colorBlob = await colorRes.blob();
+
+                        const asset = {
+                            id: "builtin:jungle-mountain",
+                            name: "Jungle Mountain",
+                            format: "obj",
+                            buffer: objBuffer,
+                        };
+
+                        const placed = await editor.spawnImportedLibraryAsset(asset);
+
+                        // Tuile/relief : agrandir fortement (au moins ×500).
+                        const scaleMultiplier = 500;
+
+                        try {
+                            placed.scale.multiplyScalar(scaleMultiplier);
+                            placed.updateMatrixWorld(true);
+
+                            // Après mise à l’échelle, reposer la montagne exactement sur y=0,
+                            // sinon la collision joueur peut se retrouver sous/sur le maillage.
+                            const groundBox = new THREE.Box3().setFromObject(placed);
+                            if (Number.isFinite(groundBox.min.y)) {
+                                placed.position.y -= groundBox.min.y;
+                                placed.updateMatrixWorld(true);
+                            }
+
+                            // Garder la collision active pour que l’avatar puisse marcher dessus.
+                            // Et utiliser un proxy léger (1 seul sous-mesh) : ça évite de recalculer AABB/raycast sur tout le groupe.
+                            placed.userData.collisionEnabled = true;
+                            let collisionProxy = null;
+                            let bestVerts = -1;
+                            placed.traverse((child) => {
+                                if (!(child instanceof THREE.Mesh)) return;
+                                const pos = child.geometry?.attributes?.position;
+                                if (!pos) return;
+                                const vertCount = typeof pos.count === "number" ? pos.count : 0;
+                                if (vertCount > bestVerts) {
+                                    bestVerts = vertCount;
+                                    collisionProxy = child;
+                                }
+                            });
+                            if (collisionProxy) placed.userData.collisionProxy = collisionProxy;
+
+                            // Gros gain perf : ombres désactivées sur ce gros relief.
+                            placed.traverse((child) => {
+                                if (!(child instanceof THREE.Mesh)) return;
+                                child.castShadow = false;
+                                child.receiveShadow = false;
+                            });
+                        } catch {
+                            /* ignore scaling */
+                        }
+
+                        // Charger la texture via objectURL (évite les dataURL énormes/base64).
+                        const objectUrl = URL.createObjectURL(colorBlob);
+                        const albedoTexture = await new Promise((resolve, reject) => {
+                            const loader = new THREE.TextureLoader();
+                            loader.load(
+                                objectUrl,
+                                (tex) => resolve(tex),
+                                undefined,
+                                (err) => reject(err ?? new Error("Texture albédo impossible"))
+                            );
+                        });
+                        if ("colorSpace" in albedoTexture) {
+                            albedoTexture.colorSpace = THREE.SRGBColorSpace;
+                        } else {
+                            // Compat ancien trois.
+                            albedoTexture.encoding = THREE.sRGBEncoding;
+                        }
+                        albedoTexture.needsUpdate = true;
+                        albedoTexture.wrapS = THREE.RepeatWrapping;
+                        albedoTexture.wrapT = THREE.RepeatWrapping;
+                        // À la même échelle que le modèle (sinon la texture paraît “grossière”).
+                        // On revient au comportement “du début” : repeat neutre (évite le tiling trop visible).
+                        albedoTexture.repeat.set(1, 1);
+                        albedoTexture.anisotropy = 8;
+
+                        placed.traverse((child) => {
+                            if (!(child instanceof THREE.Mesh)) return;
+                            const mats = Array.isArray(child.material)
+                                ? child.material
+                                : [child.material];
+                            mats.forEach((mat) => {
+                                if (!mat) return;
+                                if ("map" in mat) {
+                                    mat.map = albedoTexture;
+                                    mat.color?.set?.(0xffffff);
+                                    mat.needsUpdate = true;
+                                }
+                            });
+                        });
+
+                        try {
+                            const box = new THREE.Box3().setFromObject(placed);
+                            const size = box.getSize(new THREE.Vector3());
+                            const worldSize = Math.max(200, size.x, size.z) * 1.2;
+                            gallery.setWorldSize(worldSize);
+                            gallery.setMovementMode("design");
+                            gallery.focusOnObject(placed);
+                        } catch {
+                            /* ignore framing */
+                        }
+
+                        URL.revokeObjectURL(objectUrl);
+                        showLabStatus?.("Montagne placée et cadrée.");
+                    } catch (err) {
+                        console.warn("[LAB] bouton Jungle Mountain :", err);
+                        showLabStatus?.(err instanceof Error ? err.message : "Import montagne impossible");
+                    } finally {
+                        busy = false;
+                    }
+                });
+            }
+
             const texlibRoot = document.getElementById("lab-section-textures");
             if (texlibRoot) {
                 try {
@@ -298,6 +437,9 @@ if (viewport && blocker) {
                             editor.clearTriangleSelection?.();
                             showLabStatus("Sélection de triangles vidée");
                         },
+                        onDeleteTriangles: () => {
+                            void editor.deleteTriangleSelection?.();
+                        },
                     });
                 } catch (error) {
                     console.error("[LAB 3D] initTextureLibrary a échoué :", error);
@@ -317,7 +459,19 @@ if (viewport && blocker) {
                 onNew: async () => {
                     const created = await editor.newScene();
                     // Ne pas toucher à la caméra si l’utilisateur a annulé le dialogue.
-                    if (created) gallery.resetViewForNewScene();
+                    if (created) {
+                        gallery.resetViewForNewScene();
+                        // Sur une nouvelle scène, on enlève aussi l’océan et la skybox/HDRI,
+                        // sinon ils restent affichés.
+                        oceanEditor?.remove?.({ recordHistory: false, resetSettings: true });
+                        skyboxController?.clear?.();
+                        // Par défaut sur une nouvelle scène : mode Conception + repères.
+                        gallery.setMovementMode("design");
+                        if (sceneRegistry) {
+                            sceneRegistry.setVisible("env-grid", true);
+                            sceneRegistry.setVisible("env-floor", true);
+                        }
+                    }
                 },
                 onOpen: () => editor.openScene(),
                 onOpenDisk: () => editor.openSceneFromDisk(),

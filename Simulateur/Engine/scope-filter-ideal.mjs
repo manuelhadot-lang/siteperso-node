@@ -11,6 +11,7 @@ import {
     lm386PreviewStage,
     lm386Vbias,
 } from "./lm386.mjs";
+import { ldrResistanceOhm } from "./ldr.mjs";
 
 function parseResistorOhms(value) {
     const s = String(value || "1k").trim().toLowerCase();
@@ -22,6 +23,15 @@ function parseResistorOhms(value) {
     else if (m[2] === "m") n *= 1e6;
     else if (m[2] === "g") n *= 1e9;
     return n;
+}
+
+function componentOhms(comp) {
+    if (comp.type === "ldr") return ldrResistanceOhm(comp);
+    return parseResistorOhms(comp.value);
+}
+
+function isFilterResistor(comp) {
+    return comp.type === "resistor" || comp.type === "potentiometer" || comp.type === "ldr";
 }
 
 function parseCapacitanceFarad(s) {
@@ -174,8 +184,8 @@ function opampLinearGain(opamp, components, wires, autoJunctions) {
     let rf = 0;
     let rg = 0;
     for (const r of components) {
-        if (r.type !== "resistor" && r.type !== "potentiometer") continue;
-        const rOhm = parseResistorOhms(r.value);
+        if (r.type !== "resistor" && r.type !== "potentiometer" && r.type !== "ldr") continue;
+        const rOhm = componentOhms(r);
         const rIn = `${r.label}_in`;
         const rOut = `${r.label}_out`;
         if (resistorBetween(out, minus, r, wires, autoJunctions)) rf = rOhm;
@@ -276,7 +286,7 @@ export function findRcFilterPreviewForScope(
     const srcNet = reachableJonctions(srcOut, wires, autoJunctions);
     if ([...srcNet].some((j) => chNet.has(j))) return null;
 
-    const resistors = components.filter((c) => c.type === "resistor" || c.type === "potentiometer");
+    const resistors = components.filter(isFilterResistor);
     const capacitors = components.filter((c) => c.type === "capacitor");
 
     let best = null;
@@ -351,7 +361,7 @@ export function findRcFilterPreviewForScope(
             const linearGain = opampChain.reduce((p, s) => p * (s.gain ?? 1), 1);
             best = {
                 type,
-                rOhm: parseResistorOhms(res.value),
+                rOhm: componentOhms(res),
                 cFarad: parseCapacitanceFarad(cap.value),
                 linearGain,
                 opampChain,

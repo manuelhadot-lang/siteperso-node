@@ -7,6 +7,7 @@ import { refreshJoyitTft18DisplayCache } from './Engine/tft18-ideal.mjs';
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { DEFAULT_ESP32_SKETCH, ESP32_FQBN, uploadProfilesForBoardType, normalizeBoardFqbn } from './esp32-c3-layout.js';
 import { DEFAULT_ESP32_DEVKIT_SKETCH } from './esp32-devkit-layout.js';
+import { DEFAULT_ESP32_UPESY_LP_SKETCH } from './esp32-upesy-lp-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { registerArduinoSketchSync, syncArduinoSketchesFromEditor } from './arduino-sketch-sync.js';
@@ -524,12 +525,14 @@ export function getActiveArduinoBoard() {
 function boardPanelTitle(comp) {
     if (comp.type === 'esp32_c3') return `${comp.label} — ESP32-C3`;
     if (comp.type === 'esp32_devkit') return `${comp.label} — ESP32 DevKit`;
+    if (comp.type === 'esp32_upesy_lp') return `${comp.label} — uPesy Low Power`;
     return `${comp.label} — Arduino UNO`;
 }
 
 function defaultSketchForBoard(comp) {
     if (comp.type === 'esp32_c3') return DEFAULT_ESP32_SKETCH;
     if (comp.type === 'esp32_devkit') return DEFAULT_ESP32_DEVKIT_SKETCH;
+    if (comp.type === 'esp32_upesy_lp') return DEFAULT_ESP32_UPESY_LP_SKETCH;
     return DEFAULT_ARDUINO_SKETCH;
 }
 
@@ -555,7 +558,7 @@ function boardMatchesPreferredType(board, preferredType) {
     if (!board || !isMicroBoard(board)) return false;
     if (!preferredType) return true;
     if (preferredType === 'esp32') {
-        return board.type === 'esp32_devkit' || board.type === 'esp32_c3';
+        return board.type === 'esp32_devkit' || board.type === 'esp32_c3' || board.type === 'esp32_upesy_lp';
     }
     return board.type === preferredType;
 }
@@ -577,6 +580,7 @@ function findBoardForEditor(preferredType) {
     if (preferredType === 'esp32') {
         return (
             circuit.components.find((c) => c.type === 'esp32_devkit') ||
+            circuit.components.find((c) => c.type === 'esp32_upesy_lp') ||
             circuit.components.find((c) => c.type === 'esp32_c3')
         );
     }
@@ -612,8 +616,8 @@ export function openArduinoEditorForCircuit(preferredType) {
     const board = findBoardForEditor(preferredType);
     if (!board) {
         const hint =
-            preferredType === 'esp32' || preferredType === 'esp32_c3' || preferredType === 'esp32_devkit'
-                ? 'Ajoutez d’abord une carte ESP32 au schéma (menu ESP32 — C3 ou DevKit WROOM-32).'
+            preferredType === 'esp32' || preferredType === 'esp32_c3' || preferredType === 'esp32_devkit' || preferredType === 'esp32_upesy_lp'
+                ? 'Ajoutez d’abord une carte ESP32 au schéma (menu ESP32).'
                 : preferredType === 'arduino_uno'
                   ? 'Ajoutez d’abord une carte Arduino UNO au schéma (menu Arduino).'
                   : 'Ajoutez d’abord une carte Arduino UNO ou ESP32 au schéma.';
@@ -795,20 +799,23 @@ export function initArduinoEditor() {
     });
     document.getElementById('arduino-panel-doc')?.addEventListener('click', () => {
         if (!activeBoard) return;
-        if (activeBoard.type === 'esp32_c3' || activeBoard.type === 'esp32_devkit') {
+        if (activeBoard.type === 'esp32_c3' || activeBoard.type === 'esp32_devkit' || activeBoard.type === 'esp32_upesy_lp') {
             const modal = document.getElementById('esp32-doc-modal');
             const title = document.getElementById('esp32-doc-title');
             const body = document.getElementById('esp32-doc-body');
-            const isDevkit = activeBoard.type === 'esp32_devkit';
-            if (title) {
-                title.textContent = isDevkit
-                    ? `ESP32 DevKit WROOM-32 — ${activeBoard.label}`
-                    : `ESP32-C3 DevKit — ${activeBoard.label}`;
-            }
+            const type = activeBoard.type;
+            const titles = {
+                esp32_c3: 'ESP32-C3 DevKit',
+                esp32_devkit: 'ESP32 DevKit WROOM-32',
+                esp32_upesy_lp: 'uPesy ESP32 Wroom Low Power',
+            };
+            const boardTitle = titles[type] || titles.esp32_c3;
+            if (title) title.textContent = `${boardTitle} — ${activeBoard.label}`;
             if (body) {
-                body.dataset.boardType = isDevkit ? 'esp32_devkit' : 'esp32_c3';
-                body.querySelector('.esp32-doc-c3')?.classList.toggle('hidden', isDevkit);
-                body.querySelector('.esp32-doc-devkit')?.classList.toggle('hidden', !isDevkit);
+                body.dataset.boardType = type;
+                body.querySelector('.esp32-doc-c3')?.classList.toggle('hidden', type !== 'esp32_c3');
+                body.querySelector('.esp32-doc-devkit')?.classList.toggle('hidden', type !== 'esp32_devkit');
+                body.querySelector('.esp32-doc-upesy')?.classList.toggle('hidden', type !== 'esp32_upesy_lp');
             }
             showModal(modal);
             return;

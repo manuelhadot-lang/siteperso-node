@@ -143,6 +143,26 @@ export function initObjectContextMenu(viewport) {
         "<span>Collisions</span>" +
         "</label>" +
         "</li>" +
+        "<li class=\"lab-context-menu__physics-only\">" +
+        '<label class="lab-context-menu__item" title="Corps solide : gravité, inertia, rebond, rotation, collisions entre objets">' +
+        '<input type="checkbox" data-prop="physics">' +
+        "<span>Dynamique (physique)</span>" +
+        "</label>" +
+        "</li>" +
+        '<li class="lab-context-menu__physics-only lab-context-menu__physics-params">' +
+        '<label class="lab-context-menu__item lab-context-menu__item--range" title="Masse (kg) — P = m·g ; Ep = m·g·h. La chute libre ne dépend pas de m (Galilée).">' +
+        "<span>Masse (kg)</span>" +
+        '<input type="range" data-prop="physics-mass" min="0.1" max="50" step="0.1" value="1">' +
+        '<output data-physics-mass-value>1,0</output>' +
+        "</label>" +
+        "</li>" +
+        '<li class="lab-context-menu__physics-only lab-context-menu__physics-params">' +
+        '<label class="lab-context-menu__item lab-context-menu__item--range" title="Coefficient de restitution e : 0 = pas de rebond, 1 = rebond parfait. La forme (cube, sphère, ballon allongé) change la direction du rebond.">' +
+        "<span>Rebond (e)</span>" +
+        '<input type="range" data-prop="physics-bounce" min="0" max="1" step="0.05" value="0.4">' +
+        '<output data-physics-bounce-value>0,40</output>' +
+        "</label>" +
+        "</li>" +
         "<li class=\"lab-context-menu__hide-on-architecture\">" +
         '<label class="lab-context-menu__item">' +
         '<input type="checkbox" data-prop="smooth" checked>' +
@@ -164,6 +184,8 @@ export function initObjectContextMenu(viewport) {
         '<button type="button" class="lab-context-menu__action lab-context-menu__imported-only" data-action="mesh-split-islands" title="Découpe le mesh en pièces non soudées (ex. coussin / pieds d’un fauteuil)">Séparer les pièces disjointes</button>' +
         '<button type="button" class="lab-context-menu__action lab-context-menu__tri-sel-only" data-action="mesh-select-island" title="Étend la sélection à toute la pièce cliquée (îlot)">Sélectionner toute la pièce</button>' +
         '<button type="button" class="lab-context-menu__action lab-context-menu__tri-sel-only" data-action="mesh-extract-selection" title="Retire les triangles sélectionnés et en fait un nouvel objet">Extraire la sélection en objet</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__tri-sel-only" data-action="mesh-delete-selection" title="Retire définitivement les triangles sélectionnés (Suppr)">Supprimer les triangles</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__face-sel-only" data-action="mesh-delete-selection" title="Retire la face / le mur ciblé (Suppr)">Supprimer la face</button>' +
         "</details>" +
         '<details class="lab-context-menu__section lab-context-menu__boat-only" data-section="boat" open>' +
         '<summary class="lab-context-menu__section-title">Barque</summary>' +
@@ -178,6 +200,10 @@ export function initObjectContextMenu(viewport) {
         "</label>" +
         '<button type="button" class="lab-context-menu__action" data-action="boat-replace-import">Remplacer l’apparence (importer)…</button>' +
         '<button type="button" class="lab-context-menu__action lab-context-menu__boat-procedural-only" data-action="boat-restore-procedural">Restaurer la coque procédurale</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__arch-opening-only" data-action="arch-opening-replace-glb" title="Remplace uniquement cette porte/fenêtre, pas le mur">Remplacer par un GLB…</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__arch-opening-only" data-action="arch-opening-restore-simple">Modèle simple</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__arch-opening-only" data-action="arch-opening-reset-pose" title="Remet la porte/fenêtre dans le trou, sans bouger le mur">Réinitialiser la pose</button>' +
+        '<button type="button" class="lab-context-menu__action lab-context-menu__arch-opening-only" data-action="arch-opening-fill-none">Trou seul</button>' +
         "</details>" +
         '<ul class="lab-context-menu__list lab-context-menu__make-boat-only">' +
         "<li>" +
@@ -321,8 +347,8 @@ export function initObjectContextMenu(viewport) {
         '<p class="lab-context-menu__stair-meta" data-arch-face-label>Sud · ét. 1</p>' +
         '<p class="lab-context-menu__stair-meta" data-arch-openings-label>0 ouverture(s)</p>' +
         '<div class="lab-context-menu__arch-openings" data-arch-openings-list></div>' +
-        '<button type="button" class="lab-context-menu__action" data-action="arch-add-door" data-arch-wall-action>Ajouter une porte</button>' +
-        '<button type="button" class="lab-context-menu__action" data-action="arch-add-window" data-arch-wall-action>Ajouter une fenêtre</button>' +
+        '<button type="button" class="lab-context-menu__action" data-action="arch-add-door" data-arch-wall-action title="Trou + porte simple avec encadrement (remplaçable ensuite par un GLB)">Ajouter une porte</button>' +
+        '<button type="button" class="lab-context-menu__action" data-action="arch-add-window" data-arch-wall-action title="Trou + fenêtre simple avec encadrement (remplaçable ensuite par un GLB)">Ajouter une fenêtre</button>' +
         '<button type="button" class="lab-context-menu__action" data-action="arch-add-hole" data-arch-slab-action hidden>Ajouter un trou</button>' +
         '<button type="button" class="lab-context-menu__action" data-action="arch-clear-openings">Supprimer les ouvertures de cette face</button>' +
         "</details>" +
@@ -415,7 +441,7 @@ export function initObjectContextMenu(viewport) {
         "</label>" +
         "</div>" +
         '<div class="lab-context-menu__intensity lab-context-menu__intensity--compact">' +
-        '<label class="lab-context-menu__item lab-context-menu__item--range" title="0 = mat, 1 = miroir (reflet de la scène)">' +
+        '<label class="lab-context-menu__item lab-context-menu__item--range" title="0 = mat · 0,25–0,35 = parquet ciré · 1 = miroir">' +
         "<span>Réflexion</span>" +
         '<input type="range" data-prop="reflection" min="' +
         REFLECTION_MIN +
@@ -447,6 +473,7 @@ export function initObjectContextMenu(viewport) {
         "</label>" +
         '<div class="lab-context-menu__actions">' +
         '<button type="button" class="lab-context-menu__action" data-action="metal-preset">Métal poli</button>' +
+        '<button type="button" class="lab-context-menu__action" data-action="waxed-preset" title="Vernis léger (bois, parquet)">Ciré</button>' +
         '<button type="button" class="lab-context-menu__action" data-action="mirror-preset" title="Miroir maximal (reflet de la pièce)">Miroir</button>' +
         "</div>" +
         "</details>";
@@ -478,6 +505,17 @@ export function initObjectContextMenu(viewport) {
     const collisionInput = /** @type {HTMLInputElement} */ (
         menuEl.querySelector('[data-prop="collision"]')
     );
+    const physicsInput = /** @type {HTMLInputElement | null} */ (
+        menuEl.querySelector('[data-prop="physics"]')
+    );
+    const physicsMassInput = /** @type {HTMLInputElement | null} */ (
+        menuEl.querySelector('[data-prop="physics-mass"]')
+    );
+    const physicsMassValue = menuEl.querySelector("[data-physics-mass-value]");
+    const physicsBounceInput = /** @type {HTMLInputElement | null} */ (
+        menuEl.querySelector('[data-prop="physics-bounce"]')
+    );
+    const physicsBounceValue = menuEl.querySelector("[data-physics-bounce-value]");
     const boatFloatInput = /** @type {HTMLInputElement | null} */ (
         menuEl.querySelector('[data-prop="boat-float"]')
     );
@@ -576,6 +614,9 @@ export function initObjectContextMenu(viewport) {
     );
     const metalPresetBtn = /** @type {HTMLButtonElement | null} */ (
         menuEl.querySelector('[data-action="metal-preset"]')
+    );
+    const waxedPresetBtn = /** @type {HTMLButtonElement | null} */ (
+        menuEl.querySelector('[data-action="waxed-preset"]')
     );
     const mirrorPresetBtn = /** @type {HTMLButtonElement | null} */ (
         menuEl.querySelector('[data-action="mirror-preset"]')
@@ -775,7 +816,19 @@ export function initObjectContextMenu(viewport) {
                 const offset = Number.isFinite(Number(o.offset)) ? Number(o.offset) : 0;
                 const offsetZ = Number.isFinite(Number(o.offsetZ)) ? Number(o.offsetZ) : 0;
                 const label =
-                    type === "hole" ? "Trou" : type === "door" ? "Porte" : "Fenêtre";
+                    type === "hole"
+                        ? "Trou"
+                        : type === "door"
+                          ? o.fill === "imported"
+                              ? "Porte (GLB)"
+                              : o.fill === "none"
+                                ? "Porte (trou)"
+                                : "Porte"
+                          : o.fill === "imported"
+                            ? "Fenêtre (GLB)"
+                            : o.fill === "none"
+                              ? "Fenêtre (trou)"
+                              : "Fenêtre";
                 const opWidth = Math.max(0.4, Number(o.width) || (type === "door" ? 1.4 : 1));
                 const opHeight = Math.max(0.4, Number(o.height) || (type === "door" ? 2.1 : 1));
                 const maxWidth = Math.max(0.4, spanX - 2 * ARCH_OPENING_EDGE);
@@ -806,6 +859,15 @@ export function initObjectContextMenu(viewport) {
                         `<input type="range" data-arch-opening-offset-z="${id}" min="${minOffZ.toFixed(2)}" max="${maxOffZ.toFixed(2)}" step="0.05" value="${offsetZ}">` +
                         `<output data-arch-opening-offset-z-value="${id}">${offsetZ.toFixed(2)}</output>` +
                         `</label>`;
+                } else if (type === "door" || type === "window") {
+                    const fill = o.fill === "imported" ? "imported" : o.fill === "none" ? "none" : "simple";
+                    html +=
+                        `<div class="lab-context-menu__arch-opening-fill">` +
+                        `<button type="button" class="lab-context-menu__arch-opening-fill-btn" data-action="arch-opening-replace-glb" data-opening-id="${id}" title="Remplace la porte/fenêtre par un modèle chargé (GLB…)">Remplacer par un GLB…</button>` +
+                        `<button type="button" class="lab-context-menu__arch-opening-fill-btn" data-action="arch-opening-restore-simple" data-opening-id="${id}" ${fill === "simple" ? "hidden" : ""} title="Revient à la porte/fenêtre procédurale avec encadrement">Modèle simple</button>` +
+                        `<button type="button" class="lab-context-menu__arch-opening-fill-btn" data-action="arch-opening-fill-none" data-opening-id="${id}" ${fill === "none" ? "hidden" : ""} title="Garde le trou, enlève la porte/fenêtre et l’encadrement">Trou seul</button>` +
+                        `<p class="lab-context-menu__arch-opening-hint">Cliquez la porte/fenêtre dans la vue (G/R/E) pour la déplacer sans bouger le mur.</p>` +
+                        `</div>`;
                 }
                 html += `</div>`;
                 return html;
@@ -936,7 +998,8 @@ export function initObjectContextMenu(viewport) {
         const isTube = state.kind === "tube";
         const isArchitecture = state.kind === "architecture";
         const isBoat = state.kind === "boat";
-        const canMakeBoat = !isLight && !isBoat && !isArchitecture && state.canMakeBoat !== false;
+        const isArchOpening = state.kind === "arch-opening";
+        const canMakeBoat = !isLight && !isBoat && !isArchitecture && !isArchOpening && state.canMakeBoat !== false;
         menuEl.classList.toggle("lab-context-menu--light", isLight);
         menuEl.classList.toggle("lab-context-menu--spot", isLight && state.lightType === "spot");
         menuEl.classList.toggle("lab-context-menu--stair", isStair);
@@ -944,13 +1007,18 @@ export function initObjectContextMenu(viewport) {
         menuEl.classList.toggle("lab-context-menu--tube", isTube);
         menuEl.classList.toggle("lab-context-menu--architecture", isArchitecture);
         menuEl.classList.toggle("lab-context-menu--boat", isBoat);
+        menuEl.classList.toggle("lab-context-menu--arch-opening", isArchOpening);
         menuEl.classList.toggle("lab-context-menu--boat-procedural", isBoat && state.boatShell !== "imported" && state.boatShell !== "native");
         menuEl.classList.toggle("lab-context-menu--make-boat", canMakeBoat);
+        menuEl.classList.toggle("lab-context-menu--physics", !!state.canPhysics);
+        menuEl.classList.toggle("lab-context-menu--physics-on", !!state.canPhysics && !!state.physics);
         menuEl.classList.toggle("lab-context-menu--imported", !!state.isImported);
         menuEl.classList.toggle("lab-context-menu--has-tris", !!state.hasTriangleSelection);
+        menuEl.classList.toggle("lab-context-menu--has-face", !!state.hasLiveFace);
         const meshTools = menuEl.querySelector('[data-section="mesh-tools"]');
         if (meshTools instanceof HTMLDetailsElement) {
-            meshTools.open = !!state.isImported || !!state.hasTriangleSelection;
+            meshTools.open =
+                !!state.isImported || !!state.hasTriangleSelection || !!state.hasLiveFace;
         }
         const stairSectionTitle = menuEl.querySelector(
             '.lab-context-menu__section[data-section="stair"] > .lab-context-menu__section-title'
@@ -974,6 +1042,17 @@ export function initObjectContextMenu(viewport) {
             if (spotPenumbraValue) spotPenumbraValue.textContent = formatPenumbra(spotPenumbra);
         } else {
             collisionInput.checked = !!state.collision;
+            if (physicsInput) physicsInput.checked = !!state.physics;
+            const physicsMass = typeof state.physicsMass === "number" ? state.physicsMass : 1;
+            if (physicsMassInput) physicsMassInput.value = String(physicsMass);
+            if (physicsMassValue) {
+                physicsMassValue.textContent = physicsMass.toFixed(1).replace(".", ",");
+            }
+            const physicsBounce = typeof state.physicsBounce === "number" ? state.physicsBounce : 0.4;
+            if (physicsBounceInput) physicsBounceInput.value = String(physicsBounce);
+            if (physicsBounceValue) {
+                physicsBounceValue.textContent = physicsBounce.toFixed(2).replace(".", ",");
+            }
             if (boatFloatInput) boatFloatInput.checked = state.boatFloat !== false;
             const boatDensity = typeof state.boatDensity === "number" ? state.boatDensity : 0.32;
             if (boatDensityInput) boatDensityInput.value = String(boatDensity);
@@ -1133,6 +1212,20 @@ export function initObjectContextMenu(viewport) {
     function syncProperty(prop, value) {
         if (prop === "collision" && collisionInput.checked !== value) {
             collisionInput.checked = !!value;
+        }
+        if (prop === "physics" && physicsInput && physicsInput.checked !== value) {
+            physicsInput.checked = !!value;
+            menuEl.classList.toggle("lab-context-menu--physics-on", !!value);
+        }
+        if (prop === "physics-mass" && typeof value === "number" && physicsMassInput) {
+            physicsMassInput.value = String(value);
+            if (physicsMassValue) physicsMassValue.textContent = value.toFixed(1).replace(".", ",");
+        }
+        if (prop === "physics-bounce" && typeof value === "number" && physicsBounceInput) {
+            physicsBounceInput.value = String(value);
+            if (physicsBounceValue) {
+                physicsBounceValue.textContent = value.toFixed(2).replace(".", ",");
+            }
         }
         if (prop === "boat-float" && boatFloatInput && boatFloatInput.checked !== value) {
             boatFloatInput.checked = !!value;
@@ -1398,6 +1491,37 @@ export function initObjectContextMenu(viewport) {
         if (!targetObject) return;
         propertyChangeHandler?.("collision", targetObject, collisionInput.checked);
     });
+    physicsInput?.addEventListener("change", () => {
+        if (!targetObject || !physicsInput) return;
+        menuEl.classList.toggle("lab-context-menu--physics-on", physicsInput.checked);
+        propertyChangeHandler?.("physics", targetObject, physicsInput.checked);
+    });
+    physicsMassInput?.addEventListener("input", () => {
+        if (!targetObject || !physicsMassInput) return;
+        const value = Number(physicsMassInput.value);
+        if (physicsMassValue) physicsMassValue.textContent = value.toFixed(1).replace(".", ",");
+        propertyChangeHandler?.("physics-mass", targetObject, value);
+    });
+    bindMenuSliderWheel(physicsMassInput, (value) => {
+        if (!targetObject) return;
+        if (physicsMassValue) physicsMassValue.textContent = value.toFixed(1).replace(".", ",");
+        propertyChangeHandler?.("physics-mass", targetObject, value);
+    }, { step: 0.1 });
+    physicsBounceInput?.addEventListener("input", () => {
+        if (!targetObject || !physicsBounceInput) return;
+        const value = Number(physicsBounceInput.value);
+        if (physicsBounceValue) {
+            physicsBounceValue.textContent = value.toFixed(2).replace(".", ",");
+        }
+        propertyChangeHandler?.("physics-bounce", targetObject, value);
+    });
+    bindMenuSliderWheel(physicsBounceInput, (value) => {
+        if (!targetObject) return;
+        if (physicsBounceValue) {
+            physicsBounceValue.textContent = value.toFixed(2).replace(".", ",");
+        }
+        propertyChangeHandler?.("physics-bounce", targetObject, value);
+    }, { step: 0.05 });
     boatFloatInput?.addEventListener("change", () => {
         if (!targetObject || !boatFloatInput) return;
         propertyChangeHandler?.("boat-float", targetObject, boatFloatInput.checked);
@@ -1802,6 +1926,12 @@ export function initObjectContextMenu(viewport) {
         propertyChangeHandler?.("metal-preset", targetObject, true);
     });
 
+    waxedPresetBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!targetObject) return;
+        propertyChangeHandler?.("waxed-preset", targetObject, true);
+    });
+
     mirrorPresetBtn?.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!targetObject) return;
@@ -1875,6 +2005,18 @@ export function initObjectContextMenu(viewport) {
             const openingId = btn.getAttribute("data-opening-id") || "";
             detail = { openingId };
             actionHandler?.(action, targetObject, detail);
+            return;
+        }
+        if (
+            action === "arch-opening-replace-glb" ||
+            action === "arch-opening-restore-simple" ||
+            action === "arch-opening-fill-none"
+        ) {
+            const openingId = btn.getAttribute("data-opening-id") || "";
+            detail = { openingId };
+            actionHandler?.(action, targetObject, detail);
+            if (action !== "arch-opening-replace-glb") return;
+            hide();
             return;
         }
         if (action === "tube-continue-pos" || action === "tube-continue-neg") {

@@ -62,10 +62,10 @@ const adc = readBoardAnalogInputs(components[0], {
     wires,
     autoJunctions: [],
 });
-assert.ok(adc.GPIO36 > 700, `POT 80% sur 3.3V → ADC élevé, got ${adc.GPIO36}`);
+assert.ok(adc.GPIO36 > 2800, `POT 80% sur 3.3V → ADC 12 bits élevé, got ${adc.GPIO36}`);
 
 const bindings = evaluateLoopVarBindings(sketch, adc, "esp32_devkit");
-assert.equal(bindings.bat, "818.00");
+assert.equal(bindings.bat, "3276.00");
 
 components[0]._tftLoopVars = { page: 1, dernierEtat: 1 };
 
@@ -75,6 +75,6 @@ const disp = getIdealJoyitTft18Display("TFT1", components, wires, [], 5, {
 });
 assert.ok(disp.wired, "TFT doit être câblé");
 const labels = disp.labels.map((l) => l.text).join("|");
-assert.match(labels, /818/, `valeur bat sur TFT, got: ${labels}`);
+assert.match(labels, /3276/, `valeur bat sur TFT, got: ${labels}`);
 
 console.log("battery-tft.test.mjs OK");

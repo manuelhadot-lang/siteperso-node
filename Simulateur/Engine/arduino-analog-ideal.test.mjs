@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { voltageToAdc, resolveNetVoltage, readUnoAnalogInputs } from "./arduino-analog-ideal.mjs";
+import { voltageToAdc, resolveNetVoltage, readUnoAnalogInputs, reachableJonctionsViaSeriesPassives } from "./arduino-analog-ideal.mjs";
 import {
     createArduinoRuntime,
     stepArduinoRuntime,
@@ -138,5 +138,30 @@ const vUnoPot = resolveNetVoltage("UNO1_A0", {
     autoJunctions: [],
 });
 assert.ok(Math.abs(vUnoPot - 2.5) < 0.1, `UNO 5V/GND + pot → ~2.5 V, got ${vUnoPot}`);
+
+const gpio2Led = {
+    components: [
+        {
+            type: "esp32_upesy_lp",
+            label: "UPLP1",
+            pinModes: { GPIO2: "OUTPUT" },
+            pinLevels: { GPIO2: 1 },
+            liveLevels: { GPIO2: 1 },
+        },
+        { type: "resistor", label: "R2", value: "330" },
+        { type: "led", label: "LED1" },
+        { type: "gnd", label: "GND2" },
+    ],
+    wires: [
+        { fromJonctionId: "UPLP1_GPIO2", toJonctionId: "R2_in" },
+        { fromJonctionId: "R2_out", toJonctionId: "LED1_in" },
+        { fromJonctionId: "LED1_out", toJonctionId: "GND2_in" },
+    ],
+    autoJunctions: [],
+};
+const vGpio2 = resolveNetVoltage("UPLP1_GPIO2", gpio2Led);
+assert.ok(Math.abs(vGpio2 - 3.3) < 0.05, `GPIO2 OUTPUT HIGH avec 330 Ω, got ${vGpio2}`);
+const viaR = reachableJonctionsViaSeriesPassives("LED1_in", gpio2Led);
+assert.ok(viaR.has("UPLP1_GPIO2"), "LED derrière 330 Ω doit atteindre GPIO2");
 
 console.log("arduino-analog-ideal.test.mjs OK");

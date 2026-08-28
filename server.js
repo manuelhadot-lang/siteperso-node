@@ -34,7 +34,7 @@ if (process.env.NODE_ENV === "production") {
 }
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 /** Mot de passe « vitrine » : si SITE_ACCESS_PASSWORD est défini (ex. sur Render), tout le site exige une session cookie. */
 const SITE_ACCESS_COOKIE = 'site_unlock';
@@ -133,6 +133,16 @@ function sendSiteAccessDenied(res, req) {
 function isSimulateApiPost(req) {
     const p = req.path || "";
     return req.method === "POST" && (p === "/api/simulate" || p.endsWith("/api/simulate"));
+}
+
+/** POST altimétrie IGN : données publiques ; le cookie n’est pas toujours renvoyé sur fetch. */
+function isIgnElevationPost(req) {
+    return req.method === "POST" && req.path === "/api/ign/elevation";
+}
+
+/** POST Overpass OSM (routes) — même contrainte cookie / CORS. */
+function isOsmOverpassPost(req) {
+    return req.method === "POST" && req.path === "/api/osm/overpass";
 }
 
 function siteAccessRequiresSimulateCookie() {
@@ -326,6 +336,8 @@ app.use((req, res, next) => {
     }
     /* Simulateur : la page reste protégée en GET ; l’API POST ne dépend pas du cookie (souvent absent sur fetch). */
     if (isSimulateApiPost(req) && !siteAccessRequiresSimulateCookie()) return next();
+    if (isIgnElevationPost(req)) return next();
+    if (isOsmOverpassPost(req)) return next();
     if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
     return sendSiteAccessDenied(res, req);
 });
@@ -587,10 +599,112 @@ app.get('/api/texture-library', (req, res) => {
         });
     }
 });
+/** Proxy altimétrie IGN — évite les URL GET géantes (>90 ko) impossibles dans le navigateur. */
+const IGN_ELEVATION_URL =
+    "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json";
+const IGN_ELEVATION_RESOURCE = "ign_rge_alti_wld";
+const IGN_ELEVATION_MAX_POINTS = 5000;
+/** Taille max d’un appel GET vers l’IGN (URL ~95 ko à 5000 pts). */
+const IGN_UPSTREAM_CHUNK = 250;
+const IGN_UPSTREAM_DELAY_MS = 220;
+
+async function fetchIgnUpstreamElevations(lats, lons) {
+    const elevations = [];
+    for (let start = 0; start < lats.length; start += IGN_UPSTREAM_CHUNK) {
+        const latsChunk = lats.slice(start, start + IGN_UPSTREAM_CHUNK);
+        const lonsChunk = lons.slice(start, start + IGN_UPSTREAM_CHUNK);
+        const params = new URLSearchParams({
+            lon: lonsChunk.map((value) => String(value)).join("|"),
+            lat: latsChunk.map((value) => String(value)).join("|"),
+            resource: IGN_ELEVATION_RESOURCE,
+            delimiter: "|",
+            measures: "false",
+            zonly: "true",
+        });
+        const response = await fetch(`${IGN_ELEVATION_URL}?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error(`Service IGN (${response.status})`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data?.elevations) || data.elevations.length !== latsChunk.length) {
+            throw new Error("Réponse IGN altimétrique invalide");
+        }
+        elevations.push(...data.elevations);
+        if (start + IGN_UPSTREAM_CHUNK < lats.length) {
+            await new Promise((resolve) => setTimeout(resolve, IGN_UPSTREAM_DELAY_MS));
+        }
+    }
+    return elevations;
+}
+
+app.post("/api/ign/elevation", async (req, res) => {
+    try {
+        const lats = req.body?.lats;
+        const lons = req.body?.lons;
+        if (!Array.isArray(lats) || !Array.isArray(lons) || lats.length !== lons.length) {
+            return res.status(400).json({ error: "Tableaux lats / lons invalides" });
+        }
+        if (lats.length === 0 || lats.length > IGN_ELEVATION_MAX_POINTS) {
+            return res.status(400).json({
+                error: `Entre 1 et ${IGN_ELEVATION_MAX_POINTS} points par requête`,
+            });
+        }
+        const elevations = await fetchIgnUpstreamElevations(lats, lons);
+        return res.json({ elevations });
+    } catch (error) {
+        console.error("[api/ign/elevation]", error);
+        const message = error instanceof Error ? error.message : "Service IGN indisponible";
+        return res.status(502).json({ error: message });
+    }
+});
+
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+
+app.post("/api/osm/overpass", async (req, res) => {
+    try {
+        const south = Number(req.body?.south);
+        const west = Number(req.body?.west);
+        const north = Number(req.body?.north);
+        const east = Number(req.body?.east);
+        if (![south, west, north, east].every(Number.isFinite)) {
+            return res.status(400).json({ error: "BBox invalide (south, west, north, east)" });
+        }
+        if (south >= north || west >= east) {
+            return res.status(400).json({ error: "BBox incohérente" });
+        }
+        const latSpan = north - south;
+        const lonSpan = east - west;
+        if (latSpan > 0.08 || lonSpan > 0.12) {
+            return res.status(400).json({ error: "Zone trop grande pour OSM — réduisez la taille du terrain" });
+        }
+        const query = `[out:json][timeout:50];
+way["highway"](${south},${west},${north},${east});
+out geom;`;
+        const response = await fetch(OVERPASS_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `data=${encodeURIComponent(query)}`,
+        });
+        if (!response.ok) {
+            return res.status(502).json({ error: `Overpass OSM (${response.status})` });
+        }
+        const data = await response.json();
+        if (!Array.isArray(data?.elements)) {
+            return res.status(502).json({ error: "Réponse Overpass invalide" });
+        }
+        return res.json(data);
+    } catch (error) {
+        console.error("[api/osm/overpass]", error);
+        return res.status(502).json({ error: "Service OpenStreetMap indisponible" });
+    }
+});
+
 app.get('/api/version', (req, res) => {
     res.json({
         ok: true,
         service: "siteperso-main-server",
+        ignElevationProxy: true,
+        osmOverpassProxy: true,
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
         simUiVersion: SIM_UI_VERSION,
         simulateurDir: dirSimulateur,
@@ -1786,16 +1900,26 @@ function startServer(port) {
     server.listen(port, LISTEN_HOST, onServerListening);
 }
 
+const FALLBACK_PORTS = [3000, 3010, 3020, 3030, 3040];
+
 server.on("error", (err) => {
-    if (err.code === "EADDRINUSE" && activePort === 3000 && !process.env.PORT) {
-        console.warn("\n⚠️  Le port 3000 est déjà pris (souvent un ancien npm start).");
-        console.warn("   Un autre dossier sert encore theme4 / emojis.");
-        console.warn("   Nouvelle tentative sur le port 3010…\n");
-        startServer(3010);
-        return;
+    if (err.code !== "EADDRINUSE" || process.env.PORT) {
+        console.error(err);
+        process.exit(1);
     }
-    console.error(err);
-    process.exit(1);
+    const currentIndex = FALLBACK_PORTS.indexOf(activePort);
+    const nextPort = currentIndex >= 0 ? FALLBACK_PORTS[currentIndex + 1] : null;
+    if (!nextPort) {
+        console.error(
+            "\n❌ Ports 3000–3040 occupés. Arrêtez les anciens serveurs :\n" +
+                "   netstat -ano | findstr :3000\n" +
+                "   taskkill /PID <pid> /F\n"
+        );
+        process.exit(1);
+    }
+    console.warn(`\n⚠️  Le port ${activePort} est déjà pris (ancien npm start ?).`);
+    console.warn(`   Nouvelle tentative sur le port ${nextPort}…\n`);
+    startServer(nextPort);
 });
 
-startServer(PORT);
+startServer(FALLBACK_PORTS[0]);

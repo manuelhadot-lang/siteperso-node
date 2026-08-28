@@ -1,5 +1,5 @@
 /**
- * Entrées analogiques Arduino (A0–A5) / ESP32-C3 (GPIO0–4) — tension → ADC 10 bits.
+ * Entrées analogiques Arduino (A0–A5, 10 bits) / ESP32 (GPIO, 12 bits comme Arduino-ESP32).
  */
 
 import { reachableJonctions } from "./hc90-cascade.mjs";
@@ -7,13 +7,19 @@ import { boardProfile, isMicroBoardType } from "./micro-board-config.mjs";
 import { tryLm7805OutputVoltage } from "./lm7805.mjs";
 import { tryIr2104GateVoltage } from "./ir2104.mjs";
 import { tryL293dOutputVoltage } from "./l293d.mjs";
+import { ldrResistanceOhm } from "./ldr.mjs";
+import { upesyGpio35Volts, UPESY_DEFAULT_VBAT } from "../esp32-upesy-lp-layout.js";
 
-const ADC_MAX = 1023;
+export const ADC_MAX_10 = 1023;
+export const ADC_MAX_12 = 4095;
+/** Impédance d'entrée ADC simulée (évite une LDR seule collée à 3,3 V via 10 MΩ SPICE). */
+export const ADC_INPUT_OHM = 1e6;
 
-export function voltageToAdc(volts, vref = 5) {
+export function voltageToAdc(volts, vref = 5, adcMax = ADC_MAX_10) {
     if (!Number.isFinite(volts)) return 0;
+    const max = Number.isFinite(adcMax) && adcMax > 0 ? adcMax : ADC_MAX_10;
     const v = Math.max(0, Math.min(vref, volts));
-    return Math.round((v / vref) * ADC_MAX);
+    return Math.round((v / vref) * max);
 }
 
 /** Tension fixe d'une jonction d'alimentation (broches UNO, GND, VCC…). */
@@ -26,8 +32,10 @@ export function fixedVoltageAtJunction(jid) {
     return null;
 }
 
-function isGndJunction(jid) {
-    return fixedVoltageAtJunction(jid) === 0;
+function parseRailVolts(value, fallback = 5) {
+    if (value == null || value === "") return fallback;
+    const n = parseFloat(String(value).trim().replace(",", "."));
+    return Number.isFinite(n) ? n : fallback;
 }
 
 function parseResistorOhms(value) {
@@ -40,6 +48,12 @@ function parseResistorOhms(value) {
     else if (m[2] === "m") n *= 1e6;
     else if (m[2] === "g") n *= 1e9;
     return n;
+}
+
+function componentOhms(comp) {
+    if (comp.type === "ldr") return ldrResistanceOhm(comp);
+    if (comp.type === "resistor") return parseResistorOhms(comp.value);
+    return null;
 }
 
 function gsinVoltageAt(comp, tSec) {
@@ -81,32 +95,120 @@ function voltageFromVoltmetersOnNet(net, voltmeters) {
     return null;
 }
 
-/** Pont diviseur : deux résistances sur le même nœud. */
-function tryResistorDivider(jonctionId, ctx, visiting) {
+function collectResistiveLegs(jonctionId, ctx, visiting) {
     const { components, wires, autoJunctions = [] } = ctx;
     const net = reachableJonctions(jonctionId, wires, autoJunctions);
     const legs = [];
     for (const comp of components) {
-        if (comp.type !== "resistor" || !comp.label) continue;
+        if ((comp.type !== "resistor" && comp.type !== "ldr") || !comp.label) continue;
         const inn = `${comp.label}_in`;
         const out = `${comp.label}_out`;
         if (!net.has(inn) && !net.has(out)) continue;
+        if (net.has(inn) && net.has(out)) continue;
         const touch = net.has(inn) ? inn : out;
         const other = touch === inn ? out : inn;
         const branch = new Set(visiting);
         const vOther = resolveNetVoltage(other, ctx, branch);
         if (!Number.isFinite(vOther)) continue;
-        legs.push({ ohm: parseResistorOhms(comp.value), vOther });
+        const ohm = componentOhms(comp);
+        if (!(ohm > 0)) continue;
+        legs.push({ ohm, vOther });
     }
-    if (legs.length !== 2) return null;
-    const [a, b] = legs;
-    if (a.vOther === b.vOther) return a.vOther;
-    const high = a.vOther > b.vOther ? a : b;
-    const low = a.vOther > b.vOther ? b : a;
-    const rTop = high.ohm;
-    const rBot = low.ohm;
-    if (rTop + rBot <= 0) return null;
-    return low.vOther + (high.vOther - low.vOther) * (rBot / (rTop + rBot));
+    return legs;
+}
+
+function netHasExternalAnalogNetwork(jonctionId, ctx) {
+    const { components, wires, autoJunctions = [] } = ctx;
+    const net = reachableJonctions(jonctionId, wires, autoJunctions);
+    for (const comp of components) {
+        if (!comp.label) continue;
+        if (comp.type === "resistor" || comp.type === "ldr") {
+            const inn = `${comp.label}_in`;
+            const out = `${comp.label}_out`;
+            if (net.has(inn) || net.has(out)) return true;
+        }
+        if (comp.type === "potentiometer" && net.has(`${comp.label}_wip`)) return true;
+    }
+    return false;
+}
+
+function solveResistiveLegs(legs) {
+    let gSum = 0;
+    let iSum = 0;
+    for (const { ohm, vOther } of legs) {
+        if (!(ohm > 0) || !Number.isFinite(vOther)) continue;
+        const g = 1 / ohm;
+        gSum += g;
+        iSum += vOther * g;
+    }
+    if (gSum <= 0) return null;
+    return iSum / gSum;
+}
+
+/** Pont résistif (LDR, R, …) + impédance ADC optionnelle vers GND. */
+function tryResistorDivider(jonctionId, ctx, visiting) {
+    const legs = collectResistiveLegs(jonctionId, ctx, visiting);
+    const adcOhm = Number(ctx.adcGndOhm);
+    if (legs.length >= 2) return solveResistiveLegs(legs);
+    if (legs.length === 1 && adcOhm > 0) {
+        return solveResistiveLegs([...legs, { ohm: adcOhm, vOther: 0 }]);
+    }
+    return null;
+}
+
+function gpioOutputVoltsOnNet(net, components) {
+    for (const comp of components) {
+        if (!isMicroBoardType(comp.type) || !comp.label) continue;
+        const prof = boardProfile(comp.type);
+        for (const j of net) {
+            if (!j.startsWith(`${comp.label}_`)) continue;
+            const suffix = j.slice(comp.label.length + 1);
+            if (!/^A\d+$|^D\d+$|^GPIO\d+$/.test(suffix)) continue;
+            const modes = comp.pinModes || {};
+            if (modes[suffix] !== "OUTPUT") continue;
+            const levels = comp.liveLevels || comp.pinLevels || {};
+            return levels[suffix] ? prof.logicVolts : 0;
+        }
+    }
+    return null;
+}
+
+/**
+ * Même réseau électrique en traversant les résistances / ampèremètres en série
+ * (ex. GPIO2 → 330 Ω → LED).
+ */
+export function reachableJonctionsViaSeriesPassives(jonctionId, ctx = {}) {
+    const { components = [], wires, autoJunctions = [] } = ctx;
+    const all = new Set();
+    const queue = [];
+    if (jonctionId) queue.push(jonctionId);
+    while (queue.length) {
+        const j = queue.shift();
+        if (!j) continue;
+        const net = reachableJonctions(j, wires, autoJunctions);
+        let grew = false;
+        for (const id of net) {
+            if (all.has(id)) continue;
+            all.add(id);
+            grew = true;
+        }
+        if (!grew && !all.has(j)) all.add(j);
+        for (const comp of components) {
+            if ((comp.type !== "resistor" && comp.type !== "ammeter") || !comp.label) continue;
+            const inn = `${comp.label}_in`;
+            const out = `${comp.label}_out`;
+            if (all.has(inn) && !all.has(out)) queue.push(out);
+            if (all.has(out) && !all.has(inn)) queue.push(inn);
+        }
+    }
+    return all;
+}
+
+function tryMicroBoardGpioOutputVoltage(jonctionId, ctx) {
+    const { components = [], wires, autoJunctions = [] } = ctx;
+    const net = reachableJonctions(jonctionId, wires, autoJunctions);
+    const v = gpioOutputVoltsOnNet(net, components);
+    return Number.isFinite(v) ? v : null;
 }
 
 /**
@@ -133,15 +235,18 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
         if (fixed !== null) return fixed;
     }
 
+    const gpioOutV = tryMicroBoardGpioOutputVoltage(jonctionId, ctx);
+    if (Number.isFinite(gpioOutV)) return gpioOutV;
+
     for (const comp of components) {
         if (!comp.label) continue;
         if (comp.type === "vcc") {
             for (const j of net) {
-                if (j.startsWith(`${comp.label}_`)) return Number(comp.value) || 5;
+                if (j.startsWith(`${comp.label}_`)) return parseRailVolts(comp.value, 5);
             }
         }
         if (comp.type === "battery" && net.has(`${comp.label}_in`)) {
-            return Number(comp.value) || 5;
+            return parseRailVolts(comp.value, 5);
         }
         if (comp.type === "logic_terminal") {
             if (net.has(`${comp.label}_out`) || net.has(`${comp.label}_in`)) {
@@ -177,14 +282,13 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
 
     for (const comp of components) {
         if (!isMicroBoardType(comp.type) || !comp.label) continue;
-        const prof = boardProfile(comp.type);
         for (const j of net) {
             if (!j.startsWith(`${comp.label}_`)) continue;
             const suffix = j.slice(comp.label.length + 1);
-            if (!/^A\d+$|^D\d+$|^GPIO\d+$/.test(suffix)) continue;
-            const modes = comp.pinModes || {};
-            const levels = comp.liveLevels || comp.pinLevels || {};
-            if (modes[suffix] === "OUTPUT") return levels[suffix] ? prof.logicVolts : 0;
+            if (comp.type === "esp32_upesy_lp" && suffix === "GPIO35"
+                && !netHasExternalAnalogNetwork(j, ctx)) {
+                return upesyGpio35Volts(comp.vbat ?? UPESY_DEFAULT_VBAT);
+            }
         }
     }
 
@@ -199,16 +303,27 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
     return null;
 }
 
-/** Valeurs ADC 0–1023 pour les entrées analogiques de la carte. */
-export function readBoardAnalogInputs(board, ctx) {
+/** Valeurs ADC (UNO 0–1023, ESP32 0–4095) pour les entrées analogiques de la carte. */
+export function readBoardAnalogInputs(board, ctx = {}) {
     const out = {};
     if (!board?.label) return out;
     const type = isMicroBoardType(board.type) ? board.type : "arduino_uno";
     const prof = boardProfile(type);
+    const adcMax = prof.adcMax ?? ADC_MAX_10;
+    const analogCtx = {
+        ...ctx,
+        adcGndOhm: Number(ctx.adcGndOhm) > 0 ? ctx.adcGndOhm : ADC_INPUT_OHM,
+    };
     for (const label of prof.analogPinLabels()) {
         const jid = `${board.label}_${label}`;
-        const v = resolveNetVoltage(jid, ctx);
-        out[label] = voltageToAdc(Number.isFinite(v) ? v : 0, prof.adcVref);
+        if (board.type === "esp32_upesy_lp" && label === "GPIO35"
+            && !netHasExternalAnalogNetwork(jid, analogCtx)) {
+            const v = upesyGpio35Volts(board.vbat ?? UPESY_DEFAULT_VBAT);
+            out[label] = voltageToAdc(v, prof.adcVref, adcMax);
+            continue;
+        }
+        const v = resolveNetVoltage(jid, analogCtx);
+        out[label] = voltageToAdc(Number.isFinite(v) ? v : 0, prof.adcVref, adcMax);
     }
     return out;
 }

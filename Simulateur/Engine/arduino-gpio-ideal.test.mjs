@@ -32,8 +32,8 @@ function makeCircuit(sketch) {
         { fromJonctionId: "UNO1_D11", toJonctionId: "CD4511_1_C" },
         { fromJonctionId: "UNO1_D10", toJonctionId: "CD4511_1_D" },
         { fromJonctionId: "CD4511_1_a", toJonctionId: "SEG1_a" },
-        { fromJonctionId: "V1_in", toJonctionId: "UNO1_D13" },
-        { fromJonctionId: "V1_out", toJonctionId: "GND1_out" },
+        { fromJonctionId: "V1_out", toJonctionId: "UNO1_D13" },
+        { fromJonctionId: "V1_in", toJonctionId: "GND1_out" },
     ];
     return { components, wires, uno };
 }
@@ -121,5 +121,24 @@ const barIdeal = getIdealBargraphFromArduino("BAR1", barComps, barWires);
 assert.ok(barIdeal?.segments?.s1 && barIdeal?.segments?.s8, "bargraph s1–s8 allumés");
 assert.equal(barIdeal?.segments?.s9, false);
 assert.equal(barIdeal?.segments?.s10, false);
+
+const ldr33 = {
+    components: [
+        { type: "vcc", label: "VCC1", value: 3.3 },
+        { type: "ldr", label: "LDR1", lux: 10 },
+        { type: "resistor", label: "R1", value: "10k" },
+        { type: "gnd", label: "GND1" },
+        { type: "voltmeter", label: "V2" },
+    ],
+    wires: [
+        { fromJonctionId: "VCC1_out", toJonctionId: "LDR1_in" },
+        { fromJonctionId: "LDR1_out", toJonctionId: "R1_in" },
+        { fromJonctionId: "R1_out", toJonctionId: "GND1_out" },
+        { fromJonctionId: "V2_out", toJonctionId: "R1_in" },
+        { fromJonctionId: "V2_in", toJonctionId: "GND1_out" },
+    ],
+};
+const vLdr33 = getIdealVoltmeterVoltage("V2", ldr33.components, ldr33.wires);
+assert.ok(vLdr33 > 1.4 && vLdr33 < 1.8, `VCC 3,3 V + LDR 10 lx / 10 kΩ → +1,65 V, got ${vLdr33}`);
 
 console.log("arduino-gpio-ideal.test.mjs OK");

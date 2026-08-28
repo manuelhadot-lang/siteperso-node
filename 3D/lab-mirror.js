@@ -4,8 +4,10 @@ import { Reflector } from "three/addons/objects/Reflector.js";
 
 export const MIRROR_FLAG = "_labMirror";
 export const MIRROR_FACE_KEY = "_labMirrorFace";
-/** Au-delà : vrai miroir de scène (Reflector). En dessous : chrome PBR. */
-export const MIRROR_REFLECTOR_THRESHOLD = 0.88;
+/** Dès ce seuil : overlay Reflector (opacity ∝ réflexion). En dessous : brillance PBR seule. */
+export const MIRROR_REFLECTOR_THRESHOLD = 0.2;
+/** Preset parquet / bois ciré (vernis léger, pas un miroir). */
+export const WAXED_REFLECTION = 0.28;
 export const REFLECTION_MIN = 0;
 export const REFLECTION_MAX = 1;
 export const REFLECTION_STEP = 0.01;
@@ -57,16 +59,67 @@ const LabMirrorShader = {
 };
 
 /**
+ * Courbe diélectrique : petit r = bois ciré, grand r = chrome.
  * @param {number} reflection 0–1
- * @returns {{ metalness: number, roughness: number, envMapIntensity: number }}
+ * @returns {{ metalness: number, roughness: number, envMapScale: number, envMapIntensity: number }}
  */
 export function reflectionToPbr(reflection) {
-    const r = THREE.MathUtils.clamp(reflection, 0, 1);
+    const r = THREE.MathUtils.clamp(Number(reflection) || 0, 0, 1);
+    const gloss = Math.pow(r, 0.48);
+    const metalness =
+        r < 0.72
+            ? THREE.MathUtils.lerp(0.02, 0.14, r / 0.72)
+            : THREE.MathUtils.lerp(0.14, 1, (r - 0.72) / 0.28);
+    const roughness = THREE.MathUtils.lerp(0.78, 0.045, gloss);
+    const envMapScale = 1 + gloss * 2.15;
     return {
-        metalness: r,
-        roughness: Math.max(0, 1 - r * 0.99),
-        envMapIntensity: 1.05 + r * 2.9,
+        metalness,
+        roughness,
+        envMapScale,
+        envMapIntensity: envMapScale,
     };
+}
+
+/**
+ * Intensité IBL = exposition skybox × brillance du matériau.
+ * @param {number} reflection 0–1
+ * @param {number} [skyboxBrightness=1]
+ */
+export function composeEnvMapIntensity(reflection, skyboxBrightness = 1) {
+    const { envMapScale } = reflectionToPbr(reflection);
+    const base = Number.isFinite(skyboxBrightness) ? Math.max(0.05, skyboxBrightness) : 1;
+    return base * envMapScale;
+}
+
+/**
+ * @param {THREE.Material | null | undefined} material
+ * @param {number} [reflection]
+ */
+export function envMapIntensityForMaterial(material, reflection) {
+    const r =
+        typeof reflection === "number"
+            ? reflection
+            : typeof material?.userData?._labReflection === "number"
+              ? material.userData._labReflection
+              : null;
+    const sky = material?.userData?.labSkyboxEnvMap
+        ? typeof material.userData._labSkyboxBrightness === "number"
+            ? material.userData._labSkyboxBrightness
+            : 1
+        : 1;
+    if (typeof r === "number") return composeEnvMapIntensity(r, sky);
+    return sky;
+}
+
+/**
+ * Force du Reflector (0 = aucun, 1 = miroir plein).
+ * @param {number} reflection 0–1
+ */
+export function reflectorOverlayMix(reflection) {
+    const r = THREE.MathUtils.clamp(Number(reflection) || 0, 0, 1);
+    if (r < MIRROR_REFLECTOR_THRESHOLD) return 0;
+    const t = (r - MIRROR_REFLECTOR_THRESHOLD) / (1 - MIRROR_REFLECTOR_THRESHOLD);
+    return THREE.MathUtils.clamp(0.08 + Math.pow(t, 1.2) * 0.92, 0, 1);
 }
 
 /**
@@ -185,6 +238,7 @@ export function syncMirrorOnBoxFace(mesh, faceIndex, reflection) {
     // Teinte neutre sombre : évite le wash blanc du Reflector stock.
     const tint = new THREE.Color(0x8a8a8a);
 
+    const mix = reflectorOverlayMix(r);
     const mirror = new Reflector(new THREE.PlaneGeometry(planeW * 0.998, planeH * 0.998), {
         // Bias un peu plus élevé = moins d’artefacts quand on colle au plan.
         clipBias: 0.02,
@@ -196,27 +250,30 @@ export function syncMirrorOnBoxFace(mesh, faceIndex, reflection) {
     mirror.name = `lab-mirror-face-${faceIndex}`;
     mirror.userData[MIRROR_FLAG] = true;
     mirror.userData[MIRROR_FACE_KEY] = faceIndex;
+    mirror.userData._labReflection = r;
     mirror.userData._labNoPaintPick = true;
     mirror.renderOrder = 2;
 
     if (mirror.material) {
         mirror.material.transparent = true;
-        mirror.material.depthWrite = true;
+        // Overlay ciré : laisser l’albedo (parquet) visible dessous.
+        mirror.material.depthWrite = mix >= 0.85;
         mirror.material.polygonOffset = true;
         mirror.material.polygonOffsetFactor = -1;
         mirror.material.polygonOffsetUnits = -1;
         if (mirror.material.uniforms?.opacity) {
-            mirror.material.uniforms.opacity.value = 1;
+            mirror.material.uniforms.opacity.value = mix;
         }
     }
 
     const updateReflection = mirror.onBeforeRender;
     mirror.onBeforeRender = function onBeforeRenderMirror(renderer, scene, camera) {
         const signed = signedDistanceToMirror(mirror, camera);
+        const strength = reflectorOverlayMix(mirror.userData._labReflection ?? r);
         // Face arrière du miroir : laisser Reflector ignorer.
         if (signed <= 0) {
             if (mirror.material?.uniforms?.opacity) {
-                mirror.material.uniforms.opacity.value = 1;
+                mirror.material.uniforms.opacity.value = strength;
             }
             updateReflection.call(this, renderer, scene, camera);
             return;
@@ -231,7 +288,7 @@ export function syncMirrorOnBoxFace(mesh, faceIndex, reflection) {
                     0,
                     1
                 );
-                mirror.material.uniforms.opacity.value = t * t;
+                mirror.material.uniforms.opacity.value = strength * t * t;
             }
             return;
         }
@@ -242,7 +299,8 @@ export function syncMirrorOnBoxFace(mesh, faceIndex, reflection) {
                 0,
                 1
             );
-            mirror.material.uniforms.opacity.value = 0.55 + 0.45 * fade;
+            const distMul = strength > 0.85 ? 0.55 + 0.45 * fade : 0.35 + 0.65 * fade;
+            mirror.material.uniforms.opacity.value = strength * distMul;
         }
         updateReflection.call(this, renderer, scene, camera);
     };

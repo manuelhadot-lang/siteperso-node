@@ -49,5 +49,8 @@ SimulateurH/dist/
 # HDR 4K non référencé dans le site
 public/*.exr
 
+# OBJ Jungle Mountain ~164 Mo : limite GitHub 100 Mo (garder en local, importer via le lab)
+3D/montagne/Jungle+Mountain/*.obj
+
 # Cache Arduino local complet
 Simulateur/arduino-data/

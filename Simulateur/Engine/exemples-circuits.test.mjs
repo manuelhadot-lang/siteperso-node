@@ -22,7 +22,7 @@ const { buildSimStateFromCircuit, jonctionIdToTerminalKey } = await import(
     pathToFileURL(path.join(repoRoot, "Simulateur", "circuit-sim-state.js")).href
 );
 
-const BOARD_TYPES = new Set(["arduino_uno", "esp32_c3", "esp32_devkit"]);
+const BOARD_TYPES = new Set(["arduino_uno", "esp32_c3", "esp32_devkit", "esp32_upesy_lp"]);
 
 function listExampleFiles(dir) {
     const out = [];

@@ -26,6 +26,7 @@ import {
     isL293dType,
 } from "./l293d.mjs";
 import { appendNmosNetlist } from "./nmos.mjs";
+import { ldrResistanceOhm, isLdrType } from "./ldr.mjs";
 
 import {
     logicVhi,
@@ -108,6 +109,13 @@ import {
     isEsp32DevkitType,
 } from "./esp32-devkit.mjs";
 import {
+    appendEsp32UpesyLpNetlist,
+    esp32UpesyLpDigitalPinIndices,
+    esp32UpesyLpGpioPinName,
+    esp32UpesyLpTerminalKeys,
+    isEsp32UpesyLpType,
+} from "./esp32-upesy-lp.mjs";
+import {
     arduinoUnoMinPulsePeriodSec,
     applyArduinoSketchToComponent,
     arduinoGpioIsTimeVarying,
@@ -119,7 +127,7 @@ import {
 } from "./hc90-cascade.mjs";
 
 function isMicroBoardType(t) {
-    return isArduinoUnoType(t) || isEsp32C3Type(t) || isEsp32DevkitType(t);
+    return isArduinoUnoType(t) || isEsp32C3Type(t) || isEsp32DevkitType(t) || isEsp32UpesyLpType(t);
 }
 
 function isLedType(t) {
@@ -163,6 +171,7 @@ function isNodeLikelyLogicHigh(nodeName, components, nodeFor) {
 function isTwoTerminalType(t) {
     return (
         t === "resistor" ||
+        isLdrType(t) ||
         t === "capacitor" ||
         t === "inductor" ||
         t === "diode" ||
@@ -368,6 +377,7 @@ function terminalKeysForComponent(c) {
     if (isArduinoUnoType(c.type)) return arduinoUnoTerminalKeys(c);
     if (isEsp32C3Type(c.type)) return esp32C3TerminalKeys(c);
     if (isEsp32DevkitType(c.type)) return esp32DevkitTerminalKeys(c);
+    if (isEsp32UpesyLpType(c.type)) return esp32UpesyLpTerminalKeys(c);
     if (isSingleTerminalRefType(c.type)) return [`${c.id}#0`];
     if (isTwoTerminalType(c.type) || isSignalGeneratorType(c.type)) {
         return [`${c.id}#0`, `${c.id}#1`];
@@ -740,7 +750,7 @@ function detectRippleMod10ResetAndWarning(components, parent) {
 /** Résistances / passifs : même nœud électrique aux deux bornes (pour détecter la rétroaction AOP). */
 function ufUnionPassiveInternals(parent, components) {
     for (const c of components) {
-        if (c.type === "resistor" || c.type === "capacitor" || c.type === "inductor") {
+        if (c.type === "resistor" || isLdrType(c.type) || c.type === "capacitor" || c.type === "inductor") {
             ufUnion(parent, `${c.id}#0`, `${c.id}#1`);
         }
     }
@@ -834,7 +844,7 @@ function estimateMaxRcTauSec(components, wires) {
     let maxTau = 0;
     const caps = components.filter((c) => c.type === "capacitor");
     const resistors = components.filter(
-        (c) => c.type === "resistor" || c.type === "potentiometer"
+        (c) => c.type === "resistor" || c.type === "potentiometer" || isLdrType(c.type)
     );
     for (const cap of caps) {
         const c0 = ufFind(parent, `${cap.id}#0`);
@@ -846,7 +856,7 @@ function estimateMaxRcTauSec(components, wires) {
             const shares =
                 c0 === r0 || c0 === r1 || c1 === r0 || c1 === r1;
             if (!shares) continue;
-            const tau = parseResistanceOhm(res.value) * cFarad;
+            const tau = (isLdrType(res.type) ? ldrResistanceOhm(res) : parseResistanceOhm(res.value)) * cFarad;
             if (tau > maxTau) maxTau = tau;
         }
     }
@@ -1454,6 +1464,7 @@ function isArduinoIdealOnlyCircuit(components) {
             c.type === "voltmeter" ||
             c.type === "ammeter" ||
             c.type === "resistor" ||
+            c.type === "ldr" ||
             c.type === "capacitor" ||
             c.type === "inductor" ||
             c.type === "diode" ||
@@ -1750,6 +1761,11 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n1 = nodeFor(`${c.id}#1`);
             const ohms = parseResistanceOhm(c.value);
             lines.push(`${spiceBranchName("R", c.id)} ${n0} ${n1} ${ohms}`);
+        } else if (isLdrType(c.type)) {
+            const n0 = nodeFor(`${c.id}#0`);
+            const n1 = nodeFor(`${c.id}#1`);
+            const ohms = ldrResistanceOhm(c);
+            lines.push(`${spiceBranchName("R", c.id)} ${n0} ${n1} ${ohms}`);
         } else if (c.type === "potentiometer") {
             const n0 = nodeFor(`${c.id}#0`);
             const n1 = nodeFor(`${c.id}#1`);
@@ -2018,6 +2034,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             appendEsp32C3Netlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isEsp32DevkitType(c.type)) {
             appendEsp32DevkitNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
+        } else if (isEsp32UpesyLpType(c.type)) {
+            appendEsp32UpesyLpNetlist(c, nodeFor, lines, spiceBranchName, { i2cRepeatSec });
         } else if (isLogicCd4511Type(c.type)) {
             const vhi = resolveLogicCd4511Vhi(c, logicVhiByTerminal, parseLogicRail, logicVhi);
             appendLogicCd4511Netlist(c, nodeFor, vhi, lines, spiceBranchName, {
@@ -2650,6 +2668,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 outKeys = esp32C3DigitalPinIndices().map((i) => `${c.id}#${i}`);
             } else if (isEsp32DevkitType(c.type)) {
                 outKeys = esp32DevkitDigitalPinIndices().map((i) => `${c.id}#${i}`);
+            } else if (isEsp32UpesyLpType(c.type)) {
+                outKeys = esp32UpesyLpDigitalPinIndices().map((i) => `${c.id}#${i}`);
             }
             let vhiTran = 5;
             if (isLogicGateComponentType(c.type)) {
@@ -2684,6 +2704,8 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 vhiTran = 3.3;
             } else if (isEsp32DevkitType(c.type)) {
                 vhiTran = 3.3;
+            } else if (isEsp32UpesyLpType(c.type)) {
+                vhiTran = 3.3;
             }
             for (const outKey of outKeys) {
                 const nOut = nodeFor(outKey);
@@ -2716,6 +2738,9 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
                 } else if (isEsp32DevkitType(c.type)) {
                     const pinIdx = Number(String(outKey).split("#")[1]);
                     if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${esp32DevkitGpioPinName(pinIdx)}`;
+                } else if (isEsp32UpesyLpType(c.type)) {
+                    const pinIdx = Number(String(outKey).split("#")[1]);
+                    if (Number.isFinite(pinIdx)) icOutId = `${c.id}_${esp32UpesyLpGpioPinName(pinIdx)}`;
                 }
                 logicGatesTranMeta.push({
                     id: icOutId,
@@ -3280,6 +3305,19 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const vhi = 3.3;
             for (const pinIdx of esp32DevkitDigitalPinIndices()) {
                 const pinName = esp32DevkitGpioPinName(pinIdx);
+                logicGates.push({
+                    id: `${c.id}_${pinName}`,
+                    type: c.type,
+                    nodeOut: nodeFor(`${c.id}#${pinIdx}`),
+                    inputs: [],
+                    vhi,
+                    vth: 1.65,
+                });
+            }
+        } else if (isEsp32UpesyLpType(c.type)) {
+            const vhi = 3.3;
+            for (const pinIdx of esp32UpesyLpDigitalPinIndices()) {
+                const pinName = esp32UpesyLpGpioPinName(pinIdx);
                 logicGates.push({
                     id: `${c.id}_${pinName}`,
                     type: c.type,

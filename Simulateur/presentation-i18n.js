@@ -36,7 +36,7 @@ const PRESENTATION_I18N = {
         's.features.l1':
             'Analogique : résistances, condensateurs, diodes, AOP, transistors, LM386, LM7805, analyse de Bode',
         's.features.l2': 'Logique : portes, bascules D/JK, CD4511, 74HC90 (XSPICE)',
-        's.features.l3': 'Microcontrôleurs : Arduino UNO, ESP32-C3, ESP32 DevKit + éditeur de sketch',
+        's.features.l3': 'Microcontrôleurs : Arduino UNO, ESP32-C3, ESP32 DevKit, uPesy Low Power + éditeur de sketch',
         's.features.l4': 'Capteurs / affichage : DHT22, BMP280, TSL2591, LCD I2C, TFT ST7735, matrice 8×8',
         's.features.l5': 'Mécanique : moteur DC, servo, drivers L293D et IR2104',
         's.features.l6': 'Mesures : voltmètre, ampèremètre, ohmmètre, oscilloscope, moniteur série',
@@ -107,7 +107,7 @@ const PRESENTATION_I18N = {
         's.features.l1':
             'Analog: resistors, capacitors, diodes, op-amps, transistors, LM386, LM7805, Bode analysis',
         's.features.l2': 'Logic: gates, D/JK flip-flops, CD4511, 74HC90 (XSPICE)',
-        's.features.l3': 'Microcontrollers: Arduino UNO, ESP32-C3, ESP32 DevKit + sketch editor',
+        's.features.l3': 'Microcontrollers: Arduino UNO, ESP32-C3, ESP32 DevKit, uPesy Low Power + sketch editor',
         's.features.l4': 'Sensors / displays: DHT22, BMP280, TSL2591, I2C LCD, ST7735 TFT, 8×8 matrix',
         's.features.l5': 'Mechanics: DC motor, servo, L293D and IR2104 drivers',
         's.features.l6': 'Instruments: voltmeter, ammeter, ohmmeter, oscilloscope, serial monitor',

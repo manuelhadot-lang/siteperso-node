@@ -1,5 +1,6 @@
 /** Environnement studio (PMREM) — reflets PBR réalistes sans skybox HDRI. */
 import * as THREE from "three";
+import { composeEnvMapIntensity } from "./lab-mirror.js";
 
 /** @type {THREE.Texture | null} */
 let studioEnvTexture = null;
@@ -93,7 +94,10 @@ export function applyStudioEnvironment(scene, renderer) {
             if (!(material instanceof THREE.MeshStandardMaterial)) continue;
             if (!material.userData?.labSkyboxEnvMap) {
                 material.envMap = null;
-                if (typeof material.envMapIntensity !== "number") {
+                const refl = material.userData?._labReflection;
+                if (typeof refl === "number") {
+                    material.envMapIntensity = composeEnvMapIntensity(refl, 1);
+                } else if (typeof material.envMapIntensity !== "number") {
                     material.envMapIntensity = 1.15;
                 }
                 material.needsUpdate = true;

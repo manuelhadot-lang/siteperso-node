@@ -650,6 +650,39 @@ async function getArduinoCliStatus() {
     };
 }
 
+function stripAnsi(s) {
+    return String(s || "")
+        .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+        .replace(/\u001b\][^\u0007]*\u0007/g, "")
+        .replace(/\[[0-9;]{1,4}m/g, "");
+}
+
+function formatCompileFailureLog(raw, fqbn) {
+    const text = stripAnsi(raw).trim();
+    const hints = [];
+    if (/sdkconfig/i.test(text) && /introuvable|No such file|not found/i.test(text)) {
+        hints.push(
+            "Le fichier sdkconfig du core ESP32 est manquant (package esp32-arduino-libs incomplet).",
+            "Réparer dans un terminal : arduino-cli core install esp32:esp32"
+        );
+    }
+    if (/freertos\/task\.h/i.test(text)) {
+        hints.push(
+            "Les en-têtes FreeRTOS du core ESP32 sont absents.",
+            "Réparer : arduino-cli core install esp32:esp32"
+        );
+    }
+    const errLines = text.split(/\r?\n/).filter((l) =>
+        /error:|fatal error|Error during build|introuvable|undefined reference|fatal:/i.test(l)
+        && !/warning:/i.test(l)
+    );
+    const parts = [];
+    if (hints.length) parts.push(hints.join("\n"));
+    if (errLines.length) parts.push(errLines.slice(-40).join("\n"));
+    if (text) parts.push(text.slice(-5000));
+    return parts.join("\n\n") || `Vérifiez arduino-cli core install ${coreIdFromFqbn(fqbn) || "arduino:avr"}.`;
+}
+
 /**
  * @param {{ sketch: string; sketchName?: string; fqbn?: string }} opts
  */
@@ -689,7 +722,7 @@ async function compileArduinoSketch(opts) {
             buildCompileArgs(fqbn, outDir, sketchDir, libraryPaths),
             { timeoutMs: coreIdFromFqbn(fqbn) === "esp32:esp32" ? 300000 : 180000 }
         );
-        let log = [compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim();
+        let log = stripAnsi([compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim());
 
         if (!compileRun.ok && /No such file or directory/i.test(log)) {
             registryInstall = await ensureRegistryLibraries(headers, resolveUserLibraryPaths());
@@ -699,7 +732,7 @@ async function compileArduinoSketch(opts) {
                     buildCompileArgs(fqbn, outDir, sketchDir, libraryPaths),
                     { timeoutMs: coreIdFromFqbn(fqbn) === "esp32:esp32" ? 300000 : 180000 }
                 );
-                log = [compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim();
+                log = stripAnsi([compileRun.stdout, compileRun.stderr].filter(Boolean).join("\n").trim());
             }
         }
 
@@ -714,9 +747,9 @@ async function compileArduinoSketch(opts) {
                     "Compilation Arduino échouée.",
                     compileRun.message ? `(${compileRun.message})` : "",
                     libHint,
-                    log ? log.slice(-6000) : `Vérifiez arduino-cli core install ${coreIdFromFqbn(fqbn) || "arduino:avr"}.`,
+                    log ? formatCompileFailureLog(log, fqbn) : `Vérifiez arduino-cli core install ${coreIdFromFqbn(fqbn) || "arduino:avr"}.`,
                 ].filter(Boolean),
-                log,
+                log: formatCompileFailureLog(log, fqbn),
                 fqbn,
                 exe: compileRun.exe,
             libraryPaths,

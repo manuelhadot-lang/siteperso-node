@@ -2,7 +2,7 @@
 import { circuit, flags, simulationResults } from './state.js';
 import { bcdDigitToSeg7Segments, bcdFromQVoltages } from './Engine/bcd-seg7.mjs';
 import { quantizeVoltmeterReading } from './Engine/voltmeter-display.mjs';
-import { resolveNetVoltage } from './Engine/arduino-analog-ideal.mjs';
+import { resolveNetVoltage, readBoardAnalogInputs, reachableJonctionsViaSeriesPassives } from './Engine/arduino-analog-ideal.mjs';
 
 export { quantizeVoltmeterReading };
 import {
@@ -31,7 +31,6 @@ import {
     injectRuntimeSerialRx,
     getRuntimeSerialMeta,
 } from './Engine/arduino-sketch-parse.mjs';
-import { readBoardAnalogInputs } from './Engine/arduino-analog-ideal.mjs';
 import { sketchUsesSerial } from './Engine/arduino-uart-wave.mjs';
 import { getVoltageAtJonction } from './geometry.js';
 import { reachableJonctions } from './Engine/hc90-cascade.mjs';
@@ -445,23 +444,31 @@ function arduinoPinLabelFromJonction(board, jonctionId) {
 
 function indexArduinoLedDrives() {
     anim.arduinoLedDrive = {};
+    const hopCtx = {
+        components: circuit.components,
+        wires: circuit.wires,
+        autoJunctions: circuit.autoJunctions,
+    };
     for (const led of circuit.components.filter((c) => c.type === 'led')) {
-        const start = `${led.label}_in`;
+        const starts = [`${led.label}_in`, `${led.label}_out`];
         for (const board of circuit.components.filter((c) => isMicroBoard(c))) {
             applyArduinoSketchToComponent(board);
-            const net = reachableJonctions(start, circuit.wires, circuit.autoJunctions);
             let found = null;
-            for (const jid of net) {
-                const pinLabel = arduinoPinLabelFromJonction(board, jid);
-                if (pinLabel && board.pinModes?.[pinLabel] === 'OUTPUT') {
-                    found = {
-                        unoLabel: board.label,
-                        pinLabel,
-                        pulse: board.pinPulses?.[pinLabel],
-                        level: board.pinLevels?.[pinLabel],
-                    };
-                    break;
+            for (const start of starts) {
+                const net = reachableJonctionsViaSeriesPassives(start, hopCtx);
+                for (const jid of net) {
+                    const pinLabel = arduinoPinLabelFromJonction(board, jid);
+                    if (pinLabel && board.pinModes?.[pinLabel] === 'OUTPUT') {
+                        found = {
+                            unoLabel: board.label,
+                            pinLabel,
+                            pulse: board.pinPulses?.[pinLabel],
+                            level: board.pinLevels?.[pinLabel],
+                        };
+                        break;
+                    }
                 }
+                if (found) break;
             }
             if (found && (found.pulse || found.level === 1 || found.level === 0)) {
                 anim.arduinoLedDrive[led.label] = found;

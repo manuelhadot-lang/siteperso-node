@@ -6,6 +6,9 @@ import { getArchCollisionMeshes, isLabArchitecture } from "./lab-architecture.js
 import { LAB_CSG_KEY } from "./lab-csg.js";
 
 export const COLLISION_KEY = "collisionEnabled";
+// Réduit le coût des collisions pour les objets importés lourds (montagne, etc.).
+// Si présent : collision calcule AABB + raycast sur ce proxy (plutôt que sur tout le groupe).
+const COLLISION_PROXY_KEY = "collisionProxy";
 /** Rayon horizontal de la capsule (m) — assez fin pour marcher dans une pièce ~3 m. */
 export const PLAYER_RADIUS = 0.32;
 /** Hauteur totale pieds → sommet de tête (m) — adulte ~1,78 m. */
@@ -215,6 +218,11 @@ export function hasCollisionEnabled(object) {
     return !!object?.userData?.[COLLISION_KEY];
 }
 
+function getCollisionProxy(object) {
+    const proxy = object?.userData?.[COLLISION_PROXY_KEY];
+    return proxy instanceof THREE.Object3D ? proxy : null;
+}
+
 function getCollisionTargets() {
     return collidableObjects.filter((obj) => {
         if (!hasCollisionEnabled(obj)) return false;
@@ -225,8 +233,10 @@ function getCollisionTargets() {
 }
 
 function updateObjectBox(object, target = boxB) {
-    object.updateWorldMatrix(true, true);
-    return target.setFromObject(object);
+    const proxy = getCollisionProxy(object);
+    const src = proxy || object;
+    src.updateWorldMatrix(true, true);
+    return target.setFromObject(src);
 }
 
 function getFeetY() {
@@ -250,6 +260,23 @@ export function getPlayerBox(target = playerBox) {
     target.min.set(x - PLAYER_RADIUS, feetY, z - PLAYER_RADIUS);
     target.max.set(x + PLAYER_RADIUS, feetY + PLAYER_CAPSULE_HEIGHT, z + PLAYER_RADIUS);
     return target;
+}
+
+/**
+ * Pose + déplacement horizontal du frame (pour pousser les corps dynamiques).
+ * @returns {{ x: number, feetY: number, z: number, radius: number, height: number, moveX: number, moveZ: number } | null}
+ */
+export function getPlayerAvatarState() {
+    if (!playerRoot) return null;
+    return {
+        x: playerRoot.position.x,
+        feetY: getFeetY(),
+        z: playerRoot.position.z,
+        radius: PLAYER_RADIUS,
+        height: PLAYER_CAPSULE_HEIGHT,
+        moveX: lastMoveDirXZ.x * lastMoveHorizDist,
+        moveZ: lastMoveDirXZ.y * lastMoveHorizDist,
+    };
 }
 
 /**
@@ -535,7 +562,9 @@ function getSurfaceYAt(object, x, z, feetY = null, opts = {}) {
         return getStairSurfaceYAt(object, x, z, feetY, opts);
     }
 
-    const box = updateObjectBox(object);
+    const proxy = getCollisionProxy(object);
+    const src = proxy || object;
+    const box = updateObjectBox(src);
     if (!overlapsFootprint(x, z, box)) return null;
 
     if (isLabTerrain(object)) {
@@ -551,7 +580,8 @@ function getSurfaceYAt(object, x, z, feetY = null, opts = {}) {
 
     rayOrigin.set(x, Math.max(box.max.y, ceilingY) + 2, z);
     raycaster.set(rayOrigin, downDirection);
-    const hits = raycaster.intersectObject(object, true);
+    // Le proxy est souvent un simple mesh : on évite de parcourir descendants (descendants = true coûte cher).
+    const hits = raycaster.intersectObject(src, !(src instanceof THREE.Mesh));
     const minNormalY = 0.45;
 
     let bestY = null;
@@ -770,6 +800,55 @@ export function getGroundEyeY(x, z, feetY = null) {
 
     if (surfaceY === null) surfaceY = 0;
     return surfaceY + PLAYER_HEIGHT;
+}
+
+/**
+ * Hauteur d’appui (sol / terrain / objets) sous (x, z) pour un objet en chute.
+ * @param {number} x
+ * @param {number} z
+ * @param {number} probeFeetY bas de l’objet (m)
+ * @param {THREE.Object3D | null} [exclude]
+ * @returns {number}
+ */
+export function getSupportSurfaceY(x, z, probeFeetY, exclude = null) {
+    const targets = getCollisionTargets();
+    let surfaceY = null;
+    const feet = Number.isFinite(probeFeetY) ? probeFeetY : 0;
+    const fallOpts = { mode: "fall", ceilingY: feet + 0.35 };
+
+    for (const obj of targets) {
+        if (exclude && (obj === exclude || isDescendantOf(obj, exclude) || isDescendantOf(exclude, obj))) {
+            continue;
+        }
+        // Ne pas s’appuyer sur un autre objet en chute (évite les empilements instables).
+        if (obj?.userData?.physicsEnabled) continue;
+        if (isLabTerrain(obj)) {
+            const terrainY = sampleTerrainHeightFromGeometry(obj, x, z);
+            if (terrainY !== null) {
+                surfaceY = surfaceY === null ? terrainY : Math.max(surfaceY, terrainY);
+            }
+            continue;
+        }
+        const y = getSurfaceYAt(obj, x, z, feet, fallOpts);
+        if (y === null) continue;
+        surfaceY = surfaceY === null ? y : Math.max(surfaceY, y);
+    }
+
+    if (surfaceY === null) surfaceY = 0;
+    return surfaceY;
+}
+
+/**
+ * @param {THREE.Object3D} node
+ * @param {THREE.Object3D} ancestor
+ */
+function isDescendantOf(node, ancestor) {
+    let current = node;
+    while (current) {
+        if (current === ancestor) return true;
+        current = current.parent;
+    }
+    return false;
 }
 
 export function isPlayerGrounded() {

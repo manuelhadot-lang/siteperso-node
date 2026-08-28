@@ -15,7 +15,9 @@ import {
 import { collectUserFunctions, expandUserFunctionCalls } from "./sketch-functions.mjs";
 import {
     isEsp32BoardType,
+    isEsp32WroomType,
     isMicroBoardType,
+    analogReadPinLabel,
     esp32GpioNumbersForBoard,
     esp32LedBuiltinPin,
     portRegisterLabels,
@@ -56,14 +58,29 @@ export function parseIntPinArrays(src, boardType = "arduino_uno") {
     return arrays;
 }
 
-export function resolvePinFromSketchToken(token, boardType = "arduino_uno", pinArrays = {}) {
+export function resolvePinFromSketchToken(token, boardType = "arduino_uno", pinArrays = {}, pinConsts = {}) {
     const t = String(token || "").trim();
     const sub = t.match(/^([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]$/);
     if (sub && Array.isArray(pinArrays[sub[1]])) {
         const pin = pinArrays[sub[1]][parseInt(sub[2], 10)];
         return pin != null ? pin : null;
     }
+    if (/^[A-Za-z_]\w*$/.test(t) && Object.prototype.hasOwnProperty.call(pinConsts, t)) {
+        const n = pinConsts[t];
+        const via = resolvePinToken(String(n), boardType);
+        return via != null ? via : n;
+    }
     return resolvePinToken(t, boardType);
+}
+
+/** const int PIN_LED = 18 → { PIN_LED: 18 } (analyse statique pinMode / digitalWrite). */
+function collectScalarPinConsts(src) {
+    const { vars } = collectInitialVars(src);
+    const out = {};
+    for (const [name, val] of Object.entries(vars || {})) {
+        if (typeof val === "number" && Number.isFinite(val)) out[name] = Math.trunc(val);
+    }
+    return out;
 }
 
 function expandArraySubscripts(expr, vars) {
@@ -186,10 +203,10 @@ function pinLabel(pin, boardType = "arduino_uno") {
 }
 
 /** Broches lues via digitalRead() — entrée simulée même sans pinMode explicite. */
-function collectDigitalReadPinLabels(src, boardType, pinArrays) {
+function collectDigitalReadPinLabels(src, boardType, pinArrays, pinConsts = {}) {
     const labels = new Set();
     for (const m of String(src).matchAll(/\bdigitalRead\s*\(\s*([^()]+?)\s*\)/gi)) {
-        const pin = resolvePinFromSketchToken(m[1].trim(), boardType, pinArrays);
+        const pin = resolvePinFromSketchToken(m[1].trim(), boardType, pinArrays, pinConsts);
         const label = pinLabel(pin, boardType);
         if (label) labels.add(label);
     }
@@ -604,9 +621,26 @@ function resolvePinLabelFromExpr(expr, state) {
         const pin = resolvePinFromSketchToken(
             t,
             state.boardType,
-            parseIntPinArrays(state.sketchSrc || "", state.boardType)
+            parseIntPinArrays(state.sketchSrc || "", state.boardType),
+            collectScalarPinConsts(state.sketchSrc || "")
         );
         return pinLabel(pin, state.boardType);
+    }
+}
+
+function resolveAnalogPinLabelFromExpr(expr, state) {
+    const t = String(expr || "").trim();
+    if (!t) return null;
+    try {
+        return analogReadPinLabel(evalExprState(substituteCalls(t, state), state), state.boardType);
+    } catch {
+        const pin = resolvePinFromSketchToken(
+            t,
+            state.boardType,
+            parseIntPinArrays(state.sketchSrc || "", state.boardType),
+            collectScalarPinConsts(state.sketchSrc || "")
+        );
+        return analogReadPinLabel(pin, state.boardType);
     }
 }
 
@@ -614,6 +648,26 @@ function resolvePinLabelFromExpr(expr, state) {
  * Remplace les appels de fonction connus par leur valeur avant évaluation :
  * digitalRead(pin), analogRead(pin), millis()/micros(), Serial…
  */
+function nativeAdcBits(boardType) {
+    return isEsp32BoardType(boardType) ? 12 : 10;
+}
+
+function analogReadBitsOf(state) {
+    const n = Number(state?.analogReadBits);
+    if (Number.isFinite(n) && n >= 1 && n <= 16) return Math.trunc(n);
+    return nativeAdcBits(state?.boardType);
+}
+
+function scaleAnalogSample(raw, state) {
+    const nativeBits = nativeAdcBits(state?.boardType);
+    const outBits = analogReadBitsOf(state);
+    const nativeMax = (1 << nativeBits) - 1;
+    const outMax = (1 << outBits) - 1;
+    const v = Number.isFinite(raw) ? Math.max(0, Math.min(nativeMax, raw)) : 0;
+    if (outBits === nativeBits) return Math.round(v);
+    return Math.round((v * outMax) / nativeMax);
+}
+
 function substituteCalls(expr, state) {
     let s = String(expr);
     s = s.replace(/\bdigitalRead\s*\(\s*([^()]*?)\s*\)/gi, (_, p) => {
@@ -622,9 +676,9 @@ function substituteCalls(expr, state) {
         return v === 0 ? "0" : "1";
     });
     s = s.replace(/\banalogRead\s*\(\s*([^()]*?)\s*\)/gi, (_, p) => {
-        const label = resolvePinLabelFromExpr(p, state);
+        const label = resolveAnalogPinLabelFromExpr(p, state);
         const adc = label && state.analogInputs ? state.analogInputs[label] : undefined;
-        return String(Number.isFinite(adc) ? Math.round(adc) : 0);
+        return String(scaleAnalogSample(Number.isFinite(adc) ? adc : 0, state));
     });
     s = s.replace(/\b(?:millis|micros)\s*\(\s*\)/gi, String(Math.trunc(state.simTimeMs || 0)));
     s = s.replace(/\bSerial\.available\s*\(\s*\)/gi, String(serialAvailable(state)));
@@ -698,7 +752,7 @@ function configUartPins(state) {
         if (state.pins.GPIO20 == null) state.pins.GPIO20 = 0;
         return;
     }
-    if (state.boardType === "esp32_devkit") {
+    if (isEsp32WroomType(state.boardType)) {
         state.pins.GPIO1 = 1;
         if (state.pins.GPIO3 == null) state.pins.GPIO3 = 0;
         return;
@@ -896,6 +950,12 @@ function execExprStatement(text, state, onDelay) {
         }
         return 0;
     }
+    if (/^analogReadResolution\s*\(/i.test(text)) {
+        const arg = extractFirstCallArg(text);
+        const n = Math.trunc(evalExprState(arg || "10", state));
+        state.analogReadBits = Math.min(16, Math.max(1, n));
+        return 0;
+    }
     if (/^\w+\.begin\s*\(\s*\)/i.test(text)) return 0;
 
     const localDecl = text.match(
@@ -1081,6 +1141,7 @@ export function createArduinoRuntime(uno) {
         pins: {},
         inputs: {},
         analogInputs: {},
+        analogReadBits: nativeAdcBits(uno?.type || "arduino_uno"),
         simTimeMs: 0,
         serial: createSerialState(),
     };
@@ -1108,7 +1169,7 @@ export function stepArduinoRuntime(rt, deltaMs, inputs, analogInputs) {
     if (!rt) return;
     rt.state.inputs = inputs || {};
     rt.state.analogInputs = analogInputs || {};
-    const inKey = JSON.stringify(rt.state.inputs);
+    const inKey = JSON.stringify(rt.state.inputs) + "|" + JSON.stringify(rt.state.analogInputs);
     if (rt.lastInputs !== inKey) rt.idle = false;
     rt.lastInputs = inKey;
     if (rt.idle) return;
@@ -1195,8 +1256,10 @@ export function evaluateLoopVarBindings(sketch, analogInputs = {}, boardType = "
         pins: {},
         inputs: {},
         analogInputs: analogInputs || {},
+        analogReadBits: nativeAdcBits(boardType),
         simTimeMs: 0,
     };
+    execStatements(parseStatements(bodyOf(src, "setup")), state, () => {});
     const bindings = {};
     for (const st of parseStatements(scanBody)) {
         if (st.type !== "expr") continue;
@@ -1344,7 +1407,7 @@ function computeDynamicPinLevels(uno, tSec = 0) {
     return levels;
 }
 
-function parseLoopPhases(loopBody, boardType = "arduino_uno", pinArrays = {}) {
+function parseLoopPhases(loopBody, boardType = "arduino_uno", pinArrays = {}, pinConsts = {}) {
     const phases = [];
     let current = {};
     let hadWrite = false;
@@ -1353,7 +1416,7 @@ function parseLoopPhases(loopBody, boardType = "arduino_uno", pinArrays = {}) {
     let m;
     while ((m = re.exec(loopBody)) !== null) {
         if (/digitalWrite/i.test(m[0])) {
-            const pin = resolvePinFromSketchToken(m[1], boardType, pinArrays);
+            const pin = resolvePinFromSketchToken(m[1], boardType, pinArrays, pinConsts);
             const label = pinLabel(pin, boardType);
             if (!label) continue;
             current[label] = /HIGH|1/i.test(m[2]) ? 1 : 0;
@@ -1431,13 +1494,15 @@ export function arduinoGpioIsTimeVarying(uno) {
 export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
     const src = stripComments(sketch);
     const pinArrays = parseIntPinArrays(src, boardType);
+    const pinConsts = collectScalarPinConsts(src);
     const pinModes = {};
     const pinLevels = {};
     const pinPulses = {};
     let pinPhases = [];
-    const pinNum = (token) => resolvePinFromSketchToken(token, boardType, pinArrays);
+    const pinNum = (token) => resolvePinFromSketchToken(token, boardType, pinArrays, pinConsts);
     const labelOf = (pin) => pinLabel(pin, boardType);
-    const digitalReadLabels = collectDigitalReadPinLabels(src, boardType, pinArrays);
+    const digitalReadLabels = collectDigitalReadPinLabels(src, boardType, pinArrays, pinConsts);
+    const usesLivePins = sketchUsesAnalogInput(src) || sketchUsesLiveInput(src);
 
     for (const m of src.matchAll(/pinMode\s*\(\s*([^,)]+)\s*,\s*(OUTPUT|INPUT_PULLUP|INPUT)\s*\)/gi)) {
         const pin = pinNum(m[1]);
@@ -1451,15 +1516,18 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
 
     const loopBody = extractLoopBody(src);
     const writes = [];
+    // analogRead / digitalRead : ne pas figer HIGH/LOW (sinon LED allumée en permanence).
     const writeRe = /digitalWrite\s*\(\s*([^,)]+)\s*,\s*(HIGH|LOW|1|0)\s*\)/gi;
-    for (const m of loopBody.matchAll(writeRe)) {
-        const pin = pinNum(m[1]);
-        const label = labelOf(pin);
-        if (!label) continue;
-        writes.push({ label, level: /HIGH|1/i.test(m[2]) });
+    if (!usesLivePins) {
+        for (const m of loopBody.matchAll(writeRe)) {
+            const pin = pinNum(m[1]);
+            const label = labelOf(pin);
+            if (!label) continue;
+            writes.push({ label, level: /HIGH|1/i.test(m[2]) });
+        }
     }
 
-    const loopPhases = parseLoopPhases(loopBody, boardType, pinArrays);
+    const loopPhases = usesLivePins ? [] : parseLoopPhases(loopBody, boardType, pinArrays, pinConsts);
     let blinkApplied = false;
 
     if (loopPhases.length >= 2) {
@@ -1545,6 +1613,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
         }
     }
     if (
+        !usesLivePins &&
         pinPhases.length < 2 &&
         !blinkApplied &&
         loopPhases.length === 0 &&
@@ -1580,7 +1649,7 @@ export function parseArduinoSketch(sketch, boardType = "arduino_uno") {
             pinModes.GPIO21 = "OUTPUT";
             pinLevels.GPIO21 = 1;
             if (!pinModes.GPIO20) pinModes.GPIO20 = "INPUT_PULLUP";
-        } else if (boardType === "esp32_devkit") {
+        } else if (isEsp32WroomType(boardType)) {
             pinModes.GPIO1 = "OUTPUT";
             pinLevels.GPIO1 = 1;
             if (!pinModes.GPIO3) pinModes.GPIO3 = "INPUT_PULLUP";

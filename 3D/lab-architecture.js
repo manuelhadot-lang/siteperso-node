@@ -2,6 +2,7 @@
 import * as THREE from "three";
 
 export const LAB_ARCHITECTURE_KEY = "labArchitecture";
+export const LAB_ARCH_OPENING_FILL_KEY = "labArchOpeningFill";
 export const ARCH_LENGTH_KEY = "archLength";
 export const ARCH_WIDTH_KEY = "archWidth";
 export const ARCH_HEIGHT_KEY = "archHeight";
@@ -127,14 +128,207 @@ const PLINTH_COLOR = "#5c5348";
  *   height: number,
  *   sill: number,
  *   floor: number,
+ *   fill?: "simple" | "imported" | "none",
+ *   importDataUrl?: string,
+ *   importFormat?: string,
+ *   importName?: string,
+ *   fillTx?: {
+ *     x: number, y: number, z: number,
+ *     qx: number, qy: number, qz: number, qw: number,
+ *     sx: number, sy: number, sz: number,
+ *   },
+ *   fillColor?: string,
  * }} ArchOpening
  */
+
+/** @type {Map<string, THREE.Object3D>} */
+const archOpeningImportCache = new Map();
+
+/**
+ * @param {string} dataUrl
+ * @param {string} [format]
+ */
+export function archOpeningImportKey(dataUrl, format = "glb") {
+    const url = String(dataUrl || "");
+    return `${format}:${url.length}:${url.slice(0, 48)}:${url.slice(-24)}`;
+}
+
+/**
+ * @param {string} dataUrl
+ * @param {string} format
+ * @param {THREE.Object3D} root
+ */
+export function setArchOpeningImportTemplate(dataUrl, format, root) {
+    if (!dataUrl || !root) return;
+    archOpeningImportCache.set(archOpeningImportKey(dataUrl, format || "glb"), root);
+}
+
+/**
+ * @param {string} dataUrl
+ * @param {string} [format]
+ * @returns {THREE.Object3D | null}
+ */
+export function getArchOpeningImportTemplate(dataUrl, format = "glb") {
+    if (!dataUrl) return null;
+    return archOpeningImportCache.get(archOpeningImportKey(dataUrl, format)) || null;
+}
+
+/**
+ * Comparaison légère (évite de stringify un GLB base64 à chaque slider).
+ * @param {unknown} openings
+ */
+export function archOpeningsSignature(openings) {
+    if (!Array.isArray(openings)) return "[]";
+    return JSON.stringify(
+        openings.map((raw) => {
+            const o = /** @type {Record<string, unknown>} */ (raw || {});
+            const url = typeof o.importDataUrl === "string" ? o.importDataUrl : "";
+            return {
+                id: o.id,
+                type: o.type,
+                wall: o.wall,
+                offset: o.offset,
+                offsetZ: o.offsetZ,
+                width: o.width,
+                height: o.height,
+                sill: o.sill,
+                floor: o.floor,
+                fill: o.fill || "simple",
+                importFormat: o.importFormat || "",
+                importName: o.importName || "",
+                importLen: url.length,
+                importHead: url.slice(0, 24),
+                importTail: url.slice(-16),
+                fillTx: o.fillTx || null,
+                fillColor: o.fillColor || "",
+            };
+        })
+    );
+}
 
 /**
  * @param {THREE.Object3D | null | undefined} object
  */
 export function isLabArchitecture(object) {
     return !!object?.userData?.[LAB_ARCHITECTURE_KEY];
+}
+
+/**
+ * Porte / fenêtre (remplissage) sélectionnable indépendamment du mur.
+ * @param {THREE.Object3D | null | undefined} object
+ */
+export function isLabArchOpeningFill(object) {
+    return !!object?.userData?.[LAB_ARCH_OPENING_FILL_KEY];
+}
+
+/**
+ * @param {THREE.Object3D | null | undefined} node
+ * @returns {THREE.Object3D | null}
+ */
+export function findArchOpeningFillAncestor(node) {
+    let current = node || null;
+    while (current) {
+        if (isLabArchOpeningFill(current)) return current;
+        current = current.parent;
+    }
+    return null;
+}
+
+/**
+ * @param {THREE.Object3D | null | undefined} fill
+ * @returns {THREE.Object3D | null}
+ */
+export function getArchHostFromFill(fill) {
+    let current = fill || null;
+    while (current) {
+        if (isLabArchitecture(current)) return current;
+        current = current.parent;
+    }
+    return null;
+}
+
+/**
+ * @param {THREE.Object3D} room
+ * @param {string} openingId
+ * @returns {THREE.Object3D | null}
+ */
+export function findArchOpeningFill(room, openingId) {
+    if (!room || !openingId) return null;
+    /** @type {THREE.Object3D | null} */
+    let found = null;
+    room.traverse((node) => {
+        if (found) return;
+        if (isLabArchOpeningFill(node) && node.userData?.archOpeningId === openingId) {
+            found = node;
+        }
+    });
+    return found;
+}
+
+/**
+ * @param {THREE.Object3D} pivot
+ */
+export function readArchOpeningFillTx(pivot) {
+    return {
+        x: pivot.position.x,
+        y: pivot.position.y,
+        z: pivot.position.z,
+        qx: pivot.quaternion.x,
+        qy: pivot.quaternion.y,
+        qz: pivot.quaternion.z,
+        qw: pivot.quaternion.w,
+        sx: pivot.scale.x,
+        sy: pivot.scale.y,
+        sz: pivot.scale.z,
+    };
+}
+
+/**
+ * @param {unknown} raw
+ */
+function normalizeFillTx(raw) {
+    if (!raw || typeof raw !== "object") return undefined;
+    const o = /** @type {Record<string, unknown>} */ (raw);
+    const x = Number(o.x) || 0;
+    const y = Number(o.y) || 0;
+    const z = Number(o.z) || 0;
+    const qx = Number(o.qx) || 0;
+    const qy = Number(o.qy) || 0;
+    const qz = Number(o.qz) || 0;
+    const qw = Number.isFinite(Number(o.qw)) ? Number(o.qw) : 1;
+    const sx = Number.isFinite(Number(o.sx)) ? Number(o.sx) : 1;
+    const sy = Number.isFinite(Number(o.sy)) ? Number(o.sy) : 1;
+    const sz = Number.isFinite(Number(o.sz)) ? Number(o.sz) : 1;
+    const identity =
+        Math.abs(x) < 1e-6 &&
+        Math.abs(y) < 1e-6 &&
+        Math.abs(z) < 1e-6 &&
+        Math.abs(qx) < 1e-6 &&
+        Math.abs(qy) < 1e-6 &&
+        Math.abs(qz) < 1e-6 &&
+        Math.abs(qw - 1) < 1e-6 &&
+        Math.abs(sx - 1) < 1e-6 &&
+        Math.abs(sy - 1) < 1e-6 &&
+        Math.abs(sz - 1) < 1e-6;
+    if (identity) return undefined;
+    return { x, y, z, qx, qy, qz, qw, sx, sy, sz };
+}
+
+/**
+ * @param {THREE.Object3D} pivot
+ * @param {ArchOpening["fillTx"]} tx
+ */
+function applyArchOpeningFillTx(pivot, tx) {
+    const n = normalizeFillTx(tx);
+    if (!n) {
+        pivot.position.set(0, 0, 0);
+        pivot.quaternion.identity();
+        pivot.scale.set(1, 1, 1);
+        return;
+    }
+    pivot.position.set(n.x, n.y, n.z);
+    pivot.quaternion.set(n.qx, n.qy, n.qz, n.qw);
+    pivot.scale.set(n.sx, n.sy, n.sz);
 }
 
 /**
@@ -726,7 +920,33 @@ function normalizeOpening(raw) {
         ? THREE.MathUtils.clamp(floorRaw | 0, 0, ARCH_MAX_FLOORS - 1)
         : 0;
     const id = typeof o.id === "string" && o.id ? o.id : `op-${Math.random().toString(36).slice(2, 9)}`;
-    return { id, type, wall, offset, offsetZ, width, height, sill, floor };
+    /** @type {"simple" | "imported" | "none"} */
+    let fill = "none";
+    if (type === "door" || type === "window") {
+        if (o.fill === "none") fill = "none";
+        else if (
+            o.fill === "imported" &&
+            typeof o.importDataUrl === "string" &&
+            o.importDataUrl.startsWith("data:")
+        ) {
+            fill = "imported";
+        } else {
+            fill = "simple";
+        }
+    }
+    /** @type {ArchOpening} */
+    const next = { id, type, wall, offset, offsetZ, width, height, sill, floor, fill };
+    if (fill === "imported") {
+        next.importDataUrl = String(o.importDataUrl);
+        next.importFormat = typeof o.importFormat === "string" && o.importFormat ? o.importFormat : "glb";
+        next.importName = typeof o.importName === "string" ? o.importName : "";
+    }
+    const fillTx = normalizeFillTx(o.fillTx);
+    if (fillTx) next.fillTx = fillTx;
+    if (typeof o.fillColor === "string" && /^#[0-9a-f]{6}$/i.test(o.fillColor)) {
+        next.fillColor = o.fillColor.toLowerCase();
+    }
+    return next;
 }
 
 /**
@@ -747,6 +967,10 @@ export function getArchCollisionMeshes(object) {
         const n = String(node.name || "");
         if (n === "arch-floor" || n.startsWith("arch-floor-")) return;
         if (n === "arch-ceiling" || n.startsWith("arch-ceiling-")) return;
+        if (n.startsWith("arch-opening-frame-")) {
+            meshes.push(node);
+            return;
+        }
         if (!n.startsWith("arch-wall-")) return;
         meshes.push(node);
     });
@@ -805,28 +1029,45 @@ export function rebuildArchitectureGroup(group, overrides = {}) {
             ? group.userData.metalness
             : DEFAULT_METALNESS;
     for (const child of [...group.children]) {
-        if (child instanceof THREE.Mesh) {
-            const mats = Array.isArray(child.material) ? child.material : [child.material];
+        child.traverse((node) => {
+            if (!(node instanceof THREE.Mesh)) return;
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
             for (const mat of mats) {
                 if (
                     !storedColor &&
+                    node === child &&
                     mat?.color &&
-                    !String(child.name || "").startsWith("arch-plinth-")
+                    !String(node.name || "").startsWith("arch-plinth-") &&
+                    !String(node.name || "").startsWith("arch-opening-")
                 ) {
                     const hex = `#${mat.color.getHexString()}`;
                     // Ignorer le blanc « neutre texture Face ».
                     if (hex.toLowerCase() !== "#ffffff") color = hex;
                 }
-                if (typeof mat?.roughness === "number") roughness = mat.roughness;
-                if (typeof mat?.metalness === "number") metalness = mat.metalness;
+                if (
+                    node === child &&
+                    !String(node.name || "").startsWith("arch-opening-") &&
+                    typeof mat?.roughness === "number"
+                ) {
+                    roughness = mat.roughness;
+                }
+                if (
+                    node === child &&
+                    !String(node.name || "").startsWith("arch-opening-") &&
+                    typeof mat?.metalness === "number"
+                ) {
+                    metalness = mat.metalness;
+                }
                 try {
                     mat?.dispose?.();
                 } catch {
                     /* ignore */
                 }
             }
-            child.geometry?.dispose();
-        }
+            if (!node.userData?.archSharedGeometry) {
+                node.geometry?.dispose();
+            }
+        });
         group.remove(child);
     }
     populateArchitecture(group, {
@@ -1317,6 +1558,7 @@ export function createDefaultOpening(room, type, wall = "south", options = {}) {
         height: openingHeight,
         sill,
         floor,
+        fill: "simple",
     };
 
     if (Number.isFinite(Number(options.offset))) {
@@ -2336,6 +2578,7 @@ function defaultDoorOpening(length, height) {
             height: Math.min(2.1, height - 0.15),
             sill: 0,
             floor: 0,
+            fill: "simple",
         },
     ];
 }
@@ -2508,6 +2751,385 @@ function buildWallPanels(group, wallName, span, height, wallT, openings, place, 
             );
         }
     }
+
+    buildOpeningFills(group, wallName, openings, place, wallT, seg);
+}
+
+const OPENING_FRAME_W = 0.075;
+const OPENING_FRAME_EXTRA = 0.03;
+const OPENING_LEAF_T = 0.042;
+const OPENING_MULLION = 0.034;
+const OPENING_FRAME_COLOR = "#efe8dc";
+const OPENING_DOOR_COLOR = "#6e4a2e";
+const OPENING_HANDLE_COLOR = "#c4a35a";
+const OPENING_GLASS_COLOR = "#9ec9e6";
+
+/**
+ * Murs N/S (et ailes nord) : longueur en X. Murs E/O : longueur en Z.
+ * @param {string} wallName
+ */
+function wallRunsAlongX(wallName) {
+    const n = String(wallName || "");
+    if (n === "north-east" || n === "north-west") return true;
+    if (n.includes("east") || n.includes("west")) return false;
+    return true;
+}
+
+/**
+ * Yaw pour un modèle dont la face avant est +Z (vers l’extérieur de la pièce).
+ * @param {string} wallName
+ */
+function wallOutwardYaw(wallName) {
+    const n = String(wallName || "");
+    if (!wallRunsAlongX(n)) {
+        if (n.includes("west") && !n.includes("east")) return -Math.PI / 2;
+        return Math.PI / 2;
+    }
+    if (n === "south" || n === "court-south" || n === "north-notch") return Math.PI;
+    return 0;
+}
+
+/**
+ * @param {string} wallName
+ * @param {{ x: number, y: number, z: number, sx: number, sy: number, sz: number }} hole
+ * @param {number} along
+ * @param {number} y
+ * @param {number} normal
+ */
+function openingLocalOffset(wallName, along, y, normal) {
+    if (wallRunsAlongX(wallName)) {
+        return { x: along, y, z: normal };
+    }
+    return { x: normal, y, z: along };
+}
+
+/**
+ * @param {THREE.Group} group
+ * @param {string} wallName
+ * @param {ArchOpening} op
+ * @param {{ x: number, y: number, z: number }} hole
+ * @param {number} yaw
+ * @param {number} seg
+ */
+function createOpeningFillPivot(group, wallName, op, hole, yaw, seg) {
+    const anchor = new THREE.Group();
+    anchor.name = `arch-opening-anchor-${wallName}-${seg}-${op.id}`;
+    anchor.position.set(hole.x, hole.y, hole.z);
+    anchor.rotation.y = yaw;
+    anchor.userData.archOpeningAnchor = true;
+
+    const pivot = new THREE.Group();
+    pivot.name = `arch-opening-fill-${op.id}`;
+    pivot.userData[LAB_ARCH_OPENING_FILL_KEY] = true;
+    pivot.userData.archOpeningId = op.id;
+    pivot.userData.archOpeningKind = op.type;
+    pivot.userData.archOpeningFill = true;
+    pivot.userData.snapToFloor = false;
+    applyArchOpeningFillTx(pivot, op.fillTx);
+    if (op.fillColor) pivot.userData.objectColor = op.fillColor;
+    anchor.add(pivot);
+    group.add(anchor);
+    return pivot;
+}
+
+/**
+ * @param {string} wallName
+ * @param {number} alongSize
+ * @param {number} height
+ * @param {number} thick
+ */
+function openingBoxSize(wallName, alongSize, height, thick) {
+    if (wallRunsAlongX(wallName)) return { sx: alongSize, sy: height, sz: thick };
+    return { sx: thick, sy: height, sz: alongSize };
+}
+
+/**
+ * @param {THREE.Group} parent
+ * @param {string} name
+ * @param {number} sx
+ * @param {number} sy
+ * @param {number} sz
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @param {THREE.Material} material
+ * @param {{ noCollision?: boolean, story?: number }} [opts]
+ */
+function addOpeningMesh(parent, name, sx, sy, sz, x, y, z, material, opts = {}) {
+    if (sx < 0.012 || sy < 0.012 || sz < 0.012) return null;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+    mesh.name = name;
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    if (opts.noCollision) mesh.userData.archNoCollision = true;
+    mesh.userData.archOpeningFill = true;
+    if (opts.story != null && Number.isFinite(Number(opts.story))) {
+        mesh.userData[ARCH_STORY_KEY] = Number(opts.story) | 0;
+    }
+    parent.add(mesh);
+    return mesh;
+}
+
+/**
+ * @param {THREE.Group} group
+ * @param {string} wallName
+ * @param {ArchOpening[]} openings
+ * @param {(u: number, y: number, h: number, d: number) => { x: number, y: number, z: number, sx: number, sy: number, sz: number }} place
+ * @param {number} wallT
+ * @param {number} seg
+ */
+function buildOpeningFills(group, wallName, openings, place, wallT, seg) {
+    for (const op of openings) {
+        if (op.type !== "door" && op.type !== "window") continue;
+        const fill = op.fill || "simple";
+        if (fill === "none") continue;
+        const hole = place(op.offset, op.sill, op.height, op.width);
+        if (fill === "imported" && op.importDataUrl) {
+            const template = getArchOpeningImportTemplate(op.importDataUrl, op.importFormat || "glb");
+            if (template) {
+                addImportedOpeningFill(group, wallName, op, hole, template, seg);
+                continue;
+            }
+        }
+        addSimpleOpeningFill(group, wallName, op, hole, wallT, seg);
+    }
+}
+
+/**
+ * @param {THREE.Group} group
+ * @param {string} wallName
+ * @param {ArchOpening} op
+ * @param {{ x: number, y: number, z: number, sx: number, sy: number, sz: number }} hole
+ * @param {number} wallT
+ * @param {number} seg
+ */
+function addSimpleOpeningFill(group, wallName, op, hole, wallT, seg) {
+    const alongX = wallRunsAlongX(wallName);
+    const openingW = alongX ? hole.sx : hole.sz;
+    const openingH = hole.sy;
+    const wallThick = Math.max(0.06, alongX ? hole.sz : hole.sx);
+    const frameDepth = Math.max(wallThick, wallT) + OPENING_FRAME_EXTRA * 2;
+    const frameW = Math.min(OPENING_FRAME_W, openingW * 0.22);
+    const isDoor = op.type === "door";
+    const innerW = Math.max(0.25, openingW - 2 * frameW);
+    const innerH = Math.max(0.25, openingH - frameW - (isDoor ? 0 : frameW));
+    const leafY = isDoor ? -frameW / 2 : 0;
+    const prefix = `arch-opening-${wallName}-${seg}-${op.id}`;
+    const story = Number.isFinite(Number(op.floor)) ? Number(op.floor) | 0 : 0;
+    const pivot = createOpeningFillPivot(group, wallName, op, hole, 0, seg);
+
+    const frameMat = new THREE.MeshStandardMaterial({
+        color: op.fillColor || OPENING_FRAME_COLOR,
+        roughness: 0.55,
+        metalness: 0.04,
+    });
+    const left = openingLocalOffset(wallName, -openingW / 2 + frameW / 2, 0, 0);
+    const leftSize = openingBoxSize(wallName, frameW, openingH, frameDepth);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-frame-${prefix}-jamb-l`,
+        leftSize.sx,
+        leftSize.sy,
+        leftSize.sz,
+        left.x,
+        left.y,
+        left.z,
+        frameMat,
+        { story }
+    );
+    const right = openingLocalOffset(wallName, openingW / 2 - frameW / 2, 0, 0);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-frame-${prefix}-jamb-r`,
+        leftSize.sx,
+        leftSize.sy,
+        leftSize.sz,
+        right.x,
+        right.y,
+        right.z,
+        frameMat,
+        { story }
+    );
+    const header = openingLocalOffset(wallName, 0, openingH / 2 - frameW / 2, 0);
+    const headerSize = openingBoxSize(wallName, openingW, frameW, frameDepth);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-frame-${prefix}-lintel`,
+        headerSize.sx,
+        headerSize.sy,
+        headerSize.sz,
+        header.x,
+        header.y,
+        header.z,
+        frameMat,
+        { story }
+    );
+    if (!isDoor) {
+        const sill = openingLocalOffset(wallName, 0, -openingH / 2 + frameW / 2, 0);
+        addOpeningMesh(
+            pivot,
+            `arch-opening-frame-${prefix}-sill`,
+            headerSize.sx,
+            headerSize.sy,
+            headerSize.sz,
+            sill.x,
+            sill.y,
+            sill.z,
+            frameMat,
+            { story }
+        );
+    }
+
+    if (isDoor) {
+        const leafMat = new THREE.MeshStandardMaterial({
+            color: op.fillColor || OPENING_DOOR_COLOR,
+            roughness: 0.72,
+            metalness: 0.05,
+        });
+        const leaf = openingLocalOffset(wallName, 0, leafY, 0);
+        const leafSize = openingBoxSize(wallName, innerW, innerH, OPENING_LEAF_T);
+        addOpeningMesh(
+            pivot,
+            `arch-opening-leaf-${prefix}`,
+            leafSize.sx,
+            leafSize.sy,
+            leafSize.sz,
+            leaf.x,
+            leaf.y,
+            leaf.z,
+            leafMat,
+            { noCollision: true, story }
+        );
+        const handleMat = new THREE.MeshStandardMaterial({
+            color: OPENING_HANDLE_COLOR,
+            roughness: 0.28,
+            metalness: 0.85,
+        });
+        const handleAlong = innerW / 2 - 0.1;
+        const handle = openingLocalOffset(wallName, handleAlong, leafY, OPENING_LEAF_T / 2 + 0.012);
+        const handleSize = openingBoxSize(wallName, 0.028, 0.11, 0.028);
+        addOpeningMesh(
+            pivot,
+            `arch-opening-leaf-${prefix}-handle`,
+            handleSize.sx,
+            handleSize.sy,
+            handleSize.sz,
+            handle.x,
+            handle.y,
+            handle.z,
+            handleMat,
+            { noCollision: true, story }
+        );
+        return;
+    }
+
+    const glassMat = new THREE.MeshStandardMaterial({
+        color: OPENING_GLASS_COLOR,
+        roughness: 0.06,
+        metalness: 0.12,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+    });
+    const glass = openingLocalOffset(wallName, 0, 0, 0);
+    const glassSize = openingBoxSize(wallName, innerW, innerH, 0.016);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-glass-${prefix}`,
+        glassSize.sx,
+        glassSize.sy,
+        glassSize.sz,
+        glass.x,
+        glass.y,
+        glass.z,
+        glassMat,
+        { noCollision: true, story }
+    );
+    const mullionMat = new THREE.MeshStandardMaterial({
+        color: op.fillColor || OPENING_FRAME_COLOR,
+        roughness: 0.5,
+        metalness: 0.04,
+    });
+    const vBar = openingLocalOffset(wallName, 0, 0, 0);
+    const vSize = openingBoxSize(wallName, OPENING_MULLION, innerH, 0.028);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-frame-${prefix}-mullion-v`,
+        vSize.sx,
+        vSize.sy,
+        vSize.sz,
+        vBar.x,
+        vBar.y,
+        vBar.z,
+        mullionMat,
+        { noCollision: true, story }
+    );
+    const hBar = openingLocalOffset(wallName, 0, 0, 0);
+    const hSize = openingBoxSize(wallName, innerW, OPENING_MULLION, 0.028);
+    addOpeningMesh(
+        pivot,
+        `arch-opening-frame-${prefix}-mullion-h`,
+        hSize.sx,
+        hSize.sy,
+        hSize.sz,
+        hBar.x,
+        hBar.y,
+        hBar.z,
+        mullionMat,
+        { noCollision: true, story }
+    );
+}
+
+/**
+ * @param {THREE.Group} group
+ * @param {string} wallName
+ * @param {ArchOpening} op
+ * @param {{ x: number, y: number, z: number, sx: number, sy: number, sz: number }} hole
+ * @param {THREE.Object3D} template
+ * @param {number} seg
+ */
+function addImportedOpeningFill(group, wallName, op, hole, template, seg) {
+    const alongX = wallRunsAlongX(wallName);
+    const openingW = Math.max(0.2, alongX ? hole.sx : hole.sz);
+    const openingH = Math.max(0.2, hole.sy);
+    const wallThick = Math.max(0.08, alongX ? hole.sz : hole.sx);
+    const pivot = createOpeningFillPivot(group, wallName, op, hole, wallOutwardYaw(wallName), seg);
+
+    const clone = template.clone(true);
+    clone.traverse((node) => {
+        if (!(node instanceof THREE.Mesh)) return;
+        node.userData.archSharedGeometry = true;
+        node.userData.archNoCollision = true;
+        node.userData.archOpeningFill = true;
+        if (Array.isArray(node.material)) {
+            node.material = node.material.map((m) => (m?.clone ? m.clone() : m));
+        } else if (node.material?.clone) {
+            node.material = node.material.clone();
+        }
+        node.castShadow = true;
+        node.receiveShadow = true;
+    });
+
+    const measure = new THREE.Group();
+    measure.add(clone);
+    measure.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(measure);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    clone.position.sub(center);
+
+    const sx = size.x > 1e-4 ? openingW / size.x : 1;
+    const sy = size.y > 1e-4 ? openingH / size.y : 1;
+    const sz = size.z > 1e-4 ? Math.max(wallThick, 0.12) / size.z : 1;
+    const uniform = Math.min(sx, sy);
+    const fit = new THREE.Group();
+    measure.remove(clone);
+    fit.add(clone);
+    fit.scale.set(uniform, uniform, uniform * Math.min(size.z > 1e-4 ? sz / uniform : 1, 1.35));
+    pivot.add(fit);
 }
 
 /**

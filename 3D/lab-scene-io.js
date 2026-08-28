@@ -35,6 +35,11 @@ function serializeObjectAppearance(snapshot, opts = {}) {
         glass: !!snapshot.glass,
         smooth: snapshot.smooth !== false,
         glassRestore: snapshot.glassRestore || undefined,
+        physicsEnabled: !!snapshot.physicsEnabled,
+        physicsMass:
+            typeof snapshot.physicsMass === "number" ? snapshot.physicsMass : undefined,
+        physicsBounce:
+            typeof snapshot.physicsBounce === "number" ? snapshot.physicsBounce : undefined,
     };
     if (includeTextures) {
         out.textureDataUrl = snapshot.textureDataUrl || null;
@@ -79,6 +84,9 @@ function deserializeObjectAppearance(raw, opts = {}) {
         glass: !!raw.glass,
         smooth: raw.smooth !== false,
         glassRestore: deserializeGlassRestore(raw),
+        physicsEnabled: !!raw.physicsEnabled,
+        physicsMass: typeof raw.physicsMass === "number" ? raw.physicsMass : undefined,
+        physicsBounce: typeof raw.physicsBounce === "number" ? raw.physicsBounce : undefined,
     };
     if (includeTextures) {
         out.textureDataUrl = raw.textureDataUrl ?? legacy.texture ?? null;
@@ -304,6 +312,11 @@ function serializeObjectSnapshotBody(snapshot) {
             shadowEnabled: !!snapshot.shadowEnabled,
             shadowOpacity:
                 typeof snapshot.shadowOpacity === "number" ? snapshot.shadowOpacity : undefined,
+            physicsEnabled: !!snapshot.physicsEnabled,
+            physicsMass:
+                typeof snapshot.physicsMass === "number" ? snapshot.physicsMass : undefined,
+            physicsBounce:
+                typeof snapshot.physicsBounce === "number" ? snapshot.physicsBounce : undefined,
         };
     }
 
@@ -635,6 +648,9 @@ function deserializeObjectSnapshotBody(raw) {
             collisionEnabled: !!(raw.collisionEnabled ?? legacy.collision ?? false),
             shadowEnabled: !!raw.shadowEnabled,
             shadowOpacity: typeof raw.shadowOpacity === "number" ? raw.shadowOpacity : undefined,
+            physicsEnabled: !!raw.physicsEnabled,
+            physicsMass: typeof raw.physicsMass === "number" ? raw.physicsMass : undefined,
+            physicsBounce: typeof raw.physicsBounce === "number" ? raw.physicsBounce : undefined,
         };
     }
 

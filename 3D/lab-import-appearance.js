@@ -26,6 +26,14 @@ import {
 const FACE_PBR_STORE_KEY = "_labFacePbrStore";
 
 /**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
+function isValidTextureDataUrl(value) {
+    return typeof value === "string" && value.startsWith("data:") && value.length > 48;
+}
+
+/**
  * Opacité logique du curseur verre ← transmission Physical.
  * @param {number} transmission
  */
@@ -148,18 +156,35 @@ export function serializeImportedAppearance(object) {
                 mat.userData?.[FACE_ALBEDO_MAP_KEY] ||
                 (mat.userData?._labUniqueSlot && mat.userData?._labFaceAlbedoMap) ||
                 null;
+            // Priorité au store PBR (souvent déjà en dataURL) — sans ça, importAppearance
+            // part sans albedo alors que facePbr l’a, et le coussin devient noir au reload.
             const colorMap =
+                (typeof storeEntry.colorDataUrl === "string" ? storeEntry.colorDataUrl : null) ||
+                textureToDataUrl(storeEntry.color) ||
                 textureToDataUrl(labColor) ||
-                (mat.userData?._labUniqueSlot && mat.userData?.[FACE_ALBEDO_MAP_KEY]
+                (mat.userData?._labUniqueSlot || labColor
                     ? textureToDataUrl(mat.map)
                     : null) ||
                 (typeof mat.userData?.colorDataUrl === "string" ? mat.userData.colorDataUrl : null);
 
             const normalMap =
+                (typeof storeEntry.normalDataUrl === "string" ? storeEntry.normalDataUrl : null) ||
+                textureToDataUrl(storeEntry.normal) ||
                 textureToDataUrl(mat.userData?.[FACE_NORMAL_MAP_KEY]) ||
-                (mat.userData?._labUniqueSlot ? textureToDataUrl(mat.normalMap) : null);
-            const specularMap = textureToDataUrl(mat.userData?.[FACE_SPECULAR_MAP_KEY]);
-            const roughnessMap = textureToDataUrl(mat.userData?.[FACE_ROUGHNESS_MAP_KEY]);
+                (mat.userData?._labUniqueSlot || storeEntry.normal || storeEntry.normalDataUrl
+                    ? textureToDataUrl(mat.normalMap)
+                    : null);
+            const specularMap =
+                (typeof storeEntry.specularDataUrl === "string" ? storeEntry.specularDataUrl : null) ||
+                textureToDataUrl(storeEntry.specular) ||
+                textureToDataUrl(mat.userData?.[FACE_SPECULAR_MAP_KEY]);
+            const roughnessMap =
+                (typeof storeEntry.roughnessDataUrl === "string" ? storeEntry.roughnessDataUrl : null) ||
+                textureToDataUrl(
+                    storeEntry.roughnessMap ||
+                        (storeEntry.roughness?.isTexture ? storeEntry.roughness : null)
+                ) ||
+                textureToDataUrl(mat.userData?.[FACE_ROUGHNESS_MAP_KEY]);
 
             const tintHex = mat.color?.getHexString?.() || null;
 
@@ -300,31 +325,42 @@ export async function applyImportedAppearance(object, data) {
             const index = typeof slot.index === "number" ? slot.index : 0;
             const wantGlass = slot.glass === true;
 
-            if (slot.tintHex && !wantGlass) {
+            const hasMaps = !!(
+                isValidTextureDataUrl(slot.colorMap) ||
+                isValidTextureDataUrl(slot.normalMap) ||
+                isValidTextureDataUrl(slot.specularMap) ||
+                isValidTextureDataUrl(slot.roughnessMap)
+            );
+            if (hasMaps) {
+                try {
+                    await applyMeshSlotTextureMaps(
+                        object,
+                        mesh,
+                        index,
+                        {
+                            color: isValidTextureDataUrl(slot.colorMap) ? slot.colorMap : null,
+                            normal: isValidTextureDataUrl(slot.normalMap) ? slot.normalMap : null,
+                            specular: isValidTextureDataUrl(slot.specularMap) ? slot.specularMap : null,
+                            roughness: isValidTextureDataUrl(slot.roughnessMap)
+                                ? slot.roughnessMap
+                                : null,
+                        },
+                        typeof slot.tileX === "number" ? slot.tileX : 1,
+                        typeof slot.tileY === "number" ? slot.tileY : 1,
+                        typeof slot.offsetX === "number" ? slot.offsetX : 0,
+                        typeof slot.offsetY === "number" ? slot.offsetY : 0
+                    );
+                } catch (err) {
+                    console.warn("[lab-import] maps slot :", err);
+                }
+            }
+
+            if (slot.tintHex && !wantGlass && !hasMaps) {
                 applyMeshSlotColor(
                     object,
                     mesh,
                     index,
                     `#${String(slot.tintHex).replace(/^#/, "")}`
-                );
-            }
-
-            const hasMaps = !!(slot.colorMap || slot.normalMap || slot.specularMap || slot.roughnessMap);
-            if (hasMaps) {
-                await applyMeshSlotTextureMaps(
-                    object,
-                    mesh,
-                    index,
-                    {
-                        color: slot.colorMap || null,
-                        normal: slot.normalMap || null,
-                        specular: slot.specularMap || null,
-                        roughness: slot.roughnessMap || null,
-                    },
-                    typeof slot.tileX === "number" ? slot.tileX : 1,
-                    typeof slot.tileY === "number" ? slot.tileY : 1,
-                    typeof slot.offsetX === "number" ? slot.offsetX : 0,
-                    typeof slot.offsetY === "number" ? slot.offsetY : 0
                 );
             }
 
@@ -405,6 +441,183 @@ export async function applyImportedAppearance(object, data) {
 }
 
 /**
+ * @param {THREE.Object3D} object
+ * @param {string} key
+ * @param {object} entry
+ * @returns {{ mesh: THREE.Mesh | null, slotIndex: number }}
+ */
+function resolveImportMeshSlot(object, key, entry) {
+    let persistId = typeof entry.meshId === "number" ? entry.meshId : null;
+    let slotIndex = typeof entry.slot === "number" ? entry.slot : 0;
+    if (String(key).startsWith("m") && String(key).includes("::")) {
+        const parts = String(key).split("::");
+        persistId = Number(parts[0].slice(1));
+        slotIndex = Number(parts[1]);
+    }
+    const meshes = listImportMeshes(object);
+    /** @type {THREE.Mesh | null} */
+    let mesh =
+        typeof persistId === "number"
+            ? meshes.find((m) => m.userData?.[LAB_MESH_PERSIST_ID_KEY] === persistId) || null
+            : null;
+    if (!mesh && typeof persistId === "number" && persistId >= 0 && persistId < meshes.length) {
+        mesh = meshes[persistId];
+    }
+    return { mesh, slotIndex };
+}
+
+/**
+ * @param {THREE.Mesh} mesh
+ * @param {number} slotIndex
+ */
+function slotHasWorkingAlbedo(mesh, slotIndex) {
+    const list = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+    const mat = list[slotIndex];
+    if (!mat) return false;
+    const tex = mat.map || mat.userData?.[FACE_ALBEDO_MAP_KEY];
+    return !!(tex?.image && (tex.image.width > 0 || tex.image.videoWidth > 0));
+}
+
+/**
+ * @param {THREE.Mesh} mesh
+ * @param {number} slotIndex
+ * @param {"normal"|"specular"|"roughness"} kind
+ */
+function slotHasWorkingMap(mesh, slotIndex, kind) {
+    const list = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+    const mat = list[slotIndex];
+    if (!mat) return false;
+    let tex = null;
+    if (kind === "normal") tex = mat.normalMap || mat.userData?.[FACE_NORMAL_MAP_KEY];
+    else if (kind === "specular") tex = mat.metalnessMap || mat.userData?.[FACE_SPECULAR_MAP_KEY];
+    else tex = mat.roughnessMap || mat.userData?.[FACE_ROUGHNESS_MAP_KEY];
+    return !!(tex?.image && (tex.image.width > 0 || tex.image.videoWidth > 0));
+}
+
+/**
+ * Réapplique les textures facePbr si le matériau live n’a pas d’albedo valide
+ * (coussin noir après importAppearance tronqué ou data URL invalide).
+ * @param {THREE.Object3D} object
+ * @param {Record<string, object>} facePbr
+ */
+async function reconcileImportTexturesFromFacePbr(object, facePbr) {
+    if (!object || !facePbr || typeof facePbr !== "object") return;
+
+    /** @type {Record<string, object>} */
+    const patch = {};
+    for (const [key, entry] of Object.entries(facePbr)) {
+        if (!entry || typeof entry !== "object") continue;
+        const { mesh, slotIndex } = resolveImportMeshSlot(object, key, entry);
+        if (!mesh || !Number.isInteger(slotIndex) || slotIndex < 0) continue;
+
+        const needsColor = isValidTextureDataUrl(entry.color) && !slotHasWorkingAlbedo(mesh, slotIndex);
+        const needsNormal =
+            isValidTextureDataUrl(entry.normal) && !slotHasWorkingMap(mesh, slotIndex, "normal");
+        const needsSpecular =
+            isValidTextureDataUrl(entry.specular) && !slotHasWorkingMap(mesh, slotIndex, "specular");
+        const needsRoughness =
+            isValidTextureDataUrl(entry.roughnessMap) &&
+            !slotHasWorkingMap(mesh, slotIndex, "roughness");
+        if (!needsColor && !needsNormal && !needsSpecular && !needsRoughness) continue;
+
+        patch[key] = {
+            ...(needsColor ? { color: entry.color } : {}),
+            ...(needsNormal ? { normal: entry.normal } : {}),
+            ...(needsSpecular ? { specular: entry.specular } : {}),
+            ...(needsRoughness ? { roughnessMap: entry.roughnessMap } : {}),
+            tileX: typeof entry.tileX === "number" ? entry.tileX : 1,
+            tileY: typeof entry.tileY === "number" ? entry.tileY : 1,
+            offsetX: typeof entry.offsetX === "number" ? entry.offsetX : 0,
+            offsetY: typeof entry.offsetY === "number" ? entry.offsetY : 0,
+            meshId: typeof entry.meshId === "number" ? entry.meshId : undefined,
+            slot: typeof entry.slot === "number" ? entry.slot : slotIndex,
+        };
+    }
+    if (!Object.keys(patch).length) return;
+    await applyFacePbrStoreData(object, patch);
+}
+
+/**
+ * facePbr a souvent les textures manquantes dans importAppearance (save incomplet).
+ * On ne reprend que les maps absentes, sans écraser teintes / PBR déjà appliqués.
+ * @param {object} importAppearance
+ * @param {Record<string, object>} facePbr
+ * @returns {Record<string, object> | null}
+ */
+function buildMissingMapsPatchFromFacePbr(importAppearance, facePbr) {
+    if (!facePbr || typeof facePbr !== "object") return null;
+
+    /** @type {Map<string, object>} */
+    const iaByKey = new Map();
+    const meshes = Array.isArray(importAppearance?.meshes) ? importAppearance.meshes : [];
+    for (const mesh of meshes) {
+        if (!mesh || typeof mesh.meshId !== "number" || !Array.isArray(mesh.slots)) continue;
+        for (const slot of mesh.slots) {
+            if (!slot || typeof slot !== "object") continue;
+            const index = typeof slot.index === "number" ? slot.index : 0;
+            iaByKey.set(`m${mesh.meshId}::${index}`, slot);
+        }
+    }
+
+    /** @type {Record<string, object>} */
+    const patch = {};
+    for (const [key, entry] of Object.entries(facePbr)) {
+        if (!entry || typeof entry !== "object") continue;
+        const entryHasMaps = !!(
+            isValidTextureDataUrl(entry.color) ||
+            isValidTextureDataUrl(entry.normal) ||
+            isValidTextureDataUrl(entry.specular) ||
+            isValidTextureDataUrl(entry.roughnessMap)
+        );
+        if (!entryHasMaps) continue;
+
+        const iaSlot = iaByKey.get(key);
+        const iaHasMaps = !!(
+            iaSlot &&
+            (isValidTextureDataUrl(iaSlot.colorMap) ||
+                isValidTextureDataUrl(iaSlot.normalMap) ||
+                isValidTextureDataUrl(iaSlot.specularMap) ||
+                isValidTextureDataUrl(iaSlot.roughnessMap))
+        );
+        if (iaHasMaps) continue;
+
+        patch[key] = {
+            color: entry.color || null,
+            normal: entry.normal || null,
+            specular: entry.specular || null,
+            roughnessMap: entry.roughnessMap || null,
+            tileX:
+                typeof iaSlot?.tileX === "number"
+                    ? iaSlot.tileX
+                    : typeof entry.tileX === "number"
+                      ? entry.tileX
+                      : 1,
+            tileY:
+                typeof iaSlot?.tileY === "number"
+                    ? iaSlot.tileY
+                    : typeof entry.tileY === "number"
+                      ? entry.tileY
+                      : 1,
+            offsetX:
+                typeof iaSlot?.offsetX === "number"
+                    ? iaSlot.offsetX
+                    : typeof entry.offsetX === "number"
+                      ? entry.offsetX
+                      : 0,
+            offsetY:
+                typeof iaSlot?.offsetY === "number"
+                    ? iaSlot.offsetY
+                    : typeof entry.offsetY === "number"
+                      ? entry.offsetY
+                      : 0,
+            meshId: typeof entry.meshId === "number" ? entry.meshId : undefined,
+            slot: typeof entry.slot === "number" ? entry.slot : undefined,
+        };
+    }
+    return Object.keys(patch).length ? patch : null;
+}
+
+/**
  * Réapplique épaississement + couleurs / verre / métal après chargement du GLB brut.
  * @param {THREE.Object3D} object
  * @param {object} snapshot
@@ -419,6 +632,25 @@ export async function restoreImportedAppearance(object, snapshot, hooks = {}) {
             await applyImportedAppearance(object, snapshot.importAppearance);
         } catch (err) {
             console.warn("[lab-import] restauration apparence :", err);
+        }
+        // Compléter les textures absentes via facePbr (ex. coussin noir après reload).
+        if (snapshot.facePbr && typeof snapshot.facePbr === "object") {
+            const mapPatch = buildMissingMapsPatchFromFacePbr(
+                snapshot.importAppearance,
+                snapshot.facePbr
+            );
+            if (mapPatch) {
+                try {
+                    await applyFacePbrStoreData(object, mapPatch);
+                } catch (err) {
+                    console.warn("[lab-import] complément maps facePbr :", err);
+                }
+            }
+            try {
+                await reconcileImportTexturesFromFacePbr(object, snapshot.facePbr);
+            } catch (err) {
+                console.warn("[lab-import] réconciliation textures facePbr :", err);
+            }
         }
     } else {
         if (Array.isArray(snapshot.meshSolidify) && snapshot.meshSolidify.length) {

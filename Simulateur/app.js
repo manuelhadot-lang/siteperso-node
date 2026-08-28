@@ -1,6 +1,6 @@
 // app.js (Nouveau fichier principal)
 import { canvas, GRID_SIZE, scale, pan, flags, counters, circuit, interaction, zone, menuDrag, clipboard, undoStack, redoStack, emptyDragImage, snapToGrid, toGridCoords, saveState } from './state.js';
-import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest, potentiometerControlHit, switchSpdtToggleHit, pushButtonToggleHit, syncWireEndpointsToJonctions } from './geometry.js';
+import { isPointOnSegment, findWireIntersection, getComponentJonctions, componentHitTest, potentiometerControlHit, ldrControlHit, switchSpdtToggleHit, pushButtonToggleHit, syncWireEndpointsToJonctions } from './geometry.js';
 import { resizeCanvas, draw } from './renderer.js';
 import { triggerSimulation, stopSimulation, requestLiveSimulation } from './simulation.js';
 import { openSourcePanel, closeSourcePanel, onSourceRemoved, initSourcePanel } from './source-panel.js';
@@ -33,11 +33,18 @@ import {
 import { DEFAULT_ARDUINO_SKETCH } from './arduino-uno-layout.js';
 import { DEFAULT_ESP32_SKETCH, ESP32_FQBN } from './esp32-c3-layout.js';
 import { DEFAULT_ESP32_DEVKIT_SKETCH, ESP32_DEVKIT_FQBN } from './esp32-devkit-layout.js';
+import {
+    DEFAULT_ESP32_UPESY_LP_SKETCH,
+    ESP32_UPESY_LP_FQBN,
+    UPESY_DEFAULT_VBAT,
+    clampUpesyVbat,
+} from './esp32-upesy-lp-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { showModal, hideModal, initModalUi } from './modal-ui.js';
 import { parseJsonText, normalizeCircuitPayload, migrateLoadedComponents } from './json-utils.js';
 import { DC10H_COLOR_IDS, DC10H_COLORS } from './bargraph-dc10h-layout.js';
 import { MATRIX_COLOR_IDS, MATRIX_COLORS } from './matrix-8x8-layout.js';
+import { LDR_DEFAULT_LUX, clampLdrLux, stepLdrLux } from './Engine/ldr.mjs';
 
 /** « Simulateur H » (application Windows) ou site web. */
 const APP_PRODUCT_NAME =
@@ -49,14 +56,32 @@ const COMPONENT_PREFIX = {
     battery: 'VDC', resistor: 'R', potentiometer: 'POT', switch_spdt: 'SW', push_button: 'BP', capacitor: 'C', inductor: 'L', diode: 'D',
     npn: 'Q', nmos: 'M', opamp: 'AOP', lm386: 'LM386', lm7805: '7805', ir2104: 'IR2104', l293d: 'L293D',
     not: 'NOT', and: 'AND', nand: 'NAND', or: 'OR', nor: 'NOR', xor: 'XOR', xnor: 'XNOR',
-    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', esp32_devkit: 'ESP32', led: 'LED', seg7: 'SEG', bargraph_dc10h: 'BAR', matrix_8x8: 'MX8', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', grove_bmp280: 'BMP', joyit_tft18: 'TFT',
+    d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', esp32_devkit: 'ESP32', esp32_upesy_lp: 'UPLP', led: 'LED', ldr: 'LDR', seg7: 'SEG', bargraph_dc10h: 'BAR', matrix_8x8: 'MX8', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', grove_bmp280: 'BMP', joyit_tft18: 'TFT',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', dc_motor: 'M', servo_motor: 'SV', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'nmos', 'opamp', 'lm386', 'ir2104', 'l293d', 'seg7', 'bargraph_dc10h', 'matrix_8x8', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'esp32_upesy_lp', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'nmos', 'opamp', 'lm386', 'ir2104', 'l293d', 'seg7', 'bargraph_dc10h', 'matrix_8x8', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
     return counters[type];
+}
+
+function defaultSketchForType(type) {
+    if (type === 'esp32_upesy_lp') return DEFAULT_ESP32_UPESY_LP_SKETCH;
+    if (type === 'esp32_devkit') return DEFAULT_ESP32_DEVKIT_SKETCH;
+    if (type === 'esp32_c3') return DEFAULT_ESP32_SKETCH;
+    return DEFAULT_ARDUINO_SKETCH;
+}
+
+function defaultFqbnForType(type) {
+    if (type === 'esp32_upesy_lp') return ESP32_UPESY_LP_FQBN;
+    if (type === 'esp32_devkit') return ESP32_DEVKIT_FQBN;
+    if (type === 'esp32_c3') return ESP32_FQBN;
+    return 'arduino:avr:uno';
+}
+
+function isEsp32ComponentType(type) {
+    return type === 'esp32_c3' || type === 'esp32_devkit' || type === 'esp32_upesy_lp';
 }
 function newComponentLabel(type) {
     const pfx = COMPONENT_PREFIX[type] || 'U';
@@ -70,6 +95,20 @@ function ensureAllCounters() {
 }
 let fileHandle = null;
 let circuitDisplayName = 'Sans titre';
+
+let lastArrowAdjustAt = 0;
+const ARROW_DBLCLICK_GUARD_MS = 500;
+
+function markArrowAdjust() {
+    lastArrowAdjustAt = performance.now();
+}
+
+function shouldIgnoreArrowDblClick(comp, mx, my) {
+    if (performance.now() - lastArrowAdjustAt < ARROW_DBLCLICK_GUARD_MS) return true;
+    if (comp?.type === 'potentiometer' && potentiometerControlHit(comp, mx, my)) return true;
+    if (comp?.type === 'ldr' && ldrControlHit(comp, mx, my)) return true;
+    return false;
+}
 
 function formatCircuitDisplayName(raw) {
     const s = String(raw || '').trim();
@@ -180,12 +219,15 @@ function repairComponentsAfterLoad(components) {
     for (const comp of components) {
         if (isMicroBoard(comp)) {
             if (typeof comp.sketch !== 'string') {
-                comp.sketch = comp.type === 'esp32_devkit' ? DEFAULT_ESP32_DEVKIT_SKETCH : comp.type === 'esp32_c3' ? DEFAULT_ESP32_SKETCH : DEFAULT_ARDUINO_SKETCH;
+                comp.sketch = defaultSketchForType(comp.type);
             }
             if (!comp.fqbn) {
-                comp.fqbn = comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : comp.type === 'esp32_c3' ? ESP32_FQBN : 'arduino:avr:uno';
-            } else if ((comp.type === 'esp32_c3' || comp.type === 'esp32_devkit') && String(comp.fqbn).startsWith('espressif:esp32:')) {
-                comp.fqbn = comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : ESP32_FQBN;
+                comp.fqbn = defaultFqbnForType(comp.type);
+            } else if ((comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'esp32_upesy_lp') && String(comp.fqbn).startsWith('espressif:esp32:')) {
+                comp.fqbn = defaultFqbnForType(comp.type);
+            }
+            if (comp.type === 'esp32_upesy_lp') {
+                comp.vbat = clampUpesyVbat(comp.vbat ?? UPESY_DEFAULT_VBAT);
             }
             comp.pinModes = comp.pinModes || {};
             comp.pinLevels = comp.pinLevels || {};
@@ -359,6 +401,18 @@ canvas.addEventListener('mousedown', (e) => {
                 const step = 5;
                 const pos = hitComp.position ?? 50;
                 hitComp.position = ctrl === 'inc' ? Math.min(100, pos + step) : Math.max(0, pos - step);
+                markArrowAdjust();
+                draw();
+                if (flags.isSimulating) requestLiveSimulation();
+                return;
+            }
+        }
+        if (hitComp?.type === 'ldr') {
+            const ctrl = ldrControlHit(hitComp, mousePos.x, mousePos.y);
+            if (ctrl) {
+                if (!flags.isSimulating) saveState();
+                hitComp.lux = stepLdrLux(hitComp.lux ?? LDR_DEFAULT_LUX, ctrl === 'inc' ? 1 : -1);
+                markArrowAdjust();
                 draw();
                 if (flags.isSimulating) requestLiveSimulation();
                 return;
@@ -664,16 +718,21 @@ function openEsp32DocModal(compOrLabel) {
     if (!modal) return;
     const comp = typeof compOrLabel === 'object' ? compOrLabel : null;
     const label = comp?.label || (typeof compOrLabel === 'string' ? compOrLabel : '');
-    const isDevkit = comp?.type === 'esp32_devkit';
+    const type = comp?.type || 'esp32_c3';
+    const titles = {
+        esp32_c3: 'ESP32-C3 DevKit',
+        esp32_devkit: 'ESP32 DevKit WROOM-32',
+        esp32_upesy_lp: 'uPesy ESP32 Wroom Low Power',
+    };
+    const boardTitle = titles[type] || titles.esp32_c3;
     if (title) {
-        title.textContent = label
-            ? `${isDevkit ? 'ESP32 DevKit WROOM-32' : 'ESP32-C3 DevKit'} — ${label}`
-            : (isDevkit ? 'ESP32 DevKit WROOM-32' : 'ESP32-C3 DevKit');
+        title.textContent = label ? `${boardTitle} — ${label}` : boardTitle;
     }
     if (body) {
-        body.dataset.boardType = isDevkit ? 'esp32_devkit' : 'esp32_c3';
-        body.querySelector('.esp32-doc-c3')?.classList.toggle('hidden', isDevkit);
-        body.querySelector('.esp32-doc-devkit')?.classList.toggle('hidden', !isDevkit);
+        body.dataset.boardType = type;
+        body.querySelector('.esp32-doc-c3')?.classList.toggle('hidden', type !== 'esp32_c3');
+        body.querySelector('.esp32-doc-devkit')?.classList.toggle('hidden', type !== 'esp32_devkit');
+        body.querySelector('.esp32-doc-upesy')?.classList.toggle('hidden', type !== 'esp32_upesy_lp');
     }
     showModal(modal);
 }
@@ -782,6 +841,7 @@ canvas.addEventListener('dblclick', async (e) => {
         return;
     }
     const target = circuit.components.find(c => componentHitTest(c, mousePos.x, mousePos.y));
+    if (target && shouldIgnoreArrowDblClick(target, mousePos.x, mousePos.y)) return;
     if (target) {
         if (target.type === 'cd4511') {
             openCd4511DocModal(target.label);
@@ -845,7 +905,20 @@ canvas.addEventListener('dblclick', async (e) => {
             }
             return;
         }
-        if (target.type === 'esp32_c3' || target.type === 'esp32_devkit') {
+        if (isEsp32ComponentType(target.type)) {
+            if (e.shiftKey && target.type === 'esp32_upesy_lp') {
+                const live = flags.isSimulating;
+                let v = await showValuePrompt(
+                    `Tension batterie simulée de ${target.label} (V, GPIO35, 3,0–4,3) :`,
+                    String(target.vbat ?? UPESY_DEFAULT_VBAT)
+                );
+                if (v === null) return;
+                if (!live) saveState();
+                target.vbat = clampUpesyVbat(parseFloat(v) || UPESY_DEFAULT_VBAT);
+                draw();
+                if (live) requestLiveSimulation();
+                return;
+            }
             if (e.shiftKey) {
                 openEsp32DocModal(target);
             } else {
@@ -888,6 +961,17 @@ canvas.addEventListener('dblclick', async (e) => {
                 draw();
                 if (live) requestLiveSimulation();
             }
+        }
+        else if (target.type === 'ldr') {
+            const cur = target.lux ?? LDR_DEFAULT_LUX;
+            const v = await showValuePrompt(`Luminosité simulée ${target.label} (lux, 0–10000) :`, String(cur));
+            if (v === null || v.trim() === '') return;
+            const luxVal = parseFloat(v);
+            if (!Number.isFinite(luxVal)) return;
+            if (!live) saveState();
+            target.lux = clampLdrLux(luxVal);
+            draw();
+            if (live) requestLiveSimulation();
         }
         else if (target.type === 'capacitor') {
             let v = await showValuePrompt(`Capacité de ${target.label} (ex. 1u, 100n, 10p, 1m) :`, target.value || "1u");
@@ -1022,6 +1106,8 @@ function applyNewComponentDefaults(nc, type) {
     } else if (type === 'potentiometer') {
         nc.value = '10k';
         nc.position = 50;
+    } else if (type === 'ldr') {
+        nc.lux = LDR_DEFAULT_LUX;
     } else if (type === 'switch_spdt') {
         nc.state = 0;
     } else if (type === 'push_button') {
@@ -1094,6 +1180,15 @@ function applyNewComponentDefaults(nc, type) {
     } else if (type === 'esp32_devkit') {
         nc.sketch = DEFAULT_ESP32_DEVKIT_SKETCH;
         nc.fqbn = ESP32_DEVKIT_FQBN;
+        nc.pinModes = {};
+        nc.pinLevels = {};
+        nc.avrRegisters = null;
+        nc.lastCompileOk = null;
+        nc.lastCompileLog = '';
+    } else if (type === 'esp32_upesy_lp') {
+        nc.sketch = DEFAULT_ESP32_UPESY_LP_SKETCH;
+        nc.fqbn = ESP32_UPESY_LP_FQBN;
+        nc.vbat = UPESY_DEFAULT_VBAT;
         nc.pinModes = {};
         nc.pinLevels = {};
         nc.avrRegisters = null;

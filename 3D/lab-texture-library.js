@@ -626,6 +626,7 @@ async function loadPackAssets() {
  *   }, meta?: { phase: "input" | "change" }) => void,
  *   onModeChange?: (mode: "object" | "face" | "triangles") => void,
  *   onClearTriangles?: () => void,
+ *   onDeleteTriangles?: () => void,
  * }} options
  */
 export function initTextureLibrary(options) {
@@ -637,6 +638,7 @@ export function initTextureLibrary(options) {
         onTransformChange,
         onModeChange,
         onClearTriangles,
+        onDeleteTriangles,
     } = options;
 
     const grid = root.querySelector("[data-texlib-grid]");
@@ -665,6 +667,7 @@ export function initTextureLibrary(options) {
     const modeHint = root.querySelector("[data-texlib-mode-hint]");
     const modeBtns = [...root.querySelectorAll("[data-texlib-mode]")];
     const clearTrisBtn = root.querySelector("[data-texlib-clear-tris]");
+    const deleteTrisBtn = root.querySelector("[data-texlib-delete-tris]");
     /** Évite une boucle range ↔ number sur le même champ. */
     let syncingUvInputs = false;
     /** Évite de réécrire le select pendant un refresh programmatique. */
@@ -876,9 +879,9 @@ export function initTextureLibrary(options) {
         if (modeHint) {
             modeHint.textContent =
                 applyMode === "triangles"
-                    ? "Mode Triangles : glissez pour sélectionner. Vider △ / Échap / Ctrl+Z annule la sélection. Tile = dernier lot △."
+                    ? "Mode Triangles : glissez pour sélectionner, clic droit pour vider. Suppr △ retire les triangles. Tile = dernier lot △."
                     : applyMode === "face"
-                      ? "Mode Face : déposez sur une face de cube / panneau. Tile = dernière face."
+                      ? "Mode Face : cliquez une face (surbrillance), clic droit pour vider. Tile = dernière face."
                       : "Mode Objet : déposez sur l’objet entier. Tile = dernier objet texturé.";
         }
         onModeChange?.(applyMode);
@@ -894,6 +897,10 @@ export function initTextureLibrary(options) {
     clearTrisBtn?.addEventListener("click", (event) => {
         event.stopPropagation();
         onClearTriangles?.();
+    });
+    deleteTrisBtn?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onDeleteTriangles?.();
     });
     setApplyMode("object");
 

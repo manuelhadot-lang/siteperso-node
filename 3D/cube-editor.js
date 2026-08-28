@@ -104,6 +104,11 @@ import {
     buildArchitectureGroup,
     rebuildArchitectureGroup,
     isLabArchitecture,
+    isLabArchOpeningFill,
+    findArchOpeningFillAncestor,
+    getArchHostFromFill,
+    findArchOpeningFill,
+    readArchOpeningFillTx,
     getArchLength,
     getArchWidth,
     getArchHeight,
@@ -114,6 +119,9 @@ import {
     hasArchPlinthOnFloor,
     normalizeArchPlinthFloors,
     getArchOpenings,
+    archOpeningsSignature,
+    setArchOpeningImportTemplate,
+    getArchOpeningImportTemplate,
     createDefaultOpening,
     openingBelongsToArchFace,
     createDefaultSlabHole,
@@ -143,6 +151,7 @@ import {
     clampArchFloors,
     ARCH_LAYOUT_LABELS,
     ARCH_WALL_LABELS,
+    ARCH_OPENINGS_KEY,
 } from "./lab-architecture.js";
 import {
     buildBoatGroup,
@@ -271,8 +280,22 @@ import {
 import { initObjectContextMenu } from "./lab-context-menu.js";
 import { exportObjectGltf, objectToGlbDataUrl } from "./lab-export.js";
 import {
+    applyObjectPhysicsData,
+    disposeObjectPhysics,
+    getObjectPhysicsBounce,
+    getObjectPhysicsMass,
+    getObjectPhysicsTeaching,
+    isObjectPhysicsEnabled,
+    serializeObjectPhysics,
+    setObjectPhysicsBounce,
+    setObjectPhysicsEnabled,
+    setObjectPhysicsMass,
+    stepPhysicsObjects,
+    wakeObjectPhysics,
+} from "./lab-object-physics.js";
+import {
     splitObjectMeshesByIslands,
-    extractTriIdsFromMesh,
+    extractSelectedTrianglesFromMesh,
 } from "./lab-mesh-split.js";
 import {
     buildSceneDocument,
@@ -313,7 +336,7 @@ import {
     syncLightAim,
     updateLightHelpers,
 } from "./lab-lights.js";
-import { reflectionToPbr } from "./lab-mirror.js";
+import { reflectionToPbr, envMapIntensityForMaterial, WAXED_REFLECTION } from "./lab-mirror.js";
 import {
     getLightShadowEnabled,
     getLightShadowOpacity,
@@ -517,6 +540,14 @@ export function initCubeEditor(ctx) {
     let triangulationMode = false;
     /** @type {"object" | "face" | "triangles"} */
     let textureApplyMode = "object";
+
+    function syncTextureModeDocClass() {
+        document.documentElement.classList.toggle(
+            "lab-triangulation-mode",
+            triangulationMode || textureApplyMode === "triangles"
+        );
+        document.documentElement.classList.toggle("lab-face-apply-mode", textureApplyMode === "face");
+    }
     /** @type {ReturnType<typeof setTimeout> | null} */
     let archOpeningDebounce = null;
     /** @type {{ object: THREE.Object3D, openings: import("./lab-architecture.js").ArchOpening[] } | null} */
@@ -649,6 +680,14 @@ export function initCubeEditor(ctx) {
     let importedCounter = 0;
     /** @type {Map<string, THREE.Object3D>} */
     const importedTemplateCache = new Map();
+    /** @type {Map<string, Promise<THREE.Object3D>>} */
+    const importedTemplateLoading = new Map();
+    /** Séquence d’import de scène (ignore les jobs d’apparence périmés). */
+    let sceneImportSeq = 0;
+    /** @type {number} */
+    let currentSceneImportSeq = 0;
+    /** @type {Promise<void>} */
+    let importSceneDocumentChain = Promise.resolve();
     /** Mesh cliqué au dernier menu contextuel (pièce d’un import). */
     let contextMenuHitMesh = /** @type {THREE.Mesh | null} */ (null);
     /** @type {import("./lab-vegetation.js").VegType} */
@@ -790,6 +829,7 @@ export function initCubeEditor(ctx) {
     statusEl.setAttribute("aria-live", "polite");
     viewport.appendChild(statusEl);
     let statusTimer = 0;
+    const loadingOverlay = document.getElementById("lab-loading-overlay");
 
     const infoSize = objectInfoPanel.querySelector("[data-field='size']");
     const infoPos = objectInfoPanel.querySelector("[data-field='position']");
@@ -971,9 +1011,15 @@ export function initCubeEditor(ctx) {
                     }
                     transformBefore = null;
                 }
+                if (isLabArchOpeningFill(selectedObject)) {
+                    commitArchOpeningFillTransform(selectedObject);
+                }
             }
             // Suivre le pivot d’orbite après un déplacement (évite un saut « au centre »).
             notifyOrbitTarget({ frame: false });
+            for (const obj of selectedObjects.length ? selectedObjects : selectedObject ? [selectedObject] : []) {
+                if (isObjectPhysicsEnabled(obj)) wakeObjectPhysics(obj);
+            }
             multiDragStarts = null;
             primaryDragStart = null;
         }
@@ -1002,6 +1048,59 @@ export function initCubeEditor(ctx) {
         statusTimer = window.setTimeout(() => {
             statusEl.classList.remove("is-visible");
         }, 2200);
+    }
+
+    const loadingOverlaySnapshot = loadingOverlay?.querySelector(".lab-loading-overlay__snapshot");
+    const loadingOverlayBar = loadingOverlay?.querySelector(".lab-loading-overlay__bar");
+    const loadingOverlayBarFill = loadingOverlay?.querySelector(".lab-loading-overlay__bar-fill");
+
+    function setLoadingProgress(pct) {
+        if (!loadingOverlayBarFill) return;
+        const clamped = Math.max(0, Math.min(100, pct));
+        loadingOverlayBarFill.style.width = `${clamped}%`;
+        loadingOverlayBar?.setAttribute("aria-valuenow", String(Math.round(clamped)));
+    }
+
+    function captureViewportSnapshot() {
+        try {
+            if (renderer.getContext?.()?.isContextLost?.()) return null;
+            renderer.render(scene, camera);
+            const canvas = renderer.domElement;
+            if (!canvas?.width || !canvas?.height) return null;
+            return canvas.toDataURL("image/jpeg", 0.82);
+        } catch {
+            return null;
+        }
+    }
+
+    async function beginLoadingOverlay() {
+        if (!loadingOverlay) return;
+        const dataUrl = captureViewportSnapshot();
+        if (loadingOverlaySnapshot) {
+            if (dataUrl) loadingOverlaySnapshot.src = dataUrl;
+            else loadingOverlaySnapshot.removeAttribute("src");
+        }
+        setLoadingProgress(0);
+        loadingOverlay.hidden = false;
+        loadingOverlay.setAttribute("aria-hidden", "false");
+        await new Promise((resolve) =>
+            window.requestAnimationFrame(() =>
+                window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
+            )
+        );
+    }
+
+    async function tickLoadingProgress(pct) {
+        setLoadingProgress(pct);
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    }
+
+    function hideLoadingOverlay() {
+        if (!loadingOverlay) return;
+        loadingOverlay.hidden = true;
+        loadingOverlay.setAttribute("aria-hidden", "true");
+        loadingOverlaySnapshot?.removeAttribute("src");
+        setLoadingProgress(0);
     }
 
     function refreshSceneRegistry() {
@@ -1414,10 +1513,24 @@ export function initCubeEditor(ctx) {
             if (!isObjectContentMesh(child)) return;
             // Plinthes : teinte propre (plus foncée), pas la couleur des murs.
             if (String(child.name || "").startsWith("arch-plinth-")) return;
+            if (!isLabArchOpeningFill(object)) {
+                if (String(child.name || "").startsWith("arch-opening-")) return;
+                if (child.userData?.archOpeningFill) return;
+            } else if (child.material?.transparent && Number(child.material.opacity) < 0.5) {
+                return;
+            }
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach((material) => {
                 if (!material) return;
-                if (material?.userData?._labFaceAlbedoMap && !tintFaceMaps) return;
+                if (
+                    !tintFaceMaps &&
+                    (material?.userData?._labFaceAlbedoMap ||
+                        material?.userData?._labFaceNormalMap ||
+                        material?.userData?._labFaceSpecularMap ||
+                        material?.userData?._labFaceRoughnessMap)
+                ) {
+                    return;
+                }
                 material.color?.set(hex);
                 // Évite un mur « transparent » si un verre face était encore collé.
                 material.transparent = false;
@@ -1429,6 +1542,78 @@ export function initCubeEditor(ctx) {
             });
         });
         updateObjectVisual(object);
+        if (isLabArchOpeningFill(object)) persistArchOpeningFillColor(object, hex);
+    }
+
+    /**
+     * @param {THREE.Object3D} fill
+     * @param {(op: import("./lab-architecture.js").ArchOpening) => import("./lab-architecture.js").ArchOpening} patchFn
+     */
+    function patchArchOpeningOnHost(fill, patchFn) {
+        const room = getArchHostFromFill(fill);
+        const openingId = fill?.userData?.archOpeningId;
+        if (!room || !openingId) return;
+        const openings = getArchOpenings(room).map((op) => (op.id === openingId ? patchFn(op) : op));
+        room.userData[ARCH_OPENINGS_KEY] = openings;
+    }
+
+    /**
+     * @param {THREE.Object3D} fill
+     * @param {string} hex
+     */
+    function persistArchOpeningFillColor(fill, hex) {
+        patchArchOpeningOnHost(fill, (op) => ({ ...op, fillColor: hex }));
+    }
+
+    /**
+     * Enregistre la pose locale (gizmo) sans reconstruire le mur.
+     * @param {THREE.Object3D} fill
+     */
+    function commitArchOpeningFillTransform(fill) {
+        if (!isLabArchOpeningFill(fill)) return;
+        patchArchOpeningOnHost(fill, (op) => ({ ...op, fillTx: readArchOpeningFillTx(fill) }));
+    }
+
+    /**
+     * @param {THREE.Object3D} fill
+     */
+    function resetArchOpeningFillTransform(fill) {
+        if (!isLabArchOpeningFill(fill)) return;
+        const room = getArchHostFromFill(fill);
+        const openingId = fill.userData?.archOpeningId;
+        if (!room || !openingId) return;
+        const openings = getArchOpenings(room).map((op) => {
+            if (op.id !== openingId) return op;
+            const next = { ...op };
+            delete next.fillTx;
+            return next;
+        });
+        applyArchitectureParams(room, { openings });
+        const nextFill = findArchOpeningFill(room, openingId);
+        if (nextFill) selectObject(nextFill, { highlight: true });
+        showStatus("Pose de la porte / fenêtre réinitialisée");
+    }
+
+    /**
+     * @param {THREE.Object3D} fill
+     */
+    function removeArchOpeningFillKeepHole(fill) {
+        const room = getArchHostFromFill(fill);
+        const openingId = fill?.userData?.archOpeningId;
+        if (!room || !openingId) return;
+        const openings = getArchOpenings(room).map((op) => {
+            if (op.id !== openingId) return op;
+            return {
+                ...op,
+                fill: "none",
+                importDataUrl: undefined,
+                importFormat: undefined,
+                importName: undefined,
+            };
+        });
+        applyArchitectureParams(room, { openings });
+        selectObject(room, { highlight: true });
+        showStatus("Trou seul (sans porte / fenêtre)");
     }
 
     async function setObjectTexture(object, dataUrl) {
@@ -1558,9 +1743,9 @@ export function initCubeEditor(ctx) {
         if (hint) {
             hint.textContent =
                 mode === "triangles"
-                    ? "Mode Triangles : glissez pour sélectionner, déposez la texture. Tile = dernier lot △."
+                    ? "Mode Triangles : glissez pour sélectionner, clic droit pour vider. Tile = dernier lot △."
                     : mode === "face"
-                      ? "Mode Face : déposez sur une face de cube / panneau. Tile = dernière face."
+                      ? "Mode Face : cliquez une face, clic droit pour vider. Tile = dernière face."
                       : "Mode Objet : déposez sur l’objet entier. Tile = dernier objet texturé.";
         }
     }
@@ -1874,15 +2059,18 @@ export function initCubeEditor(ctx) {
         showStatus("Miroir — réflexion maximale");
     }
 
+    function applyWaxedPreset(object) {
+        setObjectReflection(object, WAXED_REFLECTION);
+        showStatus("Ciré — parquet légèrement brillant");
+    }
+
     function setObjectReflection(object, reflection) {
         const value = Math.max(0, Math.min(1, Number(reflection) || 0));
         if (
             applyScopedMaterial(
                 object,
                 { reflection: value },
-                value >= 0.88
-                    ? "Miroir de scène (mur)"
-                    : `Réflexion : ${value.toFixed(2)}`
+                `Réflexion : ${value.toFixed(2)}`
             )
         ) {
             return;
@@ -1897,9 +2085,8 @@ export function initCubeEditor(ctx) {
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach((material) => {
                 if (!material || typeof material.envMapIntensity !== "number") return;
-                if (material.userData?.labSkyboxEnvMap) return;
-                material.envMapIntensity = pbr.envMapIntensity;
                 material.userData._labReflection = value;
+                material.envMapIntensity = envMapIntensityForMaterial(material, value);
                 material.needsUpdate = true;
             });
         });
@@ -2072,6 +2259,7 @@ export function initCubeEditor(ctx) {
             if (typeof state.shadowOpacity === "number") {
                 setObjectShadowOpacity(object, state.shadowOpacity);
             }
+            applyObjectPhysicsData(object, state);
             updateObjectVisual(object);
             return;
         }
@@ -2083,6 +2271,7 @@ export function initCubeEditor(ctx) {
         if (isLabBoat(object) && typeof state.boatDensity === "number") {
             setBoatDensity(object, state.boatDensity);
         }
+        applyObjectPhysicsData(object, state);
         if (isLabBoat(object) && typeof state.boatLength === "number") {
             object.userData.boatLength = state.boatLength;
         }
@@ -2170,7 +2359,7 @@ export function initCubeEditor(ctx) {
                 getArchWingA(object) !== nextWingA ||
                 getArchWingB(object) !== nextWingB ||
                 getArchFloors(object) !== nextFloors ||
-                JSON.stringify(getArchOpenings(object)) !== JSON.stringify(nextOpenings);
+                archOpeningsSignature(getArchOpenings(object)) !== archOpeningsSignature(nextOpenings);
             if (needsRebuild) {
                 // Invalide toute restauration async d’un rebuild précédent.
                 object.userData._labArchRebuildGen =
@@ -2246,34 +2435,13 @@ export function initCubeEditor(ctx) {
                         ? state.textureTile
                         : getObjectTextureTile(object);
                 applyObjectTextureTile(object, tile);
-                /** @type {Promise<void>[]} */
-                const jobs = [];
-                if (
-                    isLabArchitecture(object) &&
-                    state.archFaceTextures &&
-                    typeof state.archFaceTextures === "object"
-                ) {
-                    jobs.push(applyArchSurfaceTexturesData(object, state.archFaceTextures));
-                }
-                const facePaint =
-                    state.facePaint && typeof state.facePaint === "object" ? state.facePaint : null;
-                const mesh =
-                    !isLabStair(object) && !isLabTube(object) && !isLabBoat(object) && !isLabArchitecture(object)
-                        ? getPaintableMesh(object)
-                        : null;
-                if (facePaint && mesh) jobs.push(applyFacePaintData(object, facePaint));
-                if (Array.isArray(state.triangleTextures) && state.triangleTextures.length) {
-                    jobs.push(applyTriangleTexturesData(object, state.triangleTextures));
-                }
-                return jobs.length ? Promise.all(jobs) : undefined;
             })
             .catch((err) => {
                 console.warn("[lab] restauration apparence objet :", err);
             })
-            .finally(() => {
-                // Sans albedo : retintre toujours.
-                // Avec albedo : ignorer la teinte « cyan défaut » résiduelle
-                // (sinon bois/marron redevient bleu-vert).
+            .then(() => {
+                // Scalaires objet AVANT les maps Face (sinon rugosité / métal
+                // objet écrasent parquet, vernis, roughnessMap par face).
                 if (restoredColor) {
                     const tint = normalizeObjectColorHex(restoredColor);
                     const defaultTint = normalizeObjectColorHex(DEFAULT_OBJECT_COLOR);
@@ -2297,8 +2465,48 @@ export function initCubeEditor(ctx) {
                 updateObjectVisual(object);
             })
             .then(() => {
-                // Après rugosité/métal objet : réappliquer les réglages par face
-                // (sinon applyObjectRoughness écrase chaque matériau de face).
+                /** @type {Promise<void>[]} */
+                const jobs = [];
+                const warnRestore = (label) => (err) => {
+                    console.warn(`[lab] ${label} :`, err);
+                };
+                if (
+                    isLabArchitecture(object) &&
+                    state.archFaceTextures &&
+                    typeof state.archFaceTextures === "object"
+                ) {
+                    jobs.push(
+                        applyArchSurfaceTexturesData(object, state.archFaceTextures).catch(
+                            warnRestore("restauration textures Architecture")
+                        )
+                    );
+                }
+                const facePaint =
+                    state.facePaint && typeof state.facePaint === "object" ? state.facePaint : null;
+                const mesh =
+                    !isLabStair(object) &&
+                    !isLabTube(object) &&
+                    !isLabBoat(object) &&
+                    !isLabArchitecture(object)
+                        ? getPaintableMesh(object)
+                        : null;
+                if (facePaint && mesh) {
+                    jobs.push(
+                        applyFacePaintData(object, facePaint).catch(
+                            warnRestore("restauration peinture faces")
+                        )
+                    );
+                }
+                if (Array.isArray(state.triangleTextures) && state.triangleTextures.length) {
+                    jobs.push(
+                        applyTriangleTexturesData(object, state.triangleTextures).catch(
+                            warnRestore("restauration textures triangles")
+                        )
+                    );
+                }
+                return jobs.length ? Promise.all(jobs) : undefined;
+            })
+            .then(() => {
                 const facePbr =
                     state.facePbr && typeof state.facePbr === "object" ? state.facePbr : null;
                 if (!facePbr) return undefined;
@@ -2311,7 +2519,6 @@ export function initCubeEditor(ctx) {
                     });
             })
             .then(() => {
-                // Verre objet EN DERNIER : applyObjectColor / roughness le retirent sinon.
                 if (state.glass) {
                     applyObjectGlass(object, true);
                     if (typeof state.opacity === "number") {
@@ -2392,6 +2599,7 @@ export function initCubeEditor(ctx) {
             glassRestore: isObjectGlassEnabled(object)
                 ? getObjectGlassRestore(object) || undefined
                 : undefined,
+            ...serializeObjectPhysics(object),
         };
     }
 
@@ -2515,6 +2723,7 @@ export function initCubeEditor(ctx) {
                 ...captureObjectState(object),
                 shadowEnabled: getObjectShadowEnabled(object),
                 shadowOpacity: getObjectShadowOpacity(object),
+                ...serializeObjectPhysics(object),
             };
         }
         if (object.userData?.[LAB_IMPORTED_KEY]) {
@@ -2551,6 +2760,7 @@ export function initCubeEditor(ctx) {
                 facePaint: serializeFacePaint(object) || undefined,
                 facePbr: serializeFacePbrStore(object) || undefined,
                 meshSolidify: serializeMeshSolidify(object) || undefined,
+                ...serializeObjectPhysics(object),
             };
         }
         if (object.userData?.labCsg) {
@@ -2792,6 +3002,7 @@ export function initCubeEditor(ctx) {
         const index = editableObjects.indexOf(object);
         if (index !== -1) editableObjects.splice(index, 1);
         unregisterCollidable(object);
+        disposeObjectPhysics(object);
         unregisterSceneItem(object);
         if (dispose) {
             if (isLabLight(object)) {
@@ -2813,6 +3024,60 @@ export function initCubeEditor(ctx) {
         showStatus(
             enabled ? "Collisions activées (joueur)" : "Collisions désactivées"
         );
+    }
+
+    /**
+     * @param {THREE.Object3D} object
+     */
+    function objectSupportsPhysics(object) {
+        if (!object || isLabLight(object)) return false;
+        if (isLabArchitecture(object) || isLabStair(object) || isLabLanding(object)) return false;
+        if (isLabArchOpeningFill(object)) return false;
+        if (isLabTube(object)) return false;
+        if (isLabBoat(object) && isBoatFloating(object)) return false;
+        return true;
+    }
+
+    function setObjectPhysics(object, enabled) {
+        if (!objectSupportsPhysics(object)) {
+            showStatus("Physique non disponible sur cet objet");
+            return;
+        }
+        if (isObjectPhysicsEnabled(object) === !!enabled) return;
+        setObjectPhysicsEnabled(object, enabled);
+        contextMenu.syncProperty("physics", enabled);
+        contextMenu.syncProperty("physics-mass", getObjectPhysicsMass(object));
+        contextMenu.syncProperty("physics-bounce", getObjectPhysicsBounce(object));
+        if (enabled) {
+            const t = getObjectPhysicsTeaching(object);
+            showStatus(
+                `Physique activée — m ${t.mass.toFixed(1)} kg · P ${(t.weightN).toFixed(1)} N · rebond ${t.bounce.toFixed(2).replace(".", ",")} (rotation + collisions)`
+            );
+        } else {
+            showStatus("Physique désactivée (objet figé)");
+        }
+    }
+
+    function setObjectPhysicsMassValue(object, mass) {
+        if (!objectSupportsPhysics(object)) return;
+        setObjectPhysicsMass(object, mass);
+        const m = getObjectPhysicsMass(object);
+        contextMenu.syncProperty("physics-mass", m);
+        const g = 9.81;
+        showStatus(`Masse ${m.toFixed(1).replace(".", ",")} kg — poids P = ${(m * g).toFixed(1).replace(".", ",")} N`);
+    }
+
+    function setObjectPhysicsBounceValue(object, bounce) {
+        if (!objectSupportsPhysics(object)) return;
+        setObjectPhysicsBounce(object, bounce);
+        const e = getObjectPhysicsBounce(object);
+        contextMenu.syncProperty("physics-bounce", e);
+        showStatus(
+            e <= 0.001
+                ? "Rebond 0 — pose sans rebond"
+                : `Rebond e = ${e.toFixed(2).replace(".", ",")} (élasticité)`
+        );
+        if (isObjectPhysicsEnabled(object)) wakeObjectPhysics(object);
     }
 
     function setLightMarkerVisibility(object, visible) {
@@ -3460,6 +3725,7 @@ export function initCubeEditor(ctx) {
             metalness: snapshot.metalness,
         });
         applyObjectState(object, snapshot);
+        void hydrateArchOpeningModels(object);
         return object;
     }
 
@@ -3513,9 +3779,97 @@ export function initCubeEditor(ctx) {
         const key = importedTemplateKey(dataUrl, format);
         const cached = importedTemplateCache.get(key);
         if (cached) return cached;
-        const template = await loadModelFromDataUrl(dataUrl, /** @type {any} */ (format));
-        importedTemplateCache.set(key, template);
-        return template;
+        let pending = importedTemplateLoading.get(key);
+        if (pending) return pending;
+        pending = loadModelFromDataUrl(dataUrl, /** @type {any} */ (format))
+            .then((template) => {
+                importedTemplateCache.set(key, template);
+                importedTemplateLoading.delete(key);
+                return template;
+            })
+            .catch((err) => {
+                importedTemplateLoading.delete(key);
+                throw err;
+            });
+        importedTemplateLoading.set(key, pending);
+        return pending;
+    }
+
+    /**
+     * Charge les GLB d’ouvertures Architecture (après restore / undo).
+     * @param {THREE.Object3D} object
+     */
+    async function hydrateArchOpeningModels(object) {
+        if (!isLabArchitecture(object)) return;
+        const openings = getArchOpenings(object);
+        let missing = false;
+        for (const op of openings) {
+            if (op.fill !== "imported" || !op.importDataUrl) continue;
+            const format = op.importFormat || "glb";
+            if (getArchOpeningImportTemplate(op.importDataUrl, format)) continue;
+            missing = true;
+            try {
+                const template = await ensureImportedTemplate(op.importDataUrl, format);
+                setArchOpeningImportTemplate(op.importDataUrl, format, template);
+            } catch (err) {
+                console.warn("[lab-arch] modèle ouverture :", err);
+            }
+        }
+        if (!missing) return;
+        applyArchitectureParams(object, { openings }, { recordHistory: false, quietUi: true, forceRebuild: true });
+    }
+
+    /**
+     * @param {THREE.Object3D} object
+     * @param {string} openingId
+     */
+    async function replaceArchOpeningWithFile(object, openingId) {
+        if (!isLabArchitecture(object) || !openingId) return;
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".glb,.gltf,.fbx,.obj,.stl,.dae,.ply";
+        input.hidden = true;
+        document.body.appendChild(input);
+        const file = await new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                window.removeEventListener("focus", onWindowFocus);
+                const chosen = input.files?.[0] || null;
+                input.remove();
+                resolve(chosen);
+            };
+            const onWindowFocus = () => {
+                setTimeout(finish, 800);
+            };
+            input.addEventListener("change", finish, { once: true });
+            input.addEventListener("cancel", finish, { once: true });
+            window.addEventListener("focus", onWindowFocus, { once: true });
+            void pickFilePreservingFullscreen(input);
+        });
+        if (!file) return;
+        try {
+            const loaded = await loadModelFromFile(file);
+            const key = importedTemplateKey(loaded.dataUrl, loaded.format);
+            importedTemplateCache.set(key, loaded.root.clone(true));
+            setArchOpeningImportTemplate(loaded.dataUrl, loaded.format, loaded.root);
+            const next = getArchOpenings(object).map((op) => {
+                if (op.id !== openingId) return op;
+                return {
+                    ...op,
+                    fill: "imported",
+                    importDataUrl: loaded.dataUrl,
+                    importFormat: loaded.format,
+                    importName: loaded.name,
+                };
+            });
+            applyArchitectureParams(object, { openings: next });
+            showStatus(`Ouverture remplacée : ${loaded.name}`);
+        } catch (err) {
+            console.error("[lab-arch] import ouverture :", err);
+            showStatus(err instanceof Error ? err.message : "Import impossible");
+        }
     }
 
     /**
@@ -3566,10 +3920,17 @@ export function initCubeEditor(ctx) {
         // détruisent le verre restauré juste après).
         applyImportedTransformOnly(object, snapshot);
 
+        object.userData._labSceneImportSeq = currentSceneImportSeq;
+
         const appearanceJob = (async () => {
+            const importSeq = object.userData._labSceneImportSeq;
+            const stillCurrent = () =>
+                importSeq === sceneImportSeq && editableObjects.includes(object);
+
             if (dataUrl && !importedTemplateCache.has(importedTemplateKey(dataUrl, format))) {
                 try {
                     const template = await ensureImportedTemplate(dataUrl, format);
+                    if (!stillCurrent()) return;
                     while (object.children.length) object.remove(object.children[0]);
                     object.add(template.clone(true));
                     ensureImportedMeshPersistIds(object);
@@ -3578,7 +3939,9 @@ export function initCubeEditor(ctx) {
                     console.warn("[lab-import] restauration modèle :", err);
                 }
             }
+            if (!stillCurrent()) return;
             await restoreImportedAppearance(object, snapshot, { applyObjectColor });
+            if (!stillCurrent()) return;
             invalidateLabShadows();
             updateObjectVisual(object);
         })();
@@ -3634,6 +3997,7 @@ export function initCubeEditor(ctx) {
         if (typeof snapshot.labId === "string" && snapshot.labId) {
             object.userData.labId = snapshot.labId;
         }
+        applyObjectPhysicsData(object, snapshot);
     }
 
     async function spawnImportedModelFile(file, position) {
@@ -3996,65 +4360,127 @@ export function initCubeEditor(ctx) {
     }
 
     async function importSceneDocument(data, { fileName = null } = {}) {
-        try {
-            resetEditorInteractionState();
-            const snapshots = parseSceneDocument(data);
-            const doc =
-                data && typeof data === "object"
-                    ? /** @type {{ terrain?: unknown, ocean?: unknown, skybox?: unknown, vegetationAssets?: unknown, view?: unknown }} */ (
-                          data
-                      )
-                    : null;
-            if (doc?.vegetationAssets) {
-                await hydrateVegetationAssets(doc.vegetationAssets);
-                syncVegetationModelUi();
-            }
-            removeAllObjects();
-            // L’ancienne scène ne doit pas pouvoir être « ressuscitée » par Ctrl+Z.
-            history.clear();
-            clipboard = null;
-            resetObjectCounters();
-            /** @type {Promise<unknown>[]} */
-            const importAppearanceJobs = [];
-            for (const snapshot of snapshots) {
-                if (snapshot.kind === "imported" && snapshot.importDataUrl) {
-                    try {
-                        await ensureImportedTemplate(
-                            snapshot.importDataUrl,
-                            snapshot.importFormat || "glb"
-                        );
-                    } catch (error) {
-                        console.warn("[lab-import] restauration modèle :", error);
-                    }
+        const runImport = async () => {
+            const importSeq = ++sceneImportSeq;
+            currentSceneImportSeq = importSeq;
+            await beginLoadingOverlay();
+            try {
+                await tickLoadingProgress(3);
+                resetEditorInteractionState();
+                await tickLoadingProgress(8);
+                const snapshots = parseSceneDocument(data);
+                const doc =
+                    data && typeof data === "object"
+                        ? /** @type {{ terrain?: unknown, ocean?: unknown, skybox?: unknown, vegetationAssets?: unknown, view?: unknown }} */ (
+                              data
+                          )
+                        : null;
+                if (doc?.vegetationAssets) {
+                    await hydrateVegetationAssets(doc.vegetationAssets);
+                    syncVegetationModelUi();
                 }
-                const created = addObjectFromSnapshot(snapshot, {
-                    recordHistory: false,
-                    select: false,
-                });
-                const job = created?.userData?._labImportAppearanceJob;
-                if (job && typeof job.then === "function") importAppearanceJobs.push(job);
+                await tickLoadingProgress(16);
+                removeAllObjects();
+                history.clear();
+                clipboard = null;
+                resetObjectCounters();
+                /** @type {Promise<unknown>[]} */
+                const importAppearanceJobs = [];
+                const snapCount = Math.max(1, snapshots.length);
+                for (let i = 0; i < snapshots.length; i++) {
+                    const snapshot = snapshots[i];
+                    if (snapshot.kind === "imported" && snapshot.importDataUrl) {
+                        try {
+                            await ensureImportedTemplate(
+                                snapshot.importDataUrl,
+                                snapshot.importFormat || "glb"
+                            );
+                        } catch (error) {
+                            console.warn("[lab-import] restauration modèle :", error);
+                        }
+                    }
+                    if (snapshot.kind === "architecture" && Array.isArray(snapshot.archOpenings)) {
+                        for (const raw of snapshot.archOpenings) {
+                            const op = /** @type {Record<string, unknown>} */ (raw || {});
+                            if (op.fill !== "imported" || typeof op.importDataUrl !== "string") continue;
+                            try {
+                                const format =
+                                    typeof op.importFormat === "string" && op.importFormat
+                                        ? op.importFormat
+                                        : "glb";
+                                const template = await ensureImportedTemplate(op.importDataUrl, format);
+                                setArchOpeningImportTemplate(op.importDataUrl, format, template);
+                            } catch (error) {
+                                console.warn("[lab-arch] restauration ouverture :", error);
+                            }
+                        }
+                    }
+                    if (importSeq !== sceneImportSeq) return;
+                    const created = addObjectFromSnapshot(snapshot, {
+                        recordHistory: false,
+                        select: false,
+                    });
+                    const job = created?.userData?._labImportAppearanceJob;
+                    if (job && typeof job.then === "function") {
+                        importAppearanceJobs.push(
+                            job.catch((err) => {
+                                console.warn("[lab-import] apparence objet :", err);
+                            })
+                        );
+                    }
+                    await tickLoadingProgress(18 + Math.round((52 * (i + 1)) / snapCount));
+                }
+                if (importAppearanceJobs.length) {
+                    await Promise.all(importAppearanceJobs);
+                }
+                if (importSeq !== sceneImportSeq) return;
+                await tickLoadingProgress(74);
+                try {
+                    if (terrainController?.deserialize) {
+                        await terrainController.deserialize(doc?.terrain ?? null, {
+                            recordHistory: false,
+                        });
+                    }
+                } catch (error) {
+                    console.warn("[lab] terrain :", error);
+                }
+                await tickLoadingProgress(82);
+                try {
+                    if (oceanController?.deserialize) {
+                        await oceanController.deserialize(doc?.ocean ?? null, { recordHistory: false });
+                    }
+                } catch (error) {
+                    console.warn("[lab] océan :", error);
+                }
+                await tickLoadingProgress(89);
+                try {
+                    if (skyboxController?.deserialize) {
+                        await skyboxController.deserialize(doc?.skybox ?? null);
+                    }
+                } catch (error) {
+                    console.warn("[lab] skybox / HDRI :", error);
+                }
+                await tickLoadingProgress(94);
+                reconcileEditableObjects();
+                refreshSceneRegistry();
+                if (fileName) {
+                    setCurrentSceneFileName(fileName);
+                }
+                resetEditorInteractionState();
+                if (doc?.view) {
+                    restoreView?.(doc.view);
+                }
+                await tickLoadingProgress(100);
+                showStatus(fileName ? `Scène ouverte : ${fileName}` : "Scène ouverte");
+            } catch (error) {
+                resetEditorInteractionState();
+                showStatus(error instanceof Error ? error.message : "Impossible d'ouvrir la scène");
+            } finally {
+                if (importSeq === sceneImportSeq) hideLoadingOverlay();
             }
-            if (importAppearanceJobs.length) {
-                await Promise.allSettled(importAppearanceJobs);
-            }
-            void terrainController?.deserialize(doc?.terrain ?? null);
-            void oceanController?.deserialize(doc?.ocean ?? null);
-            void skyboxController?.deserialize?.(doc?.skybox ?? null);
-            reconcileEditableObjects();
-            refreshSceneRegistry();
-            if (fileName) {
-                setCurrentSceneFileName(fileName);
-            }
-            resetEditorInteractionState();
-            // Après reset (désélection / explore) : restaurer le cadrage enregistré.
-            if (doc?.view) {
-                restoreView?.(doc.view);
-            }
-            showStatus(fileName ? `Scène ouverte : ${fileName}` : "Scène ouverte");
-        } catch (error) {
-            resetEditorInteractionState();
-            showStatus(error instanceof Error ? error.message : "Impossible d'ouvrir la scène");
-        }
+        };
+        importSceneDocumentChain = importSceneDocumentChain.then(runImport, runImport);
+        return importSceneDocumentChain;
     }
 
     /** Remet peinture / gizmo / gestures dans un état cliquable après ouverture de scène. */
@@ -4081,7 +4507,7 @@ export function initCubeEditor(ctx) {
         }
         triangulationMode = false;
         textureApplyMode = "object";
-        document.documentElement.classList.remove("lab-triangulation-mode");
+        syncTextureModeDocClass();
         try {
             faceDrawController?.clearTriangleSelection?.();
             applyTriangulationOverlays(false);
@@ -5499,12 +5925,19 @@ export function initCubeEditor(ctx) {
      *   plinthFloors?: number[],
      *   openings?: import("./lab-architecture.js").ArchOpening[],
      * }} patch
-     * @param {{ recordHistory?: boolean, quietUi?: boolean }} [opts]
+     * @param {{ recordHistory?: boolean, quietUi?: boolean, forceRebuild?: boolean, selectOpeningId?: string }} [opts]
      */
     function applyArchitectureParams(object, patch, opts = {}) {
         if (!isLabArchitecture(object)) return;
         const recordHistory = opts.recordHistory !== false;
         const quietUi = opts.quietUi === true;
+        const forceRebuild = opts.forceRebuild === true;
+        const keepFillId =
+            typeof opts.selectOpeningId === "string"
+                ? opts.selectOpeningId
+                : isLabArchOpeningFill(selectedObject) && getArchHostFromFill(selectedObject) === object
+                  ? String(selectedObject.userData.archOpeningId || "")
+                  : "";
         const nextLength = clampArchLength(patch.length ?? getArchLength(object));
         const nextWidth = clampArchWidth(patch.width ?? getArchWidth(object));
         const nextHeight = clampArchHeight(patch.height ?? getArchHeight(object));
@@ -5534,8 +5967,8 @@ export function initCubeEditor(ctx) {
             getArchWingA(object) === nextWingA &&
             getArchWingB(object) === nextWingB &&
             getArchFloors(object) === nextFloors &&
-            JSON.stringify(getArchOpenings(object)) === JSON.stringify(nextOpenings);
-        if (unchanged) {
+            archOpeningsSignature(getArchOpenings(object)) === archOpeningsSignature(nextOpenings);
+        if (unchanged && !forceRebuild) {
             if (!quietUi) syncArchitectureContextMenu(object);
             return;
         }
@@ -5560,7 +5993,7 @@ export function initCubeEditor(ctx) {
             getArchWingA(object) !== nextWingA ||
             getArchWingB(object) !== nextWingB ||
             getArchFloors(object) !== nextFloors ||
-            JSON.stringify(getArchOpenings(object)) !== JSON.stringify(nextOpenings);
+            archOpeningsSignature(getArchOpenings(object)) !== archOpeningsSignature(nextOpenings);
         /** @type {unknown} */
         let triTexKeep = null;
         if (wallTopoChanged) {
@@ -5611,9 +6044,15 @@ export function initCubeEditor(ctx) {
                     history.push({ type: "architecture-params", object, before, after });
                 }
             });
-        selectObject(object);
+        if (keepFillId) {
+            const fill = findArchOpeningFill(object, keepFillId);
+            if (fill) selectObject(fill, { highlight: true });
+            else if (!quietUi) selectObject(object);
+        } else if (!quietUi) {
+            selectObject(object);
+        }
 
-        syncArchitectureContextMenu(object);
+        if (!quietUi) syncArchitectureContextMenu(object);
         refreshSceneRegistry();
         if (!quietUi) {
             showStatus(
@@ -5831,6 +6270,10 @@ export function initCubeEditor(ctx) {
         const toDelete = [...selectedObjects];
         deselectObject();
         for (const object of toDelete) {
+            if (isLabArchOpeningFill(object)) {
+                removeArchOpeningFillKeepHole(object);
+                continue;
+            }
             deleteObject(object);
         }
     }
@@ -6270,6 +6713,9 @@ export function initCubeEditor(ctx) {
             case "transform": {
                 const state = direction === "undo" ? entry.before : entry.after;
                 applyObjectState(entry.object, state);
+                if (isLabArchOpeningFill(entry.object)) {
+                    commitArchOpeningFillTransform(entry.object);
+                }
                 selectObject(entry.object, { highlight: false });
                 refreshObjectDisplay(entry.object);
                 break;
@@ -6639,6 +7085,13 @@ export function initCubeEditor(ctx) {
             case "Delete":
             case "Backspace":
                 event.preventDefault();
+                if (
+                    faceDrawController?.hasTriangleSelection?.() ||
+                    (textureApplyMode === "face" && faceDrawController?.hasLiveFaceTarget?.())
+                ) {
+                    void deleteTriangleSelection();
+                    break;
+                }
                 deleteSelection();
                 break;
             case "KeyC":
@@ -6691,6 +7144,13 @@ export function initCubeEditor(ctx) {
                     event.stopPropagation();
                     faceDrawController.clearTriangleSelection?.(true);
                     showStatus("Sélection de triangles vidée");
+                    break;
+                }
+                if (textureApplyMode === "face" && faceDrawController?.hasLiveFaceTarget?.()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    faceDrawController.clearFaceSelectionHighlight?.(true);
+                    showStatus("Face désélectionnée");
                     break;
                 }
                 if (faceDrawController?.isActive?.()) {
@@ -7257,6 +7717,8 @@ export function initCubeEditor(ctx) {
     function resolveLabObject(hit) {
         let current = hit.object;
         while (current) {
+            const fill = findArchOpeningFillAncestor(current);
+            if (fill) return fill;
             if (isEditableEntity(current) || isLabTerrainObject(current)) return current;
             current = current.parent;
         }
@@ -7338,6 +7800,10 @@ export function initCubeEditor(ctx) {
                 opacity: getObjectOpacity(labObject),
                 glass: isObjectGlassEnabled(labObject),
                 smooth: getObjectSmooth(labObject),
+                canPhysics: objectSupportsPhysics(labObject),
+                physics: isObjectPhysicsEnabled(labObject),
+                physicsMass: getObjectPhysicsMass(labObject),
+                physicsBounce: getObjectPhysicsBounce(labObject),
             };
         }
         if (isLabTube(labObject)) {
@@ -7360,10 +7826,31 @@ export function initCubeEditor(ctx) {
                 smooth: getObjectSmooth(labObject),
             };
         }
+        if (isLabArchOpeningFill(labObject)) {
+            const kind = labObject.userData.archOpeningKind === "window" ? "window" : "door";
+            return {
+                kind: "arch-opening",
+                archOpeningKind: kind,
+                collision: false,
+                color: getObjectColor(labObject) || "#6e4a2e",
+                texture: getObjectTextureDataUrl(labObject),
+                normalTexture: getObjectNormalTextureDataUrl(labObject),
+                specularTexture: getObjectSpecularTextureDataUrl(labObject),
+                textureTile: getObjectTextureTile(labObject),
+                normalScale: getObjectNormalScale(labObject),
+                roughness: getObjectRoughness(labObject),
+                metalness: getObjectMetalness(labObject),
+                opacity: getObjectOpacity(labObject),
+                glass: isObjectGlassEnabled(labObject),
+                smooth: getObjectSmooth(labObject),
+                canPhysics: false,
+            };
+        }
         if (isLabArchitecture(labObject)) {
             const mat = getScopedMaterialState(labObject);
             return {
                 kind: "architecture",
+                hasLiveFace: textureApplyMode === "face" && !!faceDrawController?.hasLiveFaceTarget?.(),
                 collision: !!labObject.userData[COLLISION_KEY],
                 archLayout: getArchLayout(labObject),
                 archLength: getArchLength(labObject),
@@ -7408,12 +7895,17 @@ export function initCubeEditor(ctx) {
                 opacity: getObjectOpacity(labObject),
                 glass: isObjectGlassEnabled(labObject),
                 smooth: getObjectSmooth(labObject),
+                canPhysics: objectSupportsPhysics(labObject),
+                physics: isObjectPhysicsEnabled(labObject),
+                physicsMass: getObjectPhysicsMass(labObject),
+                physicsBounce: getObjectPhysicsBounce(labObject),
             };
         }
         return {
             kind: "object",
             isImported: !!(labObject.userData?.[LAB_IMPORTED_KEY] || labObject.userData?.labShape === "imported"),
             hasTriangleSelection: !!faceDrawController?.hasTriangleSelection?.(),
+            hasLiveFace: textureApplyMode === "face" && !!faceDrawController?.hasLiveFaceTarget?.(),
             collision: !!labObject.userData[COLLISION_KEY],
             color:
                 (isTriangleMaterialContext()
@@ -7437,6 +7929,10 @@ export function initCubeEditor(ctx) {
                 };
             })(),
             smooth: getObjectSmooth(labObject),
+            canPhysics: objectSupportsPhysics(labObject),
+            physics: isObjectPhysicsEnabled(labObject),
+            physicsMass: getObjectPhysicsMass(labObject),
+            physicsBounce: getObjectPhysicsBounce(labObject),
         };
     }
 
@@ -7448,6 +7944,9 @@ export function initCubeEditor(ctx) {
         if (isLabArchitecture(labObject) && hitMesh) {
             indicateArchitectureFace(labObject, hitMesh, hit);
             // Mur ciblé pour ouvertures + matériau (même en mode Objet).
+            faceDrawController?.setLiveFaceFromHit?.(labObject, hitMesh, hit);
+        }
+        if (isLabArchOpeningFill(labObject) && hitMesh) {
             faceDrawController?.setLiveFaceFromHit?.(labObject, hitMesh, hit);
         }
         if (textureApplyMode === "triangles") {
@@ -7485,6 +7984,20 @@ export function initCubeEditor(ctx) {
     function handleCanvasRightClick(event) {
         if (isGizmoDragging?.()) return;
         if (canInteractAt && !canInteractAt(event.clientX, event.clientY)) return;
+
+        if (
+            (triangulationMode || textureApplyMode === "triangles") &&
+            faceDrawController?.hasTriangleSelection?.()
+        ) {
+            faceDrawController.clearTriangleSelection?.(true);
+            contextMenu.hide();
+            return true;
+        }
+        if (textureApplyMode === "face" && faceDrawController?.hasLiveFaceTarget?.()) {
+            faceDrawController.clearFaceSelectionHighlight?.(true);
+            contextMenu.hide();
+            return true;
+        }
 
         reconcileEditableObjects();
         const hitInfo = pickLabObjectHitAt(event.clientX, event.clientY);
@@ -7615,20 +8128,24 @@ export function initCubeEditor(ctx) {
         }
         contextMenu.hide();
 
-        /** @type {Map<THREE.Mesh, Set<string>>} */
+        /** @type {Map<THREE.Mesh, typeof entries>} */
         const byMesh = new Map();
         for (const entry of entries) {
             if (!(entry.mesh instanceof THREE.Mesh)) continue;
-            const set = byMesh.get(entry.mesh) || new Set();
-            set.add(entry.triId);
-            byMesh.set(entry.mesh, set);
+            if (entry.mesh.userData?._labNoPaintPick) continue;
+            const list = byMesh.get(entry.mesh) || [];
+            list.push(entry);
+            byMesh.set(entry.mesh, list);
         }
 
         /** @type {THREE.Object3D[]} */
         const created = [];
-        for (const [mesh, triIds] of byMesh.entries()) {
-            const { extracted, remainderEmpty } = extractTriIdsFromMesh(mesh, triIds);
-            if (!extracted) continue;
+        for (const [mesh, meshEntries] of byMesh.entries()) {
+            const { extracted, remainderEmpty, matched } = extractSelectedTrianglesFromMesh(
+                mesh,
+                meshEntries
+            );
+            if (!extracted || !matched) continue;
             const pieceMesh = new THREE.Mesh(
                 extracted,
                 Array.isArray(mesh.material)
@@ -7671,6 +8188,209 @@ export function initCubeEditor(ctx) {
         } else {
             showStatus("Extraction impossible");
         }
+    }
+
+    /**
+     * @param {THREE.Mesh} mesh
+     */
+    function pruneTriangleOverlaysOnMesh(mesh) {
+        if (!mesh?.children?.length) return;
+        const toRemove = mesh.children.filter(
+            (child) =>
+                typeof child.name === "string" &&
+                (child.name.startsWith("lab-triangle-texture-overlay") ||
+                    child.name === "lab-triangle-selection-overlay")
+        );
+        for (const child of toRemove) {
+            mesh.remove(child);
+            child.geometry?.dispose?.();
+            const mat = child.material;
+            if (Array.isArray(mat)) {
+                mat.forEach((m) => {
+                    try {
+                        m?.map?.dispose?.();
+                    } catch {
+                        /* ignore */
+                    }
+                    m?.dispose?.();
+                });
+            } else if (mat) {
+                try {
+                    mat.map?.dispose?.();
+                } catch {
+                    /* ignore */
+                }
+                mat.dispose?.();
+            }
+        }
+    }
+
+    /**
+     * @param {THREE.Object3D} object
+     */
+    function countRemainingContentMeshes(object) {
+        let n = 0;
+        object?.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            if (child.name === "shadow-overlay") return;
+            if (
+                typeof child.name === "string" &&
+                (child.name.startsWith("lab-triangle-texture-overlay") ||
+                    child.name === "lab-triangle-selection-overlay" ||
+                    child.name === "lab-face-selection-overlay")
+            ) {
+                return;
+            }
+            const pos = child.geometry?.attributes?.position;
+            if (!pos || pos.count < 3) return;
+            n += 1;
+        });
+        return n;
+    }
+
+    /**
+     * @param {THREE.Object3D} mesh
+     * @returns {THREE.Object3D | null}
+     */
+    function findEditableAncestor(mesh) {
+        let cur = mesh;
+        while (cur) {
+            if (editableObjects.includes(cur)) return cur;
+            cur = cur.parent;
+        }
+        return null;
+    }
+
+    /**
+     * Retire les triangles sélectionnés de la géométrie (sans créer d’objet).
+     * @param {THREE.Object3D | null} [preferredObject]
+     */
+    async function deleteTriangleSelection(preferredObject = null) {
+        let entries = faceDrawController?.getSelectedTriangles?.() || [];
+        let fromFace = false;
+        if (!entries.length) {
+            entries = faceDrawController?.getLiveFaceTriangleEntries?.() || [];
+            fromFace = entries.length > 0;
+        }
+        if (!entries.length) {
+            showStatus(
+                textureApplyMode === "face"
+                    ? "Mode Face : cliquez une face (surbrillance jaune) puis Suppr"
+                    : "Sélectionnez d’abord des triangles (mode Triangles)"
+            );
+            return;
+        }
+        contextMenu.hide();
+
+        /** @type {Map<THREE.Object3D, Map<THREE.Mesh, typeof entries>>} */
+        const byObject = new Map();
+        for (const entry of entries) {
+            if (!(entry.mesh instanceof THREE.Mesh) || !entry.triId) continue;
+            if (entry.mesh.userData?._labNoPaintPick) continue;
+            const root =
+                (preferredObject && findEditableAncestor(entry.mesh) === preferredObject
+                    ? preferredObject
+                    : null) ||
+                (entry.entity && editableObjects.includes(entry.entity) ? entry.entity : null) ||
+                findEditableAncestor(entry.mesh);
+            if (!root) continue;
+            if (preferredObject && root !== preferredObject) continue;
+            if (isLabLight(root) || isLabVegetation(root)) continue;
+            let meshMap = byObject.get(root);
+            if (!meshMap) {
+                meshMap = new Map();
+                byObject.set(root, meshMap);
+            }
+            const list = meshMap.get(entry.mesh) || [];
+            list.push(entry);
+            meshMap.set(entry.mesh, list);
+        }
+
+        if (!byObject.size) {
+            showStatus("Aucun triangle supprimable dans cette sélection");
+            return;
+        }
+
+        let deleted = 0;
+        let objectsEmptied = 0;
+        let unmatched = 0;
+        for (const [object, meshMap] of byObject.entries()) {
+            const before = captureFullSnapshot(object);
+            let objectChanged = false;
+            for (const [mesh, meshEntries] of meshMap.entries()) {
+                const { remainderEmpty, matched } = extractSelectedTrianglesFromMesh(
+                    mesh,
+                    meshEntries
+                );
+                if (!matched) {
+                    unmatched += meshEntries.length;
+                    continue;
+                }
+                deleted += matched;
+                objectChanged = true;
+                pruneTriangleOverlaysOnMesh(mesh);
+                const pos = mesh.geometry?.attributes?.position;
+                if (remainderEmpty || !pos || pos.count < 3) {
+                    mesh.parent?.remove(mesh);
+                    if (mesh.userData?._labGeoOwned) mesh.geometry?.dispose?.();
+                }
+            }
+
+            if (!objectChanged) continue;
+
+            if (countRemainingContentMeshes(object) === 0) {
+                deleteObject(object, { recordHistory: true });
+                objectsEmptied += 1;
+                continue;
+            }
+
+            const imported =
+                !!object.userData?.[LAB_IMPORTED_KEY] || object.userData?.labShape === "imported";
+            if (imported) {
+                ensureImportedMeshPersistIds(object);
+                await bakeImportedContent(object);
+            } else if (
+                !isLabArchitecture(object) &&
+                !isLabStair(object) &&
+                !isLabLanding(object) &&
+                !isLabTube(object) &&
+                !isLabBoat(object)
+            ) {
+                object.userData.labCsg = true;
+                delete object.userData[LAB_SHAPE_KEY];
+            }
+
+            invalidateLabShadows();
+            updateObjectVisual(object);
+            if (triangulationMode) {
+                setTriangulationOverlayForObject(object, false);
+                setTriangulationOverlayForObject(object, true);
+            }
+            const after = captureFullSnapshot(object);
+            history.push({ type: "reshape", object, before, after });
+        }
+
+        faceDrawController?.clearTriangleSelection?.(false);
+        if (fromFace) faceDrawController?.clearFaceSelectionHighlight?.();
+        if (lastUvEditTarget?.kind === "triangles" || lastUvEditTarget?.kind === "face") {
+            lastUvEditTarget = null;
+        }
+
+        if (!deleted) {
+            showStatus(
+                unmatched
+                    ? "Ces triangles n’ont pas pu être retirés — resélectionnez-les puis réessayez"
+                    : "Suppression impossible"
+            );
+            return;
+        }
+        showStatus(
+            objectsEmptied
+                ? `${deleted} triangle(s) supprimé(s) — objet vide retiré`
+                : fromFace
+                  ? `Face retirée (${deleted} △) — Ctrl+Z pour annuler`
+                  : `${deleted} triangle(s) supprimé(s) — Ctrl+Z pour annuler`
+        );
     }
 
     /**
@@ -7774,6 +8494,10 @@ export function initCubeEditor(ctx) {
             void extractTriangleSelectionAsObject(object);
             return;
         }
+        if (action === "mesh-delete-selection") {
+            void deleteTriangleSelection(object);
+            return;
+        }
         if (action === "make-boat") {
             makeObjectFloatAsBoat(object);
             return;
@@ -7807,7 +8531,7 @@ export function initCubeEditor(ctx) {
             }
             applyArchitectureParams(object, { openings: [...getArchOpenings(object), opening] });
             showStatus(
-                `Porte — ${ARCH_WALL_LABELS[surface] || surface}, étage ${opening.floor + 1}`
+                `Porte avec encadrement — ${ARCH_WALL_LABELS[surface] || surface}, étage ${opening.floor + 1}`
             );
             return;
         }
@@ -7839,7 +8563,7 @@ export function initCubeEditor(ctx) {
             }
             applyArchitectureParams(object, { openings: [...getArchOpenings(object), opening] });
             showStatus(
-                `Fenêtre — ${ARCH_WALL_LABELS[surface] || surface}, étage ${opening.floor + 1}`
+                `Fenêtre avec encadrement — ${ARCH_WALL_LABELS[surface] || surface}, étage ${opening.floor + 1}`
             );
             return;
         }
@@ -7886,6 +8610,50 @@ export function initCubeEditor(ctx) {
             const openings = getArchOpenings(object).filter((o) => o.id !== openingId);
             applyArchitectureParams(object, { openings });
             showStatus("Ouverture supprimée");
+            return;
+        }
+        if (action === "arch-opening-replace-glb") {
+            const fill = isLabArchOpeningFill(object) ? object : null;
+            const room = fill ? getArchHostFromFill(fill) : object;
+            const openingId = fill
+                ? String(fill.userData.archOpeningId || "")
+                : String(detail?.openingId || "");
+            if (!isLabArchitecture(room) || !openingId) return;
+            void replaceArchOpeningWithFile(room, openingId);
+            return;
+        }
+        if (action === "arch-opening-restore-simple") {
+            const fill = isLabArchOpeningFill(object) ? object : null;
+            const room = fill ? getArchHostFromFill(fill) : object;
+            const openingId = fill
+                ? String(fill.userData.archOpeningId || "")
+                : String(detail?.openingId || "");
+            if (!isLabArchitecture(room) || !openingId) return;
+            const openings = getArchOpenings(room).map((op) => {
+                if (op.id !== openingId) return op;
+                return { ...op, fill: "simple", importDataUrl: undefined, importFormat: undefined, importName: undefined };
+            });
+            applyArchitectureParams(room, { openings }, { selectOpeningId: openingId });
+            showStatus("Modèle simple restauré");
+            return;
+        }
+        if (action === "arch-opening-fill-none") {
+            const fill = isLabArchOpeningFill(object) ? object : null;
+            const room = fill ? getArchHostFromFill(fill) : object;
+            const openingId = fill
+                ? String(fill.userData.archOpeningId || "")
+                : String(detail?.openingId || "");
+            if (!isLabArchitecture(room) || !openingId) return;
+            const openings = getArchOpenings(room).map((op) => {
+                if (op.id !== openingId) return op;
+                return { ...op, fill: "none", importDataUrl: undefined, importFormat: undefined, importName: undefined };
+            });
+            applyArchitectureParams(room, { openings });
+            showStatus("Trou seul (sans porte / fenêtre)");
+            return;
+        }
+        if (action === "arch-opening-reset-pose") {
+            if (isLabArchOpeningFill(object)) resetArchOpeningFillTransform(object);
             return;
         }
         if (action === "arch-clear-openings" && isLabArchitecture(object)) {
@@ -7946,6 +8714,7 @@ export function initCubeEditor(ctx) {
                 prop === "glass" ||
                 prop === "smooth" ||
                 prop === "metal-preset" ||
+                prop === "waxed-preset" ||
                 prop === "mirror-preset" ||
                 prop === "normal-scale" ||
                 prop === "texture-tile")
@@ -8054,9 +8823,15 @@ export function initCubeEditor(ctx) {
             syncArchitectureContextMenu(object);
         }
         if (prop === "collision") setCollision(object, !!value);
+        if (prop === "physics") setObjectPhysics(object, !!value);
+        if (prop === "physics-mass") setObjectPhysicsMassValue(object, Number(value));
+        if (prop === "physics-bounce") setObjectPhysicsBounceValue(object, Number(value));
         if (prop === "boat-float" && isLabBoat(object)) {
             object.userData[BOAT_FLOAT_KEY] = !!value;
             contextMenu.syncProperty("boat-float", !!value);
+            if (value && isObjectPhysicsEnabled(object)) {
+                setObjectPhysics(object, false);
+            }
             showStatus(value ? "Flottaison activée" : "Flottaison désactivée");
         }
         if (prop === "boat-density" && isLabBoat(object)) {
@@ -8106,6 +8881,7 @@ export function initCubeEditor(ctx) {
         if (prop === "glass") setObjectGlass(object, !!value);
         if (prop === "smooth") setObjectSmooth(object, !!value);
         if (prop === "metal-preset") applyMetalPreset(object);
+        if (prop === "waxed-preset") applyWaxedPreset(object);
         if (prop === "mirror-preset") applyMirrorPreset(object);
         if (prop === "normal-scale") setObjectNormalScale(object, Number(value));
         if (prop === "texture-tile") {
@@ -8236,15 +9012,12 @@ export function initCubeEditor(ctx) {
     setCanvasDoubleClickHandler(handleCanvasDoubleClick);
 
     /** Cale les barques sur la houle, sauf pendant une manipulation au gizmo. */
-    function updateFloatingBoats() {
+    function updateFloatingBoats(step) {
         if (!oceanController?.isActive?.()) return;
-        const now = performance.now();
-        const dt = lastFloatTimeMs ? (now - lastFloatTimeMs) / 1000 : 1 / 60;
-        lastFloatTimeMs = now;
-        const step = Math.min(0.05, Math.max(0.001, dt));
+        const dt = THREE.MathUtils.clamp(step ?? 1 / 60, 0.001, 0.05);
 
         // Avancer la houle AVANT d’échantillonner / de rendre.
-        oceanController.tick?.(step);
+        oceanController.tick?.(dt);
 
         const sampleWaveY = oceanController.getWaveHeightAt;
         if (typeof sampleWaveY !== "function") return;
@@ -8254,12 +9027,36 @@ export function initCubeEditor(ctx) {
             if (!isLabBoat(object)) continue;
             if (dragging && selectedObjects.includes(object)) continue;
             // Fond marin = plancher du lab (y = 0) pour les objets qui coulent.
-            updateBoatFloat(object, (x, z) => sampleWaveY(x, z), step, { floorY: 0 });
+            updateBoatFloat(object, (x, z) => sampleWaveY(x, z), dt, { floorY: 0 });
+        }
+    }
+
+    function updateObjectPhysics(step) {
+        const dt = THREE.MathUtils.clamp(step ?? 1 / 60, 0.001, 0.05);
+        const dragging = !!isGizmoDragging?.();
+        const moved = stepPhysicsObjects(editableObjects, dt, {
+            skip: (object) => {
+                if (!objectSupportsPhysics(object)) return true;
+                if (dragging && selectedObjects.includes(object)) return true;
+                return false;
+            },
+        });
+        if (moved) {
+            invalidateLabShadows();
+            for (const object of selectedObjects) {
+                if (isObjectPhysicsEnabled(object)) refreshObjectDisplay(object);
+            }
+            syncSelectionOutlines();
         }
     }
 
     setBeforeRender?.(() => {
-        updateFloatingBoats();
+        const now = performance.now();
+        const dt = lastFloatTimeMs ? (now - lastFloatTimeMs) / 1000 : 1 / 60;
+        lastFloatTimeMs = now;
+        const step = Math.min(0.05, Math.max(0.001, dt));
+        updateFloatingBoats(step);
+        updateObjectPhysics(step);
     });
 
     setAfterRender?.(() => {
@@ -8319,11 +9116,12 @@ export function initCubeEditor(ctx) {
                 if (object) syncObjectUvTransforms(object);
             },
             isTriangulationMode: () => triangulationMode,
+            isFaceApplyMode: () => textureApplyMode === "face",
             exitTriangulationForPaint: () => {
                 if (!triangulationMode) return;
                 triangulationMode = false;
                 textureApplyMode = "object";
-                document.documentElement.classList.remove("lab-triangulation-mode");
+                syncTextureModeDocClass();
                 faceDrawController?.clearTriangleSelection?.();
                 applyTriangulationOverlays(false);
                 syncTextureModeButtons("object");
@@ -8497,7 +9295,7 @@ export function initCubeEditor(ctx) {
         setTriangulationMode: (enabled) => {
             triangulationMode = !!enabled;
             textureApplyMode = triangulationMode ? "triangles" : "object";
-            document.documentElement.classList.toggle("lab-triangulation-mode", triangulationMode);
+            syncTextureModeDocClass();
             if (triangulationMode) {
                 faceDrawController?.setActive?.(true);
             } else {
@@ -8507,7 +9305,7 @@ export function initCubeEditor(ctx) {
             syncTextureModeButtons(textureApplyMode);
             showStatus(
                 triangulationMode
-                    ? "Mode Triangles — glisser = sélection, clic droit = caméra"
+                    ? "Mode Triangles — glisser = sélection, clic droit = vider"
                     : "Mode Objet complet"
             );
         },
@@ -8516,7 +9314,7 @@ export function initCubeEditor(ctx) {
             if (!triangulationMode) return;
             triangulationMode = false;
             textureApplyMode = "object";
-            document.documentElement.classList.remove("lab-triangulation-mode");
+            syncTextureModeDocClass();
             faceDrawController?.clearTriangleSelection?.();
             applyTriangulationOverlays(false);
             syncTextureModeButtons("object");
@@ -8527,7 +9325,7 @@ export function initCubeEditor(ctx) {
             textureApplyMode = next;
             const enableTris = next === "triangles";
             triangulationMode = enableTris;
-            document.documentElement.classList.toggle("lab-triangulation-mode", triangulationMode);
+            syncTextureModeDocClass();
             if (triangulationMode) {
                 faceDrawController?.setActive?.(true);
                 faceDrawController?.clearFaceSelectionHighlight?.();
@@ -8538,15 +9336,16 @@ export function initCubeEditor(ctx) {
             syncTextureModeButtons(next);
             showStatus(
                 next === "triangles"
-                    ? "Mode Triangles — sélectionnez puis déposez une texture"
+                    ? "Mode Triangles — glisser = sélection, clic droit = vider"
                     : next === "face"
-                      ? "Mode Face — déposez sur une face de cube / panneau"
+                      ? "Mode Face — cliquez une face, clic droit = vider"
                       : "Mode Objet — déposez sur l’objet entier"
             );
         },
         getTextureApplyMode: () => textureApplyMode,
         isTriangulationMode: () => triangulationMode,
         clearTriangleSelection: () => faceDrawController?.clearTriangleSelection?.(),
+        deleteTriangleSelection: () => deleteTriangleSelection(),
         getSelectedObjects: () => [...selectedObjects],
         getSelectedObject: () => selectedObject,
         pickLabObjectAt,

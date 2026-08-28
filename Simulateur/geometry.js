@@ -80,6 +80,16 @@ import {
     ESP32_DEVKIT_HIT_DY,
 } from './esp32-devkit-layout.js';
 import {
+    ESP32_UPESY_LP_JUNC_L,
+    ESP32_UPESY_LP_JUNC_R,
+    ESP32_UPESY_LP_LEFT_PINS,
+    ESP32_UPESY_LP_RIGHT_PINS,
+    ESP32_UPESY_LP_LEFT_PIN_Y,
+    ESP32_UPESY_LP_RIGHT_PIN_Y,
+    ESP32_UPESY_LP_HIT_DX,
+    ESP32_UPESY_LP_HIT_DY,
+} from './esp32-upesy-lp-layout.js';
+import {
     GROVE_LCD_PINS,
     GROVE_LCD_PIN_Y,
     GROVE_LCD_JUNC_X,
@@ -183,7 +193,7 @@ export function getComponentJonctions(comp) {
     const rad = (comp.rotation || 0) * Math.PI / 180;
     let localPts = [];
 
-    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'bode_analyzer', 'speaker', 'led', 'push_button'].includes(comp.type)) {
+    if (['battery', 'resistor', 'voltmeter', 'ammeter', 'ohmmeter', 'bode_analyzer', 'speaker', 'led', 'ldr', 'push_button'].includes(comp.type)) {
         localPts = [{ id: `${comp.label}_in`, x: -40, y: 0 }, { id: `${comp.label}_out`, x: 40, y: 0 }];
     } else if (comp.type === 'dc_motor') {
         localPts = [
@@ -376,6 +386,13 @@ export function getComponentJonctions(comp) {
         ESP32_DEVKIT_RIGHT_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: ESP32_DEVKIT_JUNC_R, y: ESP32_DEVKIT_RIGHT_PIN_Y[i] });
         });
+    } else if (comp.type === 'esp32_upesy_lp') {
+        ESP32_UPESY_LP_LEFT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_UPESY_LP_JUNC_L, y: ESP32_UPESY_LP_LEFT_PIN_Y[i] });
+        });
+        ESP32_UPESY_LP_RIGHT_PINS.forEach((n, i) => {
+            localPts.push({ id: `${comp.label}_${n}`, x: ESP32_UPESY_LP_JUNC_R, y: ESP32_UPESY_LP_RIGHT_PIN_Y[i] });
+        });
     } else if (comp.type === 'arduino_uno') {
         UNO_LEFT_PINS.forEach((n, i) => {
             localPts.push({ id: `${comp.label}_${n}`, x: UNO_JUNC_L, y: UNO_LEFT_PIN_Y[i] });
@@ -390,7 +407,7 @@ export function getComponentJonctions(comp) {
     localPts.forEach(pt => {
         let lx = pt.x;
         let ly = pt.y;
-        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'lm386' && comp.type !== 'lm7805' && comp.type !== 'ir2104' && comp.type !== 'l293d' && comp.type !== 'arduino_uno' && comp.type !== 'esp32_c3' && comp.type !== 'esp32_devkit' && comp.type !== 'npn' && comp.type !== 'nmos' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'matrix_8x8' && comp.type !== 'grove_dht22') {
+        if (comp.type !== 'gimp' && comp.type !== 'gsin' && comp.type !== 'gsqr' && comp.type !== 'oscilloscope' && comp.type !== 'd_flipflop' && comp.type !== 'jk_flipflop' && comp.type !== 'cd4511' && comp.type !== 'ic_74hc90' && comp.type !== 'lm386' && comp.type !== 'lm7805' && comp.type !== 'ir2104' && comp.type !== 'l293d' && comp.type !== 'arduino_uno' && comp.type !== 'esp32_c3' && comp.type !== 'esp32_devkit' && comp.type !== 'esp32_upesy_lp' && comp.type !== 'npn' && comp.type !== 'nmos' && comp.type !== 'opamp' && comp.type !== 'seg7' && comp.type !== 'bargraph_dc10h' && comp.type !== 'matrix_8x8' && comp.type !== 'grove_dht22') {
             const rx = lx * Math.cos(rad) - ly * Math.sin(rad);
             const ry = lx * Math.sin(rad) + ly * Math.cos(rad);
             lx = rx;
@@ -398,7 +415,7 @@ export function getComponentJonctions(comp) {
         }
         if (comp.flipX && (comp.type === 'npn' || comp.type === 'nmos' || comp.type === 'opamp' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18')) lx = -lx;
         if (comp.flipY && comp.type === 'opamp') ly = -ly;
-        const exactJunc = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'lm7805' || comp.type === 'ir2104' || comp.type === 'l293d' || comp.type === 'dc_motor' || comp.type === 'servo_motor' || comp.type === 'potentiometer' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit';
+        const exactJunc = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'lm7805' || comp.type === 'ir2104' || comp.type === 'l293d' || comp.type === 'dc_motor' || comp.type === 'servo_motor' || comp.type === 'potentiometer' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'esp32_upesy_lp';
         const wx = comp.x + lx;
         const wy = comp.y + ly;
         list.push({ id: pt.id, x: exactJunc ? wx : snapToGrid(wx), y: exactJunc ? wy : snapToGrid(wy) });
@@ -420,6 +437,7 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'l293d') return dx < L293D_HIT_DX && dy < L293D_HIT_DY;
     if (comp.type === 'esp32_c3') return dx < ESP32_HIT_DX && dy < ESP32_HIT_DY;
     if (comp.type === 'esp32_devkit') return dx < ESP32_DEVKIT_HIT_DX && dy < ESP32_DEVKIT_HIT_DY;
+    if (comp.type === 'esp32_upesy_lp') return dx < ESP32_UPESY_LP_HIT_DX && dy < ESP32_UPESY_LP_HIT_DY;
     if (comp.type === 'arduino_uno') return dx < UNO_HIT_DX && dy < UNO_HIT_DY;
     if (comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr') return dx < 45 && dy < 50;
     if (comp.type === 'oscilloscope') return dx < 52 && dy < 62;
@@ -475,6 +493,7 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;
     if (comp.type === 'push_button') return dx < 34 && dy < 26;
     if (comp.type === 'potentiometer') return dx < 34 && dy < 38;
+    if (comp.type === 'ldr') return dx < 42 && dy < 58;
     return dx < 30 && dy < 30;
 }
 
@@ -494,6 +513,15 @@ export function potentiometerControlHit(comp, mx, my) {
     const { x, y } = compLocalCoords(comp, mx, my);
     if (x >= -16 && x <= -2 && y >= 11 && y <= 25) return 'dec';
     if (x >= 2 && x <= 16 && y >= 11 && y <= 25) return 'inc';
+    return null;
+}
+
+/** Clic sur ◀ / ▶ de la photorésistance (luminosité). */
+export function ldrControlHit(comp, mx, my) {
+    if (comp.type !== 'ldr') return null;
+    const { x, y } = compLocalCoords(comp, mx, my);
+    if (x >= -16 && x <= -2 && y >= 14 && y <= 30) return 'dec';
+    if (x >= 2 && x <= 16 && y >= 14 && y <= 30) return 'inc';
     return null;
 }
 

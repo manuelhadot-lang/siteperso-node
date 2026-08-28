@@ -1,5 +1,6 @@
 // renderer.js
 import { canvas, ctx as mainCtx, GRID_SIZE, scale, pan, flags, circuit, interaction, zone, menuDrag, snapToGrid, simulationResults } from './state.js';
+import { ldrResistanceOhm, formatLdrOhms, formatLdrLux, LDR_DEFAULT_LUX } from './Engine/ldr.mjs';
 
 let rCtx = mainCtx;
 let rCanvas = canvas;
@@ -155,6 +156,24 @@ import {
     ESP32_DEVKIT_GPIO_PINS,
     formatEsp32DevkitPinLabel,
 } from './esp32-devkit-layout.js';
+import {
+    ESP32_UPESY_LP_BOX_B,
+    ESP32_UPESY_LP_BOX_L,
+    ESP32_UPESY_LP_BOX_R,
+    ESP32_UPESY_LP_BOX_T,
+    ESP32_UPESY_LP_JUNC_L,
+    ESP32_UPESY_LP_JUNC_R,
+    ESP32_UPESY_LP_LABEL_L,
+    ESP32_UPESY_LP_LABEL_R,
+    ESP32_UPESY_LP_LEFT_PINS,
+    ESP32_UPESY_LP_RIGHT_PINS,
+    ESP32_UPESY_LP_LEFT_PIN_Y,
+    ESP32_UPESY_LP_RIGHT_PIN_Y,
+    ESP32_UPESY_LP_GPIO_PINS,
+    formatEsp32UpesyLpPinLabel,
+    clampUpesyVbat,
+    UPESY_DEFAULT_VBAT,
+} from './esp32-upesy-lp-layout.js';
 import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction, syncWireEndpointsToJonctions } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
 import { getArduinoPanelWidth } from './arduino-editor.js';
@@ -405,6 +424,27 @@ function splitComponentLabel(label) {
     const m = String(label).match(/^(.+?)(\d+)$/);
     if (m) return { prefix: m[1], suffix: m[2] };
     return { prefix: String(label), suffix: '' };
+}
+
+function drawIncidentLightArrows() {
+    const arrows = [
+        { x1: 22, y1: -28, x2: 8, y2: -14 },
+        { x1: 30, y1: -22, x2: 16, y2: -8 },
+    ];
+    rCtx.lineWidth = 1.75;
+    for (const a of arrows) {
+        rCtx.beginPath();
+        rCtx.moveTo(a.x1, a.y1);
+        rCtx.lineTo(a.x2, a.y2);
+        rCtx.stroke();
+        const ang = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+        rCtx.beginPath();
+        rCtx.moveTo(a.x2, a.y2);
+        rCtx.lineTo(a.x2 - 6 * Math.cos(ang - 0.4), a.y2 - 6 * Math.sin(ang - 0.4));
+        rCtx.moveTo(a.x2, a.y2);
+        rCtx.lineTo(a.x2 - 6 * Math.cos(ang + 0.4), a.y2 - 6 * Math.sin(ang + 0.4));
+        rCtx.stroke();
+    }
 }
 
 function drawLabels(name, value, angle, opts = {}) {
@@ -1668,7 +1708,7 @@ function drawFlipFlopSetReset(ctx, boxTopY, boxBottomY, stubOutside = 30) {
 
 function drawComponentBody(comp) {
     rCtx.save(); rCtx.translate(comp.x, comp.y);
-    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'lm7805' || comp.type === 'ir2104' || comp.type === 'l293d' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'npn' || comp.type === 'nmos' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'matrix_8x8' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18';
+    const noRotate = comp.type === 'gimp' || comp.type === 'gsin' || comp.type === 'gsqr' || comp.type === 'oscilloscope' || comp.type === 'd_flipflop' || comp.type === 'jk_flipflop' || comp.type === 'cd4511' || comp.type === 'ic_74hc90' || comp.type === 'lm386' || comp.type === 'lm7805' || comp.type === 'ir2104' || comp.type === 'l293d' || comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'esp32_upesy_lp' || comp.type === 'npn' || comp.type === 'nmos' || comp.type === 'opamp' || comp.type === 'seg7' || comp.type === 'bargraph_dc10h' || comp.type === 'matrix_8x8' || comp.type === 'grove_lcd16x2' || comp.type === 'grove_dht22' || comp.type === 'grove_tsl2591' || comp.type === 'grove_bmp280' || comp.type === 'joyit_tft18';
     const rot = noRotate ? 0 : (comp.rotation || 0);
     rCtx.rotate(rot * Math.PI / 180);
 
@@ -1797,6 +1837,31 @@ function drawComponentBody(comp) {
         rCtx.fillRect(-20, -10, 40, 20); rCtx.strokeRect(-20, -10, 40, 20);
         rCtx.beginPath(); rCtx.moveTo(-40, 0); rCtx.lineTo(-20, 0); rCtx.moveTo(20, 0); rCtx.lineTo(40, 0); rCtx.stroke();
         drawLabels(comp.label, comp.value || '1K', rot);
+    }
+    else if (comp.type === 'ldr') {
+        const lux = comp.lux ?? LDR_DEFAULT_LUX;
+        rCtx.strokeStyle = '#f9a825'; rCtx.lineWidth = 2; rCtx.fillStyle = COLORS.componentFill;
+        rCtx.fillRect(-20, -10, 40, 20); rCtx.strokeRect(-20, -10, 40, 20);
+        rCtx.beginPath(); rCtx.moveTo(-40, 0); rCtx.lineTo(-20, 0); rCtx.moveTo(20, 0); rCtx.lineTo(40, 0); rCtx.stroke();
+        rCtx.strokeStyle = '#ff9800';
+        drawIncidentLightArrows();
+        rCtx.fillStyle = '#ff9800';
+        rCtx.font = 'bold 13px Arial';
+        rCtx.textAlign = 'center';
+        rCtx.textBaseline = 'middle';
+        rCtx.fillText('◀', -10, 22);
+        rCtx.fillText('▶', 8, 22);
+        drawUprightTextAt(rot, 0, 48, () => {
+            rCtx.fillStyle = '#ff9800';
+            rCtx.font = 'bold 11px Arial';
+            rCtx.textAlign = 'center';
+            rCtx.textBaseline = 'middle';
+            rCtx.fillText(formatLdrLux(lux), 0, 0);
+        });
+        drawLabels(comp.label, formatLdrOhms(ldrResistanceOhm(comp)), rot, {
+            labelX: -46,
+            nameY: -52,
+        });
     }
     else if (comp.type === 'potentiometer') {
         const pos = Math.min(100, Math.max(0, comp.position ?? 50));
@@ -2474,6 +2539,72 @@ function drawComponentBody(comp) {
         rCtx.font = '11px Arial';
         rCtx.textAlign = 'center';
         rCtx.fillText(comp.label, 0, ESP32_DEVKIT_BOX_T - 12);
+    }
+    else if (comp.type === 'esp32_upesy_lp') {
+        rCtx.fillStyle = '#00695c';
+        rCtx.strokeStyle = '#004d40';
+        rCtx.lineWidth = 2;
+        rCtx.fillRect(ESP32_UPESY_LP_BOX_L, ESP32_UPESY_LP_BOX_T, ESP32_UPESY_LP_BOX_R - ESP32_UPESY_LP_BOX_L, ESP32_UPESY_LP_BOX_B - ESP32_UPESY_LP_BOX_T);
+        rCtx.strokeRect(ESP32_UPESY_LP_BOX_L, ESP32_UPESY_LP_BOX_T, ESP32_UPESY_LP_BOX_R - ESP32_UPESY_LP_BOX_L, ESP32_UPESY_LP_BOX_B - ESP32_UPESY_LP_BOX_T);
+        rCtx.beginPath();
+        ESP32_UPESY_LP_LEFT_PIN_Y.forEach((y) => {
+            rCtx.moveTo(ESP32_UPESY_LP_JUNC_L, y);
+            rCtx.lineTo(ESP32_UPESY_LP_BOX_L, y);
+        });
+        ESP32_UPESY_LP_RIGHT_PIN_Y.forEach((y) => {
+            rCtx.moveTo(ESP32_UPESY_LP_BOX_R, y);
+            rCtx.lineTo(ESP32_UPESY_LP_JUNC_R, y);
+        });
+        rCtx.strokeStyle = '#003d33';
+        rCtx.stroke();
+        rCtx.fillStyle = '#ffffff';
+        rCtx.font = '5px Arial';
+        rCtx.textBaseline = 'middle';
+        rCtx.textAlign = 'left';
+        ESP32_UPESY_LP_LEFT_PINS.forEach((t, i) => rCtx.fillText(formatEsp32UpesyLpPinLabel(t), ESP32_UPESY_LP_LABEL_L, ESP32_UPESY_LP_LEFT_PIN_Y[i]));
+        rCtx.textAlign = 'right';
+        ESP32_UPESY_LP_RIGHT_PINS.forEach((t, i) => rCtx.fillText(formatEsp32UpesyLpPinLabel(t), ESP32_UPESY_LP_LABEL_R, ESP32_UPESY_LP_RIGHT_PIN_Y[i]));
+        rCtx.font = 'bold 9px Arial';
+        rCtx.textAlign = 'center';
+        rCtx.fillStyle = '#ffffff';
+        rCtx.fillText('uPesy LP', 0, -8);
+        rCtx.font = '7px Arial';
+        rCtx.fillText('WROOM-32', 0, 4);
+        rCtx.font = '6px Arial';
+        rCtx.fillStyle = '#b2dfdb';
+        rCtx.fillText(`VBAT ${clampUpesyVbat(comp.vbat ?? UPESY_DEFAULT_VBAT).toFixed(1)}V`, 0, 16);
+        if (flags.isSimulating && comp.label) {
+            ESP32_UPESY_LP_GPIO_PINS.forEach((pinName) => {
+                const lv = simulationResults.logicValues?.[`${comp.label}_${pinName}`]
+                    ?? simulationResults.logicValues?.[`${comp.label}/${pinName}`];
+                if (!lv) return;
+                const idx = ESP32_UPESY_LP_RIGHT_PINS.indexOf(pinName);
+                const side = idx >= 0 ? 'R' : 'L';
+                const pinIdx = side === 'R' ? idx : ESP32_UPESY_LP_LEFT_PINS.indexOf(pinName);
+                if (pinIdx < 0) return;
+                const y = side === 'R' ? ESP32_UPESY_LP_RIGHT_PIN_Y[pinIdx] : ESP32_UPESY_LP_LEFT_PIN_Y[pinIdx];
+                const x = side === 'R' ? ESP32_UPESY_LP_JUNC_R - 8 : ESP32_UPESY_LP_JUNC_L + 8;
+                rCtx.beginPath();
+                rCtx.fillStyle = lv.logic === 1 ? '#76ff03' : '#455a64';
+                rCtx.arc(x, y, 3, 0, Math.PI * 2);
+                rCtx.fill();
+            });
+        }
+        if (comp.lastCompileOk === true) {
+            rCtx.fillStyle = '#76ff03';
+            rCtx.font = '7px Arial';
+            rCtx.textAlign = 'left';
+            rCtx.fillText('✓ compile', ESP32_UPESY_LP_BOX_L + 4, ESP32_UPESY_LP_BOX_B - 6);
+        } else if (comp.lastCompileOk === false) {
+            rCtx.fillStyle = '#ff5252';
+            rCtx.font = '7px Arial';
+            rCtx.textAlign = 'left';
+            rCtx.fillText('✗ compile', ESP32_UPESY_LP_BOX_L + 4, ESP32_UPESY_LP_BOX_B - 6);
+        }
+        rCtx.fillStyle = COLORS.ink;
+        rCtx.font = '11px Arial';
+        rCtx.textAlign = 'center';
+        rCtx.fillText(comp.label, 0, ESP32_UPESY_LP_BOX_T - 12);
     }
     else if (comp.type === 'seg7') {
         drawSeg7Display(comp);

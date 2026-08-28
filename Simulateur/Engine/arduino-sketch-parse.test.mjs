@@ -144,4 +144,84 @@ assert.equal(arduinoRuntimeLevels(rtBtn).GPIO2, 1, "GPIO2 HIGH si GPIO4 à 0");
 stepArduinoRuntime(rtBtn, 60, { GPIO4: 1 }, {});
 assert.equal(arduinoRuntimeLevels(rtBtn).GPIO2, 0, "GPIO2 LOW si GPIO4 relâché");
 
+const veilleur = `const int PIN_LDR = 2;
+const int PIN_LED = 18;
+const int PIN_BUZZER = 19;
+const int SEUIL = 500;
+bool etaitNuit = false;
+void setup() {
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+  Serial.begin(115200);
+}
+void loop() {
+  int luminosite = analogRead(PIN_LDR);
+  Serial.println(luminosite);
+  bool estNuit = (luminosite < SEUIL);
+  digitalWrite(PIN_LED, estNuit ? HIGH : LOW);
+  if (estNuit && !etaitNuit) {
+    digitalWrite(PIN_BUZZER, HIGH);
+    delay(150);
+    digitalWrite(PIN_BUZZER, LOW);
+  }
+  etaitNuit = estNuit;
+  delay(100);
+}`;
+
+const veilleurParsed = parseArduinoSketch(veilleur, "esp32_upesy_lp");
+assert.equal(veilleurParsed.pinModes.GPIO18, "OUTPUT", "pinMode(PIN_LED) → GPIO18");
+assert.equal(veilleurParsed.pinModes.GPIO19, "OUTPUT", "pinMode(PIN_BUZZER) → GPIO19");
+assert.ok(!(veilleurParsed.pinPhases?.length >= 2), "analogRead : pas de phases figées jour/nuit");
+assert.equal(veilleurParsed.pinLevels.GPIO18, 0, "LED éteinte tant que le runtime n'a pas lu l'ADC");
+assert.ok(!veilleurParsed.pinPulses?.GPIO19, "buzzer dans un if : pas de pulsation permanente");
+
+const rtVeilleur = createArduinoRuntime({ type: "esp32_upesy_lp", sketch: veilleur });
+stepArduinoRuntime(rtVeilleur, 200, {}, { GPIO2: 1023 });
+assert.ok(getRuntimeSerialTx(rtVeilleur).includes("1023"), "Serial affiche analogRead(PIN_LDR)");
+assert.equal(arduinoRuntimeLevels(rtVeilleur).GPIO18, 0, "1023 > 500 → jour → LED éteinte");
+stepArduinoRuntime(rtVeilleur, 200, {}, { GPIO2: 100 });
+assert.equal(arduinoRuntimeLevels(rtVeilleur).GPIO18, 1, "100 < 500 → nuit → LED allumée");
+
+const veilleur2b = `const int PIN_LDR = 4;
+const int PIN_LED = 2;
+const int PIN_BUZZER = 19;
+const int SEUIL = 1800;
+bool etaitNuit = false;
+void setup() {
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+  Serial.begin(115200);
+}
+void loop() {
+  int luminosite = analogRead(PIN_LDR);
+  Serial.println(luminosite);
+  bool estNuit = (luminosite < SEUIL);
+  digitalWrite(PIN_LED, estNuit ? HIGH : LOW);
+  etaitNuit = estNuit;
+  delay(100);
+}`;
+const rtVeilleur2b = createArduinoRuntime({ type: "esp32_upesy_lp", sketch: veilleur2b });
+stepArduinoRuntime(rtVeilleur2b, 200, {}, { GPIO4: 4095 });
+assert.equal(arduinoRuntimeLevels(rtVeilleur2b).GPIO2, 0, "4095 < 1800 faux → jour → LED éteinte");
+stepArduinoRuntime(rtVeilleur2b, 200, {}, { GPIO4: 200 });
+assert.equal(arduinoRuntimeLevels(rtVeilleur2b).GPIO2, 1, "200 < 1800 → nuit → LED allumée");
+
+const veilleur10 = `const int PIN_LDR = 4;
+const int PIN_LED = 2;
+const int SEUIL = 500;
+void setup() {
+  analogReadResolution(10);
+  pinMode(PIN_LED, OUTPUT);
+}
+void loop() {
+  int luminosite = analogRead(PIN_LDR);
+  digitalWrite(PIN_LED, luminosite < SEUIL ? HIGH : LOW);
+  delay(100);
+}`;
+const rt10 = createArduinoRuntime({ type: "esp32_upesy_lp", sketch: veilleur10 });
+stepArduinoRuntime(rt10, 200, {}, { GPIO4: 2048 });
+assert.equal(arduinoRuntimeLevels(rt10).GPIO2, 0, "10 bits : 2048→512, 512<500 faux → LED éteinte (~10 lx)");
+stepArduinoRuntime(rt10, 200, {}, { GPIO4: 400 });
+assert.equal(arduinoRuntimeLevels(rt10).GPIO2, 1, "10 bits : 400→100, 100<500 → LED allumée");
+
 console.log("arduino-sketch-parse.test.mjs OK");

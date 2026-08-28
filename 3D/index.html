@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css?v=20260817bounds">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260819ignOsmRoadTexture_overpassProxy">
 
 </head>
 
@@ -328,7 +328,8 @@
                                 <button type="button" class="lab-texlib__mode-btn is-active" data-texlib-mode="object" aria-pressed="true">Objet complet</button>
                                 <button type="button" class="lab-texlib__mode-btn" data-texlib-mode="face" aria-pressed="false">Face</button>
                                 <button type="button" class="lab-texlib__mode-btn" data-texlib-mode="triangles" aria-pressed="false">Triangles</button>
-                                <button type="button" class="lab-texlib__mode-clear" data-texlib-clear-tris title="Vider la sélection de triangles (Échap / Ctrl+Z)" aria-label="Vider sélection triangles">Vider △</button>
+                                <button type="button" class="lab-texlib__mode-clear" data-texlib-clear-tris title="Vider la sélection de triangles (clic droit / Échap / Ctrl+Z)" aria-label="Vider sélection triangles">Vider △</button>
+                                <button type="button" class="lab-texlib__mode-clear lab-texlib__mode-clear--danger" data-texlib-delete-tris title="Supprimer les triangles ou la face ciblée (Suppr)" aria-label="Supprimer la sélection géométrique">Suppr △</button>
                             </div>
                             <p class="lab-texlib__mode-hint" data-texlib-mode-hint>Déposez une texture sur l’objet entier. Tile = dernier objet texturé.</p>
                             <div class="lab-texlib__browser">
@@ -435,9 +436,17 @@
                                 <span class="lab-terrain__icon" aria-hidden="true"></span>
                                 <span class="lab-side-panel__tool-label">Créer sur toute la grille</span>
                             </button>
+                            <button
+                                type="button"
+                                id="btn-import-terrain-ign"
+                                class="lab-side-panel__tool"
+                                title="Choisir une zone sur la carte (zoom) et générer le heightmap IGN"
+                            >
+                                <span class="lab-side-panel__tool-label">Heightmap IGN (carte)</span>
+                            </button>
                             <label class="lab-terrain__range" title="Taille du terrain (mètres)">
                                 <span>Taille <output id="lab-terrain-size-value">50 m</output></span>
-                                <input id="lab-terrain-size" type="range" min="10" max="500" step="1" value="50">
+                                <input id="lab-terrain-size" type="range" min="10" max="2000" step="1" value="50">
                             </label>
                             <div id="lab-terrain-tools" class="lab-terrain__tools" hidden>
                                 <div class="lab-terrain__modes" role="group" aria-label="Outil de terrain">
@@ -467,6 +476,14 @@
                                 </div>
                                 <input id="lab-terrain-texture-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <button type="button" id="btn-terrain-texture" class="lab-terrain__action">Texture générale du sol</button>
+                                <button
+                                    type="button"
+                                    id="btn-terrain-osm-roads"
+                                    class="lab-terrain__action"
+                                    title="Routes et rues OpenStreetMap alignées sur la zone IGN"
+                                >
+                                    Texture routes (OSM)
+                                </button>
                                 <input id="lab-terrain-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <div class="lab-terrain__brush-texture">
                                     <button type="button" id="btn-terrain-normal" class="lab-terrain__action">Normal map du sol</button>
@@ -638,6 +655,19 @@
 
 
             <div id="lab-viewport" class="lab-viewport">
+                <div id="lab-loading-overlay" class="lab-loading-overlay" hidden aria-hidden="true">
+                    <img class="lab-loading-overlay__snapshot" alt="" aria-hidden="true">
+                    <div class="lab-loading-overlay__veil" aria-hidden="true"></div>
+                    <div
+                        class="lab-loading-overlay__bar"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0"
+                    >
+                        <div class="lab-loading-overlay__bar-fill"></div>
+                    </div>
+                </div>
 
                 <div id="lab-object-info" class="lab-object-info" hidden>
                     <p class="lab-object-info__row" title="Cube englobant dans la scène : H = hauteur (Y), L = longueur (X), W = largeur (Z)">
@@ -745,7 +775,8 @@
             "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js",
 
             "three-csg-ts": "https://cdn.jsdelivr.net/npm/three-csg-ts@3.1.10/+esm",
-            "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@2.5.1/manifold.js"
+            "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@2.5.1/manifold.js",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
 
         }
 
@@ -766,8 +797,8 @@
     }, true);
     </script>
 
-    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260817bounds"></script>
-    <script type="module" src="/3D/app.js?v=20260817bounds"></script>
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260819ignOsmRoadTexture_overpassProxy"></script>
+    <script type="module" src="/3D/app.js?v=20260819ignOsmRoadTexture_overpassProxy"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

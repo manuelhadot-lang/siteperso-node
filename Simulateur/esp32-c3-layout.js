@@ -48,6 +48,7 @@ export const ESP32_FQBN = 'esp32:esp32:esp32c3';
 export const ESP32_XIAO_FQBN = 'esp32:esp32:seeed_xiao_esp32c3';
 
 import { ESP32_DEVKIT_UPLOAD_PROFILES } from './esp32-devkit-layout.js';
+import { ESP32_UPESY_LP_UPLOAD_PROFILES } from './esp32-upesy-lp-layout.js';
 
 export const ARDUINO_UNO_FQBN = 'arduino:avr:uno';
 
@@ -61,6 +62,7 @@ export const UPLOAD_PROFILES = {
         { id: 'xiao', label: 'Seeed XIAO ESP32-C3', fqbn: ESP32_XIAO_FQBN },
     ],
     esp32_devkit: ESP32_DEVKIT_UPLOAD_PROFILES,
+    esp32_upesy_lp: ESP32_UPESY_LP_UPLOAD_PROFILES,
 };
 
 export function uploadProfilesForBoardType(boardType) {
@@ -74,6 +76,7 @@ export function normalizeBoardFqbn(comp) {
     if (profiles.some((p) => p.fqbn === fqbn)) return fqbn;
     if (comp.type === 'esp32_c3' && fqbn.includes('esp32')) return ESP32_FQBN;
     if (comp.type === 'esp32_devkit' && fqbn.includes('esp32')) return UPLOAD_PROFILES.esp32_devkit[0]?.fqbn || fqbn;
+    if (comp.type === 'esp32_upesy_lp') return UPLOAD_PROFILES.esp32_upesy_lp[0]?.fqbn || 'esp32:esp32:esp32';
     return profiles[0]?.fqbn || ARDUINO_UNO_FQBN;
 }
 

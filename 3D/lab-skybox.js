@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 import { bindIntensitySliderWheel } from "./lab-lights.js";
 import { applyStudioEnvironment } from "./lab-studio-env.js";
+import { composeEnvMapIntensity } from "./lab-mirror.js";
 
 const { PMREMGenerator } = THREE;
 import {
@@ -25,6 +26,30 @@ const CUBE_FACE_RULES = [
     { id: "pz", patterns: [/pos[_-]?z\b|\+z\b|\bpz\b|\bfront\b|\bfwd\b/i] },
     { id: "nz", patterns: [/neg[_-]?z\b|-z\b|\bnz\b|\bback\b/i] },
 ];
+
+/**
+ * @param {THREE.Material} material
+ */
+function skyboxEnvMapIntensityFor(material) {
+    const refl = material?.userData?._labReflection;
+    if (typeof refl === "number") {
+        return composeEnvMapIntensity(refl, skyboxBrightness);
+    }
+    return skyboxBrightness;
+}
+
+/**
+ * @param {THREE.Material} material
+ */
+function applySkyboxEnvToMaterial(material) {
+    if (!(material instanceof THREE.MeshStandardMaterial)) return;
+    if (!activeEnvTexture) return;
+    material.envMap = activeEnvTexture;
+    material.envMapIntensity = skyboxEnvMapIntensityFor(material);
+    material.userData.labSkyboxEnvMap = true;
+    material.userData._labSkyboxBrightness = skyboxBrightness;
+    material.needsUpdate = true;
+}
 
 const DEFAULT_BACKGROUND = new THREE.Color(0x1a1a1a);
 /** near > 0 : évite d’aplatir le contraste / la profondeur en FPS dans une pièce. */
@@ -309,12 +334,7 @@ function applySkyboxBrightness(scene, renderer) {
         if (!(child instanceof THREE.Mesh)) return;
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
-            if (!(material instanceof THREE.MeshStandardMaterial)) return;
-            if (!activeEnvTexture) return;
-            material.envMap = activeEnvTexture;
-            material.envMapIntensity = skyboxBrightness;
-            material.userData.labSkyboxEnvMap = true;
-            material.needsUpdate = true;
+            applySkyboxEnvToMaterial(material);
         });
     });
 }
@@ -329,11 +349,7 @@ function applySkyboxMaterials(scene) {
         if (!(child instanceof THREE.Mesh)) return;
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach((material) => {
-            if (!(material instanceof THREE.MeshStandardMaterial)) return;
-            material.envMap = activeEnvTexture;
-            material.envMapIntensity = skyboxBrightness;
-            material.userData.labSkyboxEnvMap = true;
-            material.needsUpdate = true;
+            applySkyboxEnvToMaterial(material);
         });
     });
 }
@@ -388,6 +404,11 @@ function hideSkyboxFromScene(scene, renderer) {
             if (!(material instanceof THREE.MeshStandardMaterial)) return;
             material.envMap = null;
             delete material.userData.labSkyboxEnvMap;
+            delete material.userData._labSkyboxBrightness;
+            const refl = material.userData._labReflection;
+            if (typeof refl === "number") {
+                material.envMapIntensity = composeEnvMapIntensity(refl, 1);
+            }
             material.needsUpdate = true;
         });
     });
@@ -714,10 +735,5 @@ export function bindSkyboxBrightnessSliderWheel(slider, applyValue) {
 }
 
 export function applySkyboxToNewMaterial(material) {
-    if (!(material instanceof THREE.MeshStandardMaterial)) return;
-    if (!loadedSkybox || !skyboxVisible || !activeEnvTexture) return;
-    material.envMap = activeEnvTexture;
-    material.envMapIntensity = skyboxBrightness;
-    material.userData.labSkyboxEnvMap = true;
-    material.needsUpdate = true;
+    applySkyboxEnvToMaterial(material);
 }

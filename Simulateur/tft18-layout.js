@@ -46,4 +46,5 @@ export const TFT18_SPI_DEFAULTS = {
     arduino_uno: { SCL: 'D13', SDA: 'D11', CS: 'D10', DC: 'D8', RES: 'D9' },
     esp32_c3: { SCL: 'GPIO8', SDA: 'GPIO10', CS: 'GPIO6', DC: 'GPIO7', RES: 'GPIO5' },
     esp32_devkit: { SCL: 'GPIO18', SDA: 'GPIO23', CS: 'GPIO5', DC: 'GPIO16', RES: 'GPIO17' },
+    esp32_upesy_lp: { SCL: 'GPIO18', SDA: 'GPIO23', CS: 'GPIO5', DC: 'GPIO16', RES: 'GPIO17' },
 };

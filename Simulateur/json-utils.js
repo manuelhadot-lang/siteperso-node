@@ -72,6 +72,9 @@ export function migrateLoadedComponents(components) {
             if (comp.i2cAddress == null) comp.i2cAddress = 0x29;
             if (comp.lux == null || !Number.isFinite(comp.lux)) comp.lux = 100;
         }
+        if (comp.type === 'ldr') {
+            if (comp.lux == null || !Number.isFinite(comp.lux)) comp.lux = 100;
+        }
         if (comp.type === 'grove_bmp280') {
             comp.flipX = !!comp.flipX;
             if (comp.i2cAddress == null) comp.i2cAddress = 0x76;
@@ -93,8 +96,12 @@ export function migrateLoadedComponents(components) {
             comp.flipX = !!comp.flipX;
             comp.rotation = 0;
         }
-        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit') {
+        if (comp.type === 'arduino_uno' || comp.type === 'esp32_c3' || comp.type === 'esp32_devkit' || comp.type === 'esp32_upesy_lp') {
             comp.fqbn = normalizeBoardFqbn(comp);
+            if (comp.type === 'esp32_upesy_lp') {
+                const n = Number(comp.vbat);
+                comp.vbat = Number.isFinite(n) ? Math.max(3, Math.min(4.3, n)) : 3.7;
+            }
         }
     }
     return components;

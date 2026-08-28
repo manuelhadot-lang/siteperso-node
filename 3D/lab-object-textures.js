@@ -2,7 +2,15 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import { getPlaceholderWhiteTexture, syncPaintUvChannel, restoreFaceAlbedoMapUvs } from "./lab-face-draw.js";
+import {
+    getPlaceholderWhiteTexture,
+    syncPaintUvChannel,
+    restoreFaceAlbedoMapUvs,
+    FACE_ALBEDO_MAP_KEY,
+    FACE_NORMAL_MAP_KEY,
+    FACE_SPECULAR_MAP_KEY,
+    FACE_ROUGHNESS_MAP_KEY,
+} from "./lab-face-draw.js";
 import {
     applyArchMeshPlanarUvs,
     ARCH_SURFACE_TEXTURED_KEY,
@@ -70,11 +78,14 @@ const RUNTIME_ROUGHNESS_TEXTURE_KEY = "_labRoughnessTexture";
 const GLASS_RESTORE_KEY = "_glassRestore";
 
 function isContentMesh(child) {
+    const name = String(child.name || "");
     return (
         child instanceof THREE.Mesh &&
         child.name !== "shadow-overlay" &&
         !child.userData?.skipObjectPbr &&
-        !child.userData?.labVegetationMesh
+        !child.userData?.labVegetationMesh &&
+        !child.userData?.archOpeningFill &&
+        !name.startsWith("arch-opening-")
     );
 }
 
@@ -84,15 +95,54 @@ function isContentMesh(child) {
  * @param {THREE.Object3D} child
  */
 function isMaterialEditableMesh(child) {
+    const name = String(child.name || "");
     return (
         child instanceof THREE.Mesh &&
         child.name !== "shadow-overlay" &&
         !child.userData?.labVegetationMesh &&
+        !child.userData?.archOpeningFill &&
+        !name.startsWith("arch-opening-") &&
+        !child.userData?.archOpeningFill &&
+        !name.startsWith("arch-opening-") &&
         !(typeof child.name === "string" && child.name.startsWith("lab-triangle-texture-overlay")) &&
         !(typeof child.name === "string" && child.name === "lab-triangle-selection-overlay") &&
         !(typeof child.name === "string" && child.name === "lab-face-selection-overlay") &&
         !(typeof child.name === "string" && child.name.startsWith("lab-mirror-face-"))
     );
+}
+
+/**
+ * @param {THREE.Object3D} object
+ * @param {(child: THREE.Mesh) => void} fn
+ */
+/**
+ * Matériau texturé en mode Face — ne pas l’écraser par une map / un scalaire objet.
+ * @param {THREE.Material | null | undefined} material
+ */
+function isFaceMappedMaterial(material) {
+    const ud = material?.userData;
+    if (!ud) return false;
+    return !!(
+        ud[FACE_ALBEDO_MAP_KEY] ||
+        ud[FACE_NORMAL_MAP_KEY] ||
+        ud[FACE_SPECULAR_MAP_KEY] ||
+        ud[FACE_ROUGHNESS_MAP_KEY]
+    );
+}
+
+function forEachAppearanceMesh(object, fn) {
+    const fillRoot = !!object?.userData?.labArchOpeningFill;
+    object?.traverse((child) => {
+        if (fillRoot) {
+            if (!(child instanceof THREE.Mesh) || child.name === "shadow-overlay") return;
+            const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+            if (mat?.transparent && Number(mat.opacity) < 0.45) return;
+            fn(child);
+            return;
+        }
+        if (!isMaterialEditableMesh(child)) return;
+        fn(child);
+    });
 }
 
 /**
@@ -577,6 +627,7 @@ export function applyObjectTextureTransform(object, transform) {
  * @param {number} opacity
  */
 function syncMaterialOpacity(material, opacity) {
+    if (isFaceMappedMaterial(material)) return;
     const value = THREE.MathUtils.clamp(opacity, OPACITY_MIN, OPACITY_MAX);
     const glass = !!material.userData?._labGlass;
     if (glass && material.isMeshPhysicalMaterial) {
@@ -702,8 +753,7 @@ export function getObjectOpacity(object) {
 export function applyObjectOpacity(object, opacity) {
     const value = THREE.MathUtils.clamp(opacity, OPACITY_MIN, OPACITY_MAX);
     object.userData[OBJECT_OPACITY_KEY] = value;
-    object.traverse((child) => {
-        if (!isMaterialEditableMesh(child)) return;
+    forEachAppearanceMesh(object, (child) => {
         syncMeshOpacity(child, value);
     });
 }
@@ -747,7 +797,11 @@ export function applyObjectGlass(object, enabled) {
         object.traverse((child) => {
             if (!isMaterialEditableMesh(child)) return;
             const mats = ensureObjectMaterials(child);
-            const next = mats.map((material) => polishObjectGlassMaterial(material, true));
+            const next = mats.map((material) =>
+                isFaceMappedMaterial(material)
+                    ? material
+                    : polishObjectGlassMaterial(material, true)
+            );
             child.material = Array.isArray(child.material) ? next : next[0];
             child.renderOrder = 2;
         });
@@ -763,7 +817,11 @@ export function applyObjectGlass(object, enabled) {
     object.traverse((child) => {
         if (!isMaterialEditableMesh(child)) return;
         const mats = ensureObjectMaterials(child);
-        const next = mats.map((material) => polishObjectGlassMaterial(material, false));
+        const next = mats.map((material) =>
+            isFaceMappedMaterial(material)
+                ? material
+                : polishObjectGlassMaterial(material, false)
+        );
         child.material = Array.isArray(child.material) ? next : next[0];
         child.renderOrder = 0;
     });
@@ -871,7 +929,9 @@ export function applyObjectMetalness(object, metalness) {
     // Mode verre objet actif : ne pas démolir le Physical (restauration / course async).
     if (isObjectGlassEnabled(object)) return;
     object.traverse((child) => {
-        if (!isMaterialEditableMesh(child)) return;
+        if (object?.userData?.labArchOpeningFill) {
+            if (!(child instanceof THREE.Mesh) || child.name === "shadow-overlay") return;
+        } else if (!isMaterialEditableMesh(child)) return;
         const mats = ensureObjectMaterials(child);
         const next = mats.map((material) => {
             let mat = material;
@@ -884,6 +944,7 @@ export function applyObjectMetalness(object, metalness) {
             ) {
                 return mat;
             }
+            if (isFaceMappedMaterial(mat)) return mat;
             mat.metalness = value;
             if (mat.metalnessMap) {
                 mat.metalnessMap = null;
@@ -1326,6 +1387,7 @@ export function releaseObjectTexture(object) {
         if (!isContentMesh(child)) return;
         if (String(child.name || "").startsWith("arch-plinth-")) return;
         ensureObjectMaterials(child).forEach((material) => {
+            if (isFaceMappedMaterial(material)) return;
             // Un matériau de face peint doit garder une map (même un
             // placeholder blanc) pour que le shader du dessin reste valide
             // (USE_MAP / vUv toujours définis) — jamais null.
@@ -1351,6 +1413,7 @@ export function releaseObjectNormalTexture(object) {
     object.traverse((child) => {
         if (!isContentMesh(child)) return;
         ensureObjectMaterials(child).forEach((material) => {
+            if (isFaceMappedMaterial(material)) return;
             material.normalMap = null;
             material.needsUpdate = true;
         });
@@ -1368,6 +1431,7 @@ export function releaseObjectSpecularTexture(object) {
     object.traverse((child) => {
         if (!isContentMesh(child)) return;
         ensureObjectMaterials(child).forEach((material) => {
+            if (isFaceMappedMaterial(material)) return;
             material.metalnessMap = null;
             material.needsUpdate = true;
         });
@@ -1392,6 +1456,7 @@ export function releaseObjectRoughnessTexture(object) {
     object.traverse((child) => {
         if (!isContentMesh(child)) return;
         ensureObjectMaterials(child).forEach((material) => {
+            if (isFaceMappedMaterial(material)) return;
             material.roughnessMap = null;
             material.needsUpdate = true;
         });
@@ -1412,9 +1477,9 @@ export function getObjectRoughnessTextureDataUrl(object) {
 export function applyObjectRoughness(object, roughness) {
     const value = THREE.MathUtils.clamp(roughness, ROUGHNESS_MIN, ROUGHNESS_MAX);
     object.userData[OBJECT_ROUGHNESS_KEY] = value;
-    object.traverse((child) => {
-        if (!isMaterialEditableMesh(child)) return;
+    forEachAppearanceMesh(object, (child) => {
         ensureObjectMaterials(child).forEach((material) => {
+            if (isFaceMappedMaterial(material)) return;
             material.roughness = value;
             // Curseur rugosité : ne plus laisser roughnessMap écraser le réglage.
             if (material.roughnessMap) {
@@ -1449,7 +1514,7 @@ export function applyObjectTexture(object, dataUrl) {
             // Surfaces Face Architecture : ne pas écraser les maps de panneau.
             if (typeof child.userData?.[ARCH_SURFACE_TEXTURED_KEY] === "string") return;
             ensureObjectMaterials(child).forEach((material) => {
-                if (material.userData?._labFaceAlbedoMap) return;
+                if (isFaceMappedMaterial(material)) return;
                 // Une vraie texture remplace le placeholder blanc du dessin :
                 // on retire le repère "placeholder" pour ne pas le supprimer
                 // par erreur plus tard.
@@ -1486,7 +1551,7 @@ export function applyObjectNormalTexture(object, dataUrl) {
             if (!isContentMesh(child)) return;
             if (typeof child.userData?.[ARCH_SURFACE_TEXTURED_KEY] === "string") return;
             ensureObjectMaterials(child).forEach((material) => {
-                if (material.userData?._labFaceNormalMap) return;
+                if (isFaceMappedMaterial(material)) return;
                 material.normalMap = texture;
                 material.normalScale.set(normalScale, normalScale);
                 material.needsUpdate = true;
@@ -1517,7 +1582,7 @@ export function applyObjectSpecularTexture(object, dataUrl) {
             if (!isContentMesh(child)) return;
             if (typeof child.userData?.[ARCH_SURFACE_TEXTURED_KEY] === "string") return;
             ensureObjectMaterials(child).forEach((material) => {
-                if (material.userData?._labFaceSpecularMap) return;
+                if (isFaceMappedMaterial(material)) return;
                 material.metalnessMap = texture;
                 if (typeof material.metalness !== "number" || material.metalness < 0.2) {
                     material.metalness = 1;
@@ -1550,7 +1615,7 @@ export function applyObjectRoughnessTexture(object, dataUrl) {
             if (!isContentMesh(child)) return;
             if (typeof child.userData?.[ARCH_SURFACE_TEXTURED_KEY] === "string") return;
             ensureObjectMaterials(child).forEach((material) => {
-                if (material.userData?._labFaceRoughnessMap) return;
+                if (isFaceMappedMaterial(material)) return;
                 material.roughnessMap = texture;
                 // La map module le facteur : 1 = pleine amplitude de la texture.
                 if (typeof material.roughness !== "number" || material.roughness < 0.2) {

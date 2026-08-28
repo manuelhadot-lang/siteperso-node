@@ -430,6 +430,8 @@ export function initGallery(container, ui) {
     function serializeView() {
         return {
             mode: movementMode,
+            gridVisible: gridHelper.visible !== false,
+            floorVisible: floorUserVisible !== false,
             yaw: {
                 x: yaw.position.x,
                 y: yaw.position.y,
@@ -457,6 +459,13 @@ export function initGallery(container, ui) {
         if (!view || typeof view !== "object") return false;
         const raw = /** @type {Record<string, unknown>} */ (view);
         const mode = normalizeMode(typeof raw.mode === "string" ? raw.mode : "design");
+        if (typeof raw.gridVisible === "boolean") {
+            gridHelper.visible = raw.gridVisible;
+            environmentRegistry?.refresh?.();
+        }
+        if (typeof raw.floorVisible === "boolean") {
+            setFloorUserVisible(raw.floorVisible);
+        }
 
         const ot = raw.orbitTarget && typeof raw.orbitTarget === "object"
             ? /** @type {Record<string, unknown>} */ (raw.orbitTarget)
@@ -781,6 +790,25 @@ export function initGallery(container, ui) {
             pendingRightClick = null;
             rightClickHandledThisGesture = true;
             return;
+        }
+        // Mode Triangles / Face : pas de menu objet — le clic droit vide la sélection.
+        if (
+            document.documentElement.classList.contains("lab-triangulation-mode") ||
+            document.documentElement.classList.contains("lab-face-apply-mode")
+        ) {
+            pendingRightClick = null;
+            rightClickHandledThisGesture = true;
+            return;
+        }
+        // Glisser droit = caméra : ne pas traiter comme un clic (menu).
+        if (pendingRightClick) {
+            const dx = event.clientX - pendingRightClick.startX;
+            const dy = event.clientY - pendingRightClick.startY;
+            if (dx * dx + dy * dy >= CLICK_THRESHOLD_PX * CLICK_THRESHOLD_PX) {
+                pendingRightClick = null;
+                rightClickHandledThisGesture = true;
+                return;
+            }
         }
         pendingRightClick = null;
         rightClickHandledThisGesture = true;
@@ -1151,12 +1179,18 @@ export function initGallery(container, ui) {
         }
     }
 
+    function getMaxOrbitDistance() {
+        return Math.max(280, worldSizeMeters * 3.8);
+    }
+
     /**
-     * Cadre le terrain : vue rapprochée et plongeante (le relief reste visible).
+     * Cadre le terrain.
      * @param {THREE.Object3D} object
+     * @param {{ overview?: boolean }} [opts] overview = vue d’ensemble (dézoom)
      */
-    function focusOnTerrainRelief(object) {
+    function focusOnTerrainRelief(object, opts = {}) {
         if (!object) return;
+        const overview = !!opts.overview;
         enterExplore();
 
         object.updateWorldMatrix(true, true);
@@ -1164,7 +1198,32 @@ export function initGallery(container, ui) {
         focusBox.getCenter(focusTarget);
         const size = focusBox.getSize(focusSize);
         const span = Math.max(size.x, size.z, 1);
-        const relief = Math.max(size.y, 0.3);
+        const relief = Math.max(size.y, 0.5);
+        const reliefRatio = relief / span;
+        const maxOrbit = getMaxOrbitDistance();
+
+        if (movementMode === "design") {
+            orbitTarget.copy(focusTarget);
+            if (overview) {
+                orbitTarget.y = focusTarget.y + relief * 0.12;
+                orbitDistance = THREE.MathUtils.clamp(span * 1.55, span * 0.9, maxOrbit);
+                orbitPhi = THREE.MathUtils.clamp(0.28 + relief / Math.max(span * 2.5, 1), 0.22, 0.48);
+            } else {
+                orbitTarget.y += relief * 0.35;
+                orbitDistance = THREE.MathUtils.clamp(
+                    span * (reliefRatio > 0.08 ? 0.48 : 0.38),
+                    10,
+                    Math.min(maxOrbit, Math.max(span * 0.95, 60))
+                );
+                orbitPhi = THREE.MathUtils.clamp(
+                    0.55 + relief / Math.max(span * 0.85, 1),
+                    0.52,
+                    1.12
+                );
+            }
+            applyOrbitCamera();
+            return;
+        }
 
         const distance = THREE.MathUtils.clamp(span * 0.32, 16, 85);
         const eyeHeight = Math.max(relief * 2.8, span * 0.1, 5);
@@ -1192,7 +1251,7 @@ export function initGallery(container, ui) {
             orbitDistance = THREE.MathUtils.clamp(
                 orbitDistance * Math.exp(notch * WHEEL_ORBIT_ZOOM),
                 0.08,
-                120
+                getMaxOrbitDistance()
             );
             applyOrbitCamera();
             return;

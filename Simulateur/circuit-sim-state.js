@@ -12,6 +12,7 @@ import { servoMotorJonctionToTerminalKey } from './servo-motor-layout.js';
 import { arduinoUnoJonctionToTerminalKey } from './arduino-uno-layout.js';
 import { esp32C3JonctionToTerminalKey, ESP32_FQBN } from './esp32-c3-layout.js';
 import { esp32DevkitJonctionToTerminalKey, ESP32_DEVKIT_FQBN } from './esp32-devkit-layout.js';
+import { esp32UpesyLpJonctionToTerminalKey, ESP32_UPESY_LP_FQBN, UPESY_DEFAULT_VBAT, clampUpesyVbat } from './esp32-upesy-lp-layout.js';
 import { isMicroBoard } from './micro-board.js';
 import { applyArduinoSketchToComponent } from './Engine/arduino-sketch-parse.mjs';
 import { snapToGrid } from './grid-constants.js';
@@ -21,7 +22,7 @@ const COMPONENT_TYPE_TO_ENGINE = {
     gnd: 'ground',
     not: 'logic_not', and: 'logic_and', nand: 'logic_nand', or: 'logic_or', nor: 'logic_nor', xor: 'logic_xor', xnor: 'logic_xnor',
     d_flipflop: 'logic_dff', jk_flipflop: 'logic_jk', cd4511: 'logic_cd4511', ic_74hc90: 'ic_74hc90',
-    arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', esp32_devkit: 'esp32_devkit',
+    arduino_uno: 'arduino_uno', esp32_c3: 'esp32_c3', esp32_devkit: 'esp32_devkit', esp32_upesy_lp: 'esp32_upesy_lp',
     led: 'diode_led', seg7: 'seg7', bargraph_dc10h: 'bargraph_dc10h', matrix_8x8: 'matrix_8x8',
     grove_lcd16x2: 'grove_lcd16x2', grove_dht22: 'grove_dht22', grove_tsl2591: 'grove_tsl2591',
     grove_bmp280: 'grove_bmp280', joyit_tft18: 'joyit_tft18',
@@ -188,6 +189,9 @@ export function jonctionIdToTerminalKey(jonctionId, components, autoJunctions = 
         } else if (comp.type === 'esp32_devkit') {
             const key = esp32DevkitJonctionToTerminalKey(id, jonctionId);
             if (key) return key;
+        } else if (comp.type === 'esp32_upesy_lp') {
+            const key = esp32UpesyLpJonctionToTerminalKey(id, jonctionId);
+            if (key) return key;
         } else if (comp.type === 'arduino_uno') {
             const key = arduinoUnoJonctionToTerminalKey(id, jonctionId);
             if (key) return key;
@@ -239,6 +243,7 @@ export function buildSimStateFromCircuit(circuitData) {
             out.value = comp.value || '10k';
             out.position = comp.position ?? 50;
         }
+        if (comp.type === 'ldr') out.lux = comp.lux ?? 100;
         if (comp.type === 'switch_spdt') out.state = comp.state ?? 0;
         if (comp.type === 'push_button') out.state = comp.state ?? 0;
         if (comp.type === 'capacitor') out.value = comp.value || '1u';
@@ -286,12 +291,13 @@ export function buildSimStateFromCircuit(circuitData) {
         if (isMicroBoard(comp)) {
             applyArduinoSketchToComponent(comp);
             out.sketch = comp.sketch || '';
-            out.fqbn = comp.fqbn || (comp.type === 'esp32_c3' ? ESP32_FQBN : comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : 'arduino:avr:uno');
+            out.fqbn = comp.fqbn || (comp.type === 'esp32_c3' ? ESP32_FQBN : comp.type === 'esp32_devkit' ? ESP32_DEVKIT_FQBN : comp.type === 'esp32_upesy_lp' ? ESP32_UPESY_LP_FQBN : 'arduino:avr:uno');
             out.pinModes = comp.pinModes || {};
             out.pinLevels = comp.pinLevels || {};
             out.pinPulses = comp.pinPulses || {};
             out.pinPhases = comp.pinPhases || [];
             out.avrRegisters = comp.avrRegisters || null;
+            if (comp.type === 'esp32_upesy_lp') out.vbat = clampUpesyVbat(comp.vbat ?? UPESY_DEFAULT_VBAT);
         }
         return out;
     });

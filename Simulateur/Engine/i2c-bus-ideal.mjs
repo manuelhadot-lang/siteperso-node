@@ -54,6 +54,9 @@ function isLcdPoweredEngine(lcdId, components, wires) {
             } else if (comp.type === "esp32_devkit") {
                 if (vccNet.has(`${id}#0`) || vccNet.has(`${id}#35`)) vccOk = true;
                 if (gndNet.has(`${id}#13`) || gndNet.has(`${id}#23`)) gndOk = true;
+            } else if (comp.type === "esp32_upesy_lp") {
+                if (vccNet.has(`${id}#30`) || vccNet.has(`${id}#14`)) vccOk = true;
+                if (gndNet.has(`${id}#15`) || gndNet.has(`${id}#31`)) gndOk = true;
             }
         }
         if (gndNet.has(`${id}#0`) || gndNet.has(`${id}#1`)) {

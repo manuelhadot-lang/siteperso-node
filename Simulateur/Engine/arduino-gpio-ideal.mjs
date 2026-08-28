@@ -16,6 +16,7 @@ import {
     isMicroBoardType,
     isEsp32BoardType,
 } from "./micro-board-config.mjs";
+import { resolveNetVoltage } from "./arduino-analog-ideal.mjs";
 
 const CD4511_BCD_INPUTS = { A: 0, B: 1, C: 2, D: 3 };
 const SEG7_OFF = { a: false, b: false, c: false, d: false, e: false, f: false, g: false };
@@ -90,11 +91,18 @@ export function getIdealVoltmeterVoltage(vmLabel, components, wires, tSec = 0, a
     const out = classifyJonction(`${vmLabel}_out`, components, wires, autoJunctions, tSec);
     const inn = classifyJonction(`${vmLabel}_in`, components, wires, autoJunctions, tSec);
 
+    // Borne « + » du symbole = _out (#1), comme SPICE nodePlus.
     if (out.kind === "arduino" && inn.kind === "gnd") return out.volts;
-    if (inn.kind === "arduino" && out.kind === "gnd") return inn.volts;
+    if (inn.kind === "arduino" && out.kind === "gnd") return -inn.volts;
     if (out.kind === "arduino" && inn.kind !== "arduino") return out.volts;
-    if (inn.kind === "arduino" && out.kind !== "arduino") return inn.volts;
     if (out.kind === "gnd" && inn.kind === "gnd") return 0;
+
+    const ctx = { components, wires, autoJunctions, tSec, adcGndOhm: 1e6 };
+    const vMinus = resolveNetVoltage(`${vmLabel}_in`, ctx);
+    const vPlus = resolveNetVoltage(`${vmLabel}_out`, ctx);
+    if (Number.isFinite(vPlus) && Number.isFinite(vMinus)) return vPlus - vMinus;
+    if (Number.isFinite(vPlus) && (inn.kind === "gnd" || vMinus === 0)) return vPlus;
+    if (Number.isFinite(vMinus) && (out.kind === "gnd" || vPlus === 0)) return -vMinus;
     return null;
 }
 

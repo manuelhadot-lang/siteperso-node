@@ -26,6 +26,14 @@ import {
 } from "./lab-object-textures.js";
 import { bindRangeSliderWheel } from "./wheel-utils.js";
 import { fillRepeatingTexture, prepareTileSource } from "./texture-tile-utils.js";
+import {
+    downloadIgnHeightmapPng,
+    elevationsToHeightmapDataUrl,
+    fetchIgnHeightGrid,
+    labIgnTerrainPicker,
+    mapIgnElevationsToMeshHeights,
+} from "./lab-terrain-ign.js";
+import { buildOsmRoadTextureForTerrain } from "./lab-terrain-osm.js";
 
 export const LAB_TERRAIN_KEY = "labTerrain";
 export const TERRAIN_SCENE_ITEM_ID = "env-terrain";
@@ -56,6 +64,8 @@ function formatNumber(value, digits = 2) {
  *   sceneRegistry?: ReturnType<import("./lab-scene-registry.js").createSceneRegistry> | null,
  *   focusOnTerrain?: (object: THREE.Object3D) => void,
  *   setWorldSize?: (sizeMeters: number) => void,
+ *   showStatus?: (message: string) => void,
+ *   setMovementMode?: (mode: string) => void,
  * }} options
  */
 export function initTerrainEditor(options) {
@@ -70,6 +80,8 @@ export function initTerrainEditor(options) {
         sceneRegistry = null,
         focusOnTerrain = null,
         setWorldSize = null,
+        showStatus = null,
+        setMovementMode = null,
     } = options;
 
     function coverFloor(covered) {
@@ -94,6 +106,9 @@ export function initTerrainEditor(options) {
     const createBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-create-terrain")
     );
+    const ignImportBtn = /** @type {HTMLButtonElement | null} */ (
+        document.getElementById("btn-import-terrain-ign")
+    );
     const tools = document.getElementById("lab-terrain-tools");
     const sizeInput = /** @type {HTMLInputElement | null} */ (
         document.getElementById("lab-terrain-size")
@@ -117,6 +132,9 @@ export function initTerrainEditor(options) {
     );
     const textureBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-terrain-texture")
+    );
+    const osmRoadsBtn = /** @type {HTMLButtonElement | null} */ (
+        document.getElementById("btn-terrain-osm-roads")
     );
     const textureInput = /** @type {HTMLInputElement | null} */ (
         document.getElementById("lab-terrain-texture-input")
@@ -657,8 +675,45 @@ export function initTerrainEditor(options) {
         gridHelper.renderOrder = 20;
     }
 
-    function frameTerrainView() {
-        if (terrain) focusOnTerrain?.(terrain);
+    /** @type {HTMLElement | null} */
+    let ignLoadingEl = null;
+
+    function setIgnLoading(active, message = "", progress = null) {
+        const viewport =
+            document.getElementById("lab-viewport") ||
+            renderer.domElement.closest("#lab-viewport");
+        if (!viewport) return;
+        if (!ignLoadingEl) {
+            ignLoadingEl = document.createElement("div");
+            ignLoadingEl.className = "lab-ign-loading";
+            ignLoadingEl.hidden = true;
+            ignLoadingEl.innerHTML = `
+                <div class="lab-ign-loading__panel" role="status" aria-live="polite">
+                    <div class="lab-ign-loading__hourglass" aria-hidden="true">⏳</div>
+                    <p class="lab-ign-loading__msg"></p>
+                    <progress class="lab-ign-loading__bar" max="100" value="0"></progress>
+                </div>`;
+            viewport.appendChild(ignLoadingEl);
+        }
+        ignLoadingEl.hidden = !active;
+        if (!active) return;
+        const msgEl = ignLoadingEl.querySelector(".lab-ign-loading__msg");
+        const barEl = /** @type {HTMLProgressElement | null} */ (
+            ignLoadingEl.querySelector(".lab-ign-loading__bar")
+        );
+        if (msgEl) msgEl.textContent = message;
+        if (barEl) {
+            if (typeof progress === "number" && Number.isFinite(progress)) {
+                barEl.hidden = false;
+                barEl.value = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+            } else {
+                barEl.hidden = true;
+            }
+        }
+    }
+
+    function frameTerrainView(overview = false) {
+        if (terrain) focusOnTerrain?.(terrain, overview ? { overview: true } : undefined);
     }
 
     function syncTerrainNormalMaterial() {
@@ -684,6 +739,31 @@ export function initTerrainEditor(options) {
     function createTerrainGeometry() {
         const geometry = new THREE.PlaneGeometry(sizeMeters, sizeMeters, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
         geometry.rotateX(-Math.PI / 2);
+        return geometry;
+    }
+
+    /**
+     * Maillage terrain avec relief IGN (hauteur sur Z avant rotateX → axe Y monde).
+     * @param {number[]} meshHeights
+     * @param {number} [segments]
+     * @param {number} [terrainSize]
+     */
+    function buildIgnTerrainGeometry(meshHeights, segments = TERRAIN_SEGMENTS, terrainSize = sizeMeters) {
+        const geometry = new THREE.PlaneGeometry(terrainSize, terrainSize, segments, segments);
+        const positions = geometry.attributes.position;
+        const row = segments + 1;
+        for (let iy = 0; iy <= segments; iy += 1) {
+            for (let ix = 0; ix <= segments; ix += 1) {
+                const vi = iy * row + ix;
+                const j = segments - iy;
+                positions.setZ(vi, meshHeights[j * row + ix] ?? 0);
+            }
+        }
+        positions.needsUpdate = true;
+        geometry.rotateX(-Math.PI / 2);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        geometry.computeBoundingBox();
         return geometry;
     }
 
@@ -1289,11 +1369,123 @@ export function initTerrainEditor(options) {
     });
 
     /**
+     * @param {{ lat: number, lon: number, sizeMeters?: number }} pick
+     */
+    async function importIgnRelief(pick) {
+        const targetSize = Math.max(100, Math.min(2000, Number(pick.sizeMeters) || sizeMeters));
+        const before = terrain ? serialize() : null;
+
+        if (Math.abs(targetSize - sizeMeters) > 0.001) {
+            applyTerrainSize(targetSize, { recordHistory: false });
+        }
+        if (!terrain) makeTerrain({ recordHistory: false });
+
+        setIgnLoading(true, "Interrogation IGN (RGE ALTI®)…", 0);
+        try {
+            const grid = await fetchIgnHeightGrid(
+                pick.lat,
+                pick.lon,
+                sizeMeters,
+                TERRAIN_SEGMENTS,
+                (progress) => {
+                    setIgnLoading(
+                        true,
+                        progress >= 0.999
+                            ? "Construction du relief 3D…"
+                            : `Interrogation IGN… ${Math.round(progress * 100)} %`,
+                        progress
+                    );
+                }
+            );
+            const meshHeights = mapIgnElevationsToMeshHeights(
+                grid.elevations,
+                grid.minElev,
+                grid.maxElev,
+                sizeMeters
+            );
+            const heightmapRes = TERRAIN_SEGMENTS + 1;
+            const heightmapDataUrl = elevationsToHeightmapDataUrl(grid.elevations, heightmapRes);
+
+            const prevGeometry = terrain.geometry;
+            terrain.geometry = buildIgnTerrainGeometry(meshHeights, TERRAIN_SEGMENTS, sizeMeters);
+            prevGeometry.dispose();
+            terrain.updateMatrixWorld(true);
+            coverFloor(true);
+            updateTerrainGridLevel();
+            renderTerrainTexture();
+            terrain.userData.ignCenter = { lat: pick.lat, lon: pick.lon };
+            terrain.userData.ignElevRange = { min: grid.minElev, max: grid.maxElev };
+            terrain.userData.ignHeightmap = {
+                dataUrl: heightmapDataUrl,
+                resolution: heightmapRes,
+                sizeMeters,
+                minElev: grid.minElev,
+                maxElev: grid.maxElev,
+            };
+            downloadIgnHeightmapPng(heightmapDataUrl, pick);
+            markHeightMapDirty();
+            syncTerrainSceneItem();
+            tools?.removeAttribute("hidden");
+            setMovementMode?.("design");
+            frameTerrainView(true);
+            setEditing(true);
+
+            const after = serialize();
+            pushSceneHistory?.({ type: "terrain", before, after });
+
+            return grid;
+        } finally {
+            setIgnLoading(false);
+        }
+    }
+
+    let ignImportBusy = false;
+    ignImportBtn?.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        if (ignImportBusy) return;
+        ignImportBusy = true;
+        try {
+            const pick = await labIgnTerrainPicker({
+                defaultLat: terrain?.userData?.ignCenter?.lat ?? 48.8566,
+                defaultLon: terrain?.userData?.ignCenter?.lon ?? 2.3522,
+                defaultSize: Math.max(100, Math.min(2000, sizeMeters)),
+            });
+            if (!pick) return;
+            const grid = await importIgnRelief(pick);
+            terrain?.geometry?.computeBoundingBox?.();
+            const reliefVisual = terrain?.geometry?.boundingBox
+                ? terrain.geometry.boundingBox.max.y - terrain.geometry.boundingBox.min.y
+                : 0;
+            const denivele = grid.maxElev - grid.minElev;
+            if (denivele < 0.5) {
+                showStatus?.(
+                    `Zone très plate (${grid.minElev.toFixed(0)} m d’altitude) — zoomez sur une pente, un sommet ou une vallée (${Math.round(sizeMeters)} m)`
+                );
+            } else if (reliefVisual < 0.5) {
+                showStatus?.(
+                    `Dénivelé IGN ${denivele.toFixed(0)} m non visible en 3D — Ctrl+F5 puis réessayez`
+                );
+            } else {
+                showStatus?.(
+                    `Relief IGN : ${denivele.toFixed(0)} m dénivelé → ${reliefVisual.toFixed(0)} m en 3D (${Math.round(sizeMeters)} m) — molette pour dézoomer`
+                );
+            }
+        } catch (error) {
+            console.warn("[lab-terrain] import IGN :", error);
+            showStatus?.(
+                error instanceof Error ? error.message : "Import relief IGN impossible"
+            );
+        } finally {
+            ignImportBusy = false;
+        }
+    });
+
+    /**
      * @param {number} nextSize
      * @param {{ recordHistory?: boolean }} [opts]
      */
     function applyTerrainSize(nextSize, { recordHistory = true } = {}) {
-        const size = Math.max(10, Math.min(500, Number(nextSize) || GRID_SIZE));
+        const size = Math.max(10, Math.min(2000, Number(nextSize) || GRID_SIZE));
         if (Math.abs(size - sizeMeters) < 0.001) {
             syncSizeUi();
             return;
@@ -1398,6 +1590,25 @@ export function initTerrainEditor(options) {
         if (paintIntensityValue) paintIntensityValue.textContent = value.toFixed(2);
     }, { step: 0.01 });
 
+    function applyBaseTextureFromDataUrl(dataUrl) {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => {
+                baseImage = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
+                baseGpuTexture?.dispose();
+                baseGpuTexture = createGpuTileTexture(image);
+                baseTextureDataUrl = dataUrl;
+                textureTile = 1;
+                if (textureTileInput) textureTileInput.value = "1";
+                if (textureTileValue) textureTileValue.textContent = "1,00";
+                renderTerrainTexture();
+                resolve(undefined);
+            };
+            image.onerror = () => reject(new Error("Texture illisible"));
+            image.src = dataUrl;
+        });
+    }
+
     textureBtn?.addEventListener("click", () => {
         if (textureInput) void pickFilePreservingFullscreen(textureInput);
     });
@@ -1425,6 +1636,42 @@ export function initTerrainEditor(options) {
         };
         reader.onerror = () => void ensureLabFullscreenAfterFile();
         reader.readAsDataURL(file);
+    });
+
+    let osmRoadsBusy = false;
+    osmRoadsBtn?.addEventListener("click", async () => {
+        if (osmRoadsBusy || !terrain) return;
+        const center = terrain.userData?.ignCenter;
+        if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lon)) {
+            showStatus?.(
+                "Importez d’abord un heightmap IGN — la texture routes s’aligne sur la même zone"
+            );
+            return;
+        }
+        osmRoadsBusy = true;
+        setIgnLoading(true, "Chargement des routes OpenStreetMap…", null);
+        try {
+            const { dataUrl, wayCount } = await buildOsmRoadTextureForTerrain(
+                center.lat,
+                center.lon,
+                sizeMeters,
+                2048,
+                { backgroundColor: baseColor }
+            );
+            await applyBaseTextureFromDataUrl(dataUrl);
+            terrain.userData.osmRoadTexture = true;
+            showStatus?.(
+                `Texture routes OSM : ${wayCount} tronçons (${Math.round(sizeMeters)} m) — tile sol = 1`
+            );
+        } catch (error) {
+            console.warn("[lab-terrain] texture OSM :", error);
+            showStatus?.(
+                error instanceof Error ? error.message : "Texture routes OSM impossible"
+            );
+        } finally {
+            setIgnLoading(false);
+            osmRoadsBusy = false;
+        }
     });
 
     brushTextureBtn?.addEventListener("click", () => {
@@ -1732,7 +1979,7 @@ export function initTerrainEditor(options) {
         clear({ recordHistory: false });
         if (!data || typeof data !== "object") return;
         const raw = /** @type {Record<string, unknown>} */ (data);
-        sizeMeters = Math.max(10, Math.min(500, Number(raw.sizeMeters) || GRID_SIZE));
+        sizeMeters = Math.max(10, Math.min(2000, Number(raw.sizeMeters) || GRID_SIZE));
         syncSizeUi();
         makeTerrain({ recordHistory: false });
         const positions = terrain.geometry.attributes.position;
@@ -1948,5 +2195,6 @@ export function initTerrainEditor(options) {
         ensureTerrain() {
             return makeTerrain({ recordHistory: true });
         },
+        importIgnRelief,
     };
 }
