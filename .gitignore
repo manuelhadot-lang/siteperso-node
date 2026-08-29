@@ -24,6 +24,9 @@ simulator-visits.json
 # BMP280 : fourni par arduino-cli au build Docker (voir Dockerfile)
 arduino-libraries/libraries/Adafruit_BMP280_Library/
 
+# Exemples des libs Arduino : inutiles à la compilation, chemins trop longs sous Windows
+arduino-libraries/libraries/*/examples/
+
 dist/
 dist-out/
 build/

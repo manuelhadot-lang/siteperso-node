@@ -13,6 +13,11 @@ function mountSimulatorVisitRoutes(app, repoRoot) {
     const statsPath = path.join(repoRoot, "simulator-visits.json");
     let count = readJsonFileSafe(statsPath, { count: 0 }).count || 0;
 
+    mountSimulatorVisitRoutes.reloadFromDisk = function reloadFromDisk() {
+        count = readJsonFileSafe(statsPath, { count: 0 }).count || 0;
+        return count;
+    };
+
     app.get("/api/simulator/counter", (req, res) => {
         count++;
         try {

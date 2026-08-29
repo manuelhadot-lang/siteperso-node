@@ -20,7 +20,8 @@ const {
     resolveDigitalCmSourcePath,
 } = require("./tools/ngspice-bundle.cjs");
 const { mountArduinoRoutes } = require("./tools/arduino-routes.cjs");
-const { readJsonFileSafe } = require("./tools/read-json-safe.cjs");
+const { parseJsonText, readJsonFileSafe } = require("./tools/read-json-safe.cjs");
+const { extractAllowedFilesFromZip } = require("./tools/unzip-backup.cjs");
 
 const XSPICE_DIGITAL_CM_PLACEHOLDER = "__XSPICE_DIGITAL_CM__";
 
@@ -41,8 +42,9 @@ const SITE_ACCESS_COOKIE = 'site_unlock';
 const SITE_ACCESS_DEFAULT_MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 jours si SITE_ACCESS_MAX_AGE_SEC non défini
 
 function siteAccessLogoutOnPageUnloadEnabled() {
-    const v = process.env.SITE_ACCESS_LOGOUT_ON_PAGE_UNLOAD;
-    return v === '1' || String(v || '').toLowerCase() === 'true';
+    // Mot de passe uniquement à l’entrée du site : la session reste valable
+    // pour tous les blocs (Cours, Projets, 3D, Simulateur, …).
+    return false;
 }
 
 /** Durée du cookie : nombre de secondes, ou "session" = cookie de session navigateur (pas Max-Age). */
@@ -521,6 +523,89 @@ const storageQuiz = multer.diskStorage({
     filename: (req, file, cb) => cb(null, 'img_' + Date.now() + path.extname(file.originalname))
 });
 const uploadQuiz = multer({ storage: storageQuiz });
+
+const BACKUP_JSON_FILES = [
+    "eleves.json",
+    "quizzes.json",
+    "planning_projets.json",
+    "planning_docs.json",
+    "chat_messages.json",
+    "visits.json",
+    "simulator-visits.json",
+];
+
+const uploadBackupZip = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const ok = file && /\.zip$/i.test(file.originalname || "");
+        cb(ok ? null : new Error("Choisissez le fichier ZIP de sauvegarde."), ok);
+    },
+});
+
+function writeJsonAtomic(fileName, value) {
+    fs.writeFileSync(path.join(__dirname, fileName), JSON.stringify(value, null, 2));
+}
+
+function applyBackupJsonFile(fileName, parsed) {
+    if (fileName === "eleves.json") {
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("eleves.json invalide.");
+        }
+        baseEleves = parsed;
+        writeJsonAtomic(fileName, baseEleves);
+        return;
+    }
+    if (fileName === "quizzes.json") {
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("quizzes.json invalide.");
+        }
+        quizzes = parsed;
+        writeJsonAtomic(fileName, quizzes);
+        return;
+    }
+    if (fileName === "planning_projets.json") {
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("planning_projets.json invalide.");
+        }
+        planningProjets = parsed;
+        writeJsonAtomic(fileName, planningProjets);
+        return;
+    }
+    if (fileName === "planning_docs.json") {
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("planning_docs.json invalide.");
+        }
+        planningDocs = parsed;
+        writeJsonAtomic(fileName, planningDocs);
+        return;
+    }
+    if (fileName === "chat_messages.json") {
+        if (!Array.isArray(parsed)) {
+            throw new Error("chat_messages.json invalide.");
+        }
+        chatMessages = parsed;
+        writeJsonAtomic(fileName, chatMessages);
+        return;
+    }
+    if (fileName === "visits.json") {
+        const n = parsed && typeof parsed === "object" ? Number(parsed.count) : NaN;
+        visitCount = Number.isFinite(n) ? n : 0;
+        writeJsonAtomic(fileName, { count: visitCount });
+        return;
+    }
+    if (fileName === "simulator-visits.json") {
+        const n = parsed && typeof parsed === "object" ? Number(parsed.count) : NaN;
+        writeJsonAtomic(fileName, { count: Number.isFinite(n) ? n : 0 });
+        if (typeof mountSimulatorVisitRoutes.reloadFromDisk === "function") {
+            mountSimulatorVisitRoutes.reloadFromDisk();
+        }
+    }
+}
+
+function adminAlertRedirect(message) {
+    return `<script>alert(${JSON.stringify(String(message))}); window.location='/espace-correction';</script>`;
+}
 
 
 // --- 4. MIDDLEWARES ---
@@ -1445,9 +1530,14 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
             <h2 style="margin:0; color:#00d1ff; font-size:1.2rem;">🧩 Générateur de QCM</h2>
             <a href="/admin/export-csv" style="background:#eab308; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">📊 Exporter les Notes (.csv)</a>
             <a href="/admin/backup-zip" style="background:#f97316; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💾 SAUVEGARDE TOTALE (.zip)</a>
+            <form action="/admin/restore-zip" method="POST" enctype="multipart/form-data" style="display:inline-flex; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;" onsubmit="return confirm('Remplacer les données actuelles (élèves, dates, quiz, tchat…) par ce ZIP ?');">
+                <input type="file" name="backup" accept=".zip,application/zip" required style="color:#e2e8f0; max-width:220px;">
+                <button type="submit" style="background:#a855f7; color:white; border:none; padding:10px 20px; border-radius:5px; font-weight:bold; cursor:pointer;">♻️ RESTAURER (.zip)</button>
+            </form>
             <a href="/gestion-quiz" style="background:#00d1ff; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">🛠️ Créer / Modifier un Quiz</a>
             <a href="/contact.html?prof=1" target="_blank" style="background:#10b981; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💬 Accéder au Tchat</a>
         </div>
+        <p style="color:#94a3b8; font-size:0.85rem; margin:-8px 0 20px;">Après un redéploiement Render : téléchargez d’abord le ZIP de sauvegarde, puis utilisez <b>Restaurer</b> avec ce même fichier pour récupérer élèves, dates, quiz et tchat.</p>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:20px;">
             <section style="background:#1e1e1e; padding:15px; border-radius:10px;">
@@ -1558,16 +1648,36 @@ app.get('/admin/backup-zip', authentificationProf, (req, res) => {
     archive.on('error', (err) => res.status(500).send({ error: err.message }));
     archive.pipe(res);
 
-    // Ajouter les fichiers JSON de données
-    const files = ['eleves.json', 'quizzes.json', 'planning_projets.json', 'planning_docs.json', 'chat_messages.json', 'visits.json', 'simulator-visits.json'];
-    files.forEach(file => {
+    BACKUP_JSON_FILES.forEach(file => {
         if (fs.existsSync(file)) archive.file(file, { name: file });
     });
 
-    // Ajouter le dossier des uploads élèves (optionnel, peut être lourd)
-    // archive.directory(dirUploads, 'Travaux_Eleves'); 
-
     archive.finalize();
+});
+
+app.post("/admin/restore-zip", authentificationProf, (req, res) => {
+    uploadBackupZip.single("backup")(req, res, (err) => {
+        if (err) return res.send(adminAlertRedirect(err.message || "Upload invalide."));
+        try {
+            if (!req.file || !req.file.buffer) {
+                return res.send(adminAlertRedirect("Aucun fichier ZIP sélectionné."));
+            }
+            const extracted = extractAllowedFilesFromZip(req.file.buffer, BACKUP_JSON_FILES);
+            const restored = [];
+            for (const fileName of BACKUP_JSON_FILES) {
+                const raw = extracted[fileName];
+                if (!raw) continue;
+                applyBackupJsonFile(fileName, parseJsonText(raw.toString("utf8")));
+                restored.push(fileName);
+            }
+            if (restored.length === 0) {
+                return res.send(adminAlertRedirect("Aucun fichier de sauvegarde reconnu dans ce ZIP."));
+            }
+            return res.send(adminAlertRedirect("Restauration OK : " + restored.join(", ")));
+        } catch (e) {
+            return res.send(adminAlertRedirect(e.message || "Restauration impossible."));
+        }
+    });
 });
 
 // --- ROUTES GESTION QUIZ ---
