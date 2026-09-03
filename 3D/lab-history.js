@@ -55,6 +55,7 @@ export function createHistory({ maxSize = 50 } = {}) {
         peekUndoAt: () => peekAt(undoStack),
         /** Horodatage de la prochaine entrée rétablissable (0 si vide). */
         peekRedoAt: () => peekAt(redoStack),
+        peekUndo: () => (undoStack.length ? undoStack[undoStack.length - 1] : null),
     };
 }
 

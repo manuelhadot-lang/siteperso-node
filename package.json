@@ -5,9 +5,9 @@
   "description": "Site personnel Node.js (Express)",
   "main": "server.js",
   "type": "commonjs",
-  "scripts": {
-    "start": "node server.js",
-    "sim:ports": "node scripts/check-sim-ports.mjs",
+    "scripts": {
+        "start": "node server.js",
+        "sim:ports": "node scripts/check-sim-ports.mjs",
     "repair-esp32-toolchain": "node scripts/repair-esp32-toolchain.cjs",
     "check-ngspice": "node tools/check-ngspice.cjs",
     "prepare-arduino-bundle": "node scripts/prepare-arduino-bundle.cjs",

@@ -88,6 +88,7 @@ export function initGallery(container, ui) {
     let vegetationPlaceModeActive = false;
     let avatarPlaceModeActive = false;
     let lightPlaceModeActive = false;
+    let riverPlaceModeActive = false;
     let rightLookActive = false;
     /** @type {"fps" | "design" | "overview"} */
     let movementMode = "design";
@@ -325,7 +326,69 @@ export function initGallery(container, ui) {
         onMovementModeChange?.(movementMode);
     }
 
-    function resetViewForNewScene() {
+    /** Hauteur max caméra (conception / vue d’ensemble) — suit la taille du monde. */
+    function getDesignMaxY() {
+        return Math.max(MAX_FLY_HEIGHT, worldSizeMeters * 1.15);
+    }
+
+    /**
+     * Cadre le plateau (grille) depuis le mode Conception, origine au centre.
+     */
+    function frameStudioPlateau() {
+        orbitTarget.set(0, 0.5, 0);
+        orbitDistance = THREE.MathUtils.clamp(worldSizeMeters * 0.55, 16, 42);
+        orbitTheta = 0.7;
+        orbitPhi = 0.38;
+        resetPlayerVerticalMotion();
+        movementMode = "design";
+        enterExplore();
+        container.classList.toggle("lab-viewport--fps", false);
+        container.classList.toggle("lab-viewport--design", true);
+        container.classList.toggle("lab-viewport--overview", false);
+        syncCameraFovForMode();
+        setObjectCollisionEnabled(true);
+        setGroundCollisionEnabled(true);
+        resetHeadBob();
+        applyOrbitCamera();
+        onMovementModeChange?.(movementMode);
+    }
+
+    /**
+     * Réinitialise la vue. `resetWorld` (Fichier → Nouveau) ramène aussi
+     * la grille 50 m, le plateau et une caméra centrée.
+     * @param {{ resetWorld?: boolean }} [opts]
+     */
+    function restoreDefaultEnvironment() {
+        scene.background = null;
+        scene.environment = null;
+        if ("backgroundBlurriness" in scene) scene.backgroundBlurriness = 0;
+        if ("backgroundIntensity" in scene) scene.backgroundIntensity = 1;
+        if ("environmentIntensity" in scene) scene.environmentIntensity = 1;
+        scene.background = new THREE.Color(0x1a1a1a);
+        scene.fog = new THREE.Fog(0x1a1a1a, SCENE_FOG_NEAR, SCENE_FOG_FAR);
+        renderer.toneMapping = THREE.NoToneMapping;
+        renderer.toneMappingExposure = 1;
+        applyStudioEnvironment(scene, renderer);
+        syncWorldFog(worldSizeMeters);
+        // S’assurer qu’aucun fond HDRI n’a survécu (texture encore assignée).
+        if (scene.background && scene.background.isTexture) {
+            scene.background = new THREE.Color(0x1a1a1a);
+        }
+    }
+
+    function resetViewForNewScene({ resetWorld = false } = {}) {
+        if (resetWorld) {
+            restoreDefaultEnvironment();
+            setWorldSize(GRID_SIZE);
+            gridHelper.visible = true;
+            gridHelper.position.y = 0.02;
+            floorUserVisible = true;
+            floorCoveredByTerrain = false;
+            syncFloorVisibility();
+            environmentRegistry?.refresh?.();
+            frameStudioPlateau();
+            return;
+        }
         const eyeY = getOverviewEyeY();
         yaw.position.set(0, eyeY, getOverviewZ());
         yaw.rotation.y = 0;
@@ -724,13 +787,22 @@ export function initGallery(container, ui) {
      * Agrandit / réduit la grille et le sol pour suivre une zone terrain (mètres).
      * @param {number} sizeMeters
      */
+    function syncWorldFog(size) {
+        if (!(scene.fog instanceof THREE.Fog)) return;
+        const fogFar = Math.max(SCENE_FOG_FAR, size * 1.8 + 50);
+        scene.fog.near = Math.min(Math.max(SCENE_FOG_NEAR, size * 0.12), fogFar * 0.35);
+        scene.fog.far = fogFar;
+    }
+
     function setWorldSize(sizeMeters) {
         const size = Math.max(1, Number(sizeMeters) || GRID_SIZE);
         worldSizeMeters = size;
         const scale = size / GRID_SIZE;
         gridHelper.scale.set(scale, 1, scale);
         floor.scale.set(scale, scale, 1);
-        camera.far = Math.max(400, size * 4);
+        syncWorldFog(size);
+        const fogFar = scene.fog instanceof THREE.Fog ? scene.fog.far : SCENE_FOG_FAR;
+        camera.far = Math.max(400, size * 4, fogFar * 1.2);
         camera.updateProjectionMatrix();
         quadView.setWorldSize(size);
         if (environmentRegistry) {
@@ -837,15 +909,15 @@ export function initGallery(container, ui) {
         if (!canInteractAt(event.clientX, event.clientY)) return;
         if (isViewportUiTarget(event.target)) return;
 
-        // Peinture / triangulation / terrain / placement avatar : clic gauche = outil, jamais look/orbite.
+        // Peinture / triangulation / placement : clic gauche = outil, jamais look/orbite.
+        // Terrain : le sculpt est en capture sur le mesh ; un clic dans le vide doit orbiter.
         // (Doit être avant !exploreActive, sinon le 1er clic armé leftLookActive.)
-        if (drawModeActive || terrainSculptModeActive || paintStrokeActive || avatarPlaceModeActive || lightPlaceModeActive) {
+        if (drawModeActive || paintStrokeActive || avatarPlaceModeActive || lightPlaceModeActive || riverPlaceModeActive) {
             if (event.button === 0) {
                 leftLookActive = false;
                 pendingLeftClick = null;
                 if (!rightLookActive) container.classList.remove("lab-viewport--look");
-                // Placement avatar / lumière : clic = pose immédiate (pas besoin de court-glisser).
-                if ((avatarPlaceModeActive || lightPlaceModeActive) && exploreActive && !gizmoDragging) {
+                if ((avatarPlaceModeActive || lightPlaceModeActive || riverPlaceModeActive) && exploreActive && !gizmoDragging) {
                     emitCanvasLeftClick(event);
                 }
                 return;
@@ -992,7 +1064,7 @@ export function initGallery(container, ui) {
 
         // Tant que le déplacement reste sous le seuil, c’est un clic potentiel :
         // ne pas démarrer look / orbite (sinon la désélection « clic vide » rate souvent).
-        if (pendingLeftClick && leftLookActive && !terrainSculptModeActive) {
+        if (pendingLeftClick && leftLookActive) {
             const dx = event.clientX - pendingLeftClick.startX;
             const dy = event.clientY - pendingLeftClick.startY;
             if (dx * dx + dy * dy < CLICK_THRESHOLD_PX * CLICK_THRESHOLD_PX) {
@@ -1014,7 +1086,6 @@ export function initGallery(container, ui) {
             !gizmoDragging &&
             !drawModeActive &&
             !paintStrokeActive &&
-            !terrainSculptModeActive &&
             exploreActive;
         if (!usingRightLook && !normalLeftLook) return;
 
@@ -1045,14 +1116,17 @@ export function initGallery(container, ui) {
     });
 
     function clampPosition({ allowFly = false } = {}) {
-        const bound = worldSizeMeters * 0.45;
+        const observeMode = movementMode === "overview";
+        const designLike = observeMode || movementMode === "design";
+        const bound = designLike
+            ? Math.max(worldSizeMeters * 1.35, 50)
+            : worldSizeMeters * 0.45;
         yaw.position.x = THREE.MathUtils.clamp(yaw.position.x, -bound, bound);
         yaw.position.z = THREE.MathUtils.clamp(yaw.position.z, -bound, bound);
-        const observeMode = movementMode === "overview";
-        const maxY = allowFly || observeMode || movementMode === "design" ? MAX_FLY_HEIGHT : MAX_EYE_HEIGHT;
+        const maxY = allowFly || designLike ? getDesignMaxY() : MAX_EYE_HEIGHT;
         const groundEyeY = getGroundEyeY(yaw.position.x, yaw.position.z);
 
-        if (observeMode || movementMode === "design") {
+        if (designLike) {
             // Conception : en cadrage proche, autoriser la hauteur de la face / du centre objet
             // (sinon getGroundEyeY ≈ 1,62 m remonte toujours la caméra).
             const closeInspect = movementMode === "design" && orbitDistance < INSPECT_ORBIT_CLOSE;
@@ -1423,6 +1497,7 @@ export function initGallery(container, ui) {
         serializeView,
         restoreView,
         resetViewForNewScene,
+        restoreDefaultEnvironment,
         placePlayerAt,
         setGizmoDragging(value) {
             gizmoDragging = !!value;
@@ -1461,9 +1536,11 @@ export function initGallery(container, ui) {
                 vegetationPlaceModeActive = false;
                 avatarPlaceModeActive = false;
                 lightPlaceModeActive = false;
+                riverPlaceModeActive = false;
                 container.classList.remove("lab-viewport--veg-place");
                 container.classList.remove("lab-viewport--avatar-place");
                 container.classList.remove("lab-viewport--light-place");
+                container.classList.remove("lab-viewport--river-place");
             } else {
                 rightLookActive = false;
                 rightClickHandledThisGesture = false;
@@ -1479,9 +1556,11 @@ export function initGallery(container, ui) {
                 pendingLeftClick = null;
                 avatarPlaceModeActive = false;
                 lightPlaceModeActive = false;
+                riverPlaceModeActive = false;
                 container.classList.remove("lab-viewport--look");
                 container.classList.remove("lab-viewport--avatar-place");
                 container.classList.remove("lab-viewport--light-place");
+                container.classList.remove("lab-viewport--river-place");
             }
             container.classList.toggle("lab-viewport--veg-place", vegetationPlaceModeActive);
         },
@@ -1493,9 +1572,11 @@ export function initGallery(container, ui) {
                 pendingLeftClick = null;
                 vegetationPlaceModeActive = false;
                 lightPlaceModeActive = false;
+                riverPlaceModeActive = false;
                 container.classList.remove("lab-viewport--look");
                 container.classList.remove("lab-viewport--veg-place");
                 container.classList.remove("lab-viewport--light-place");
+                container.classList.remove("lab-viewport--river-place");
             }
             container.classList.toggle("lab-viewport--avatar-place", avatarPlaceModeActive);
         },
@@ -1507,13 +1588,31 @@ export function initGallery(container, ui) {
                 pendingLeftClick = null;
                 vegetationPlaceModeActive = false;
                 avatarPlaceModeActive = false;
+                riverPlaceModeActive = false;
                 container.classList.remove("lab-viewport--look");
                 container.classList.remove("lab-viewport--veg-place");
                 container.classList.remove("lab-viewport--avatar-place");
+                container.classList.remove("lab-viewport--river-place");
             }
             container.classList.toggle("lab-viewport--light-place", lightPlaceModeActive);
         },
         isLightPlaceModeActive: () => lightPlaceModeActive,
+        setRiverPlaceModeActive(value) {
+            riverPlaceModeActive = !!value;
+            if (value) {
+                leftLookActive = false;
+                pendingLeftClick = null;
+                vegetationPlaceModeActive = false;
+                avatarPlaceModeActive = false;
+                lightPlaceModeActive = false;
+                container.classList.remove("lab-viewport--look");
+                container.classList.remove("lab-viewport--veg-place");
+                container.classList.remove("lab-viewport--avatar-place");
+                container.classList.remove("lab-viewport--light-place");
+            }
+            container.classList.toggle("lab-viewport--river-place", riverPlaceModeActive);
+        },
+        isRiverPlaceModeActive: () => riverPlaceModeActive,
         isDrawModeActive: () => drawModeActive,
         setCanvasRightClickHandler(fn) {
             canvasRightClickHandler = fn;

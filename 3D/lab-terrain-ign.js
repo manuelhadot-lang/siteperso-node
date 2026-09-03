@@ -3,12 +3,15 @@
 const IGN_ELEVATION_URL =
     "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json";
 const IGN_RESOURCE = "ign_rge_alti_wld";
-/** Points / requête vers notre proxy (POST JSON, pas de limite URL). */
-const IGN_BATCH_SIZE = 400;
+/** Points / requête vers notre proxy (POST JSON). Aligné sur le plafond serveur. */
+const IGN_BATCH_SIZE = 5000;
 /** GET direct navigateur vers l’IGN : URL max ~2–8 ko. */
 const IGN_DIRECT_GET_MAX = 80;
 /** Respecter ~5 req/s max (proxy + IGN). */
-const IGN_BATCH_DELAY_MS = 250;
+const IGN_BATCH_DELAY_MS = 80;
+
+/** Grille IGN compacte (65×65) — un seul POST, puis sur-échantillon local. */
+export const IGN_GRID_SEGMENTS = 64;
 
 function getIgnProxyUrl() {
     if (typeof window !== "undefined" && window.location?.origin) {
@@ -30,13 +33,30 @@ function metersPerDegreeLon(lat) {
  * @param {number} centerLat
  * @param {number} centerLon
  * @param {number} localX mètres est
- * @param {number} localZ mètres nord
+ * @param {number} localZ mètres sud (+Z = sud sur le maillage terrain)
  */
 export function localTerrainToWgs84(centerLat, centerLon, localX, localZ) {
     const mLon = metersPerDegreeLon(centerLat);
     return {
-        lat: centerLat + localZ / METERS_PER_DEG_LAT,
+        lat: centerLat - localZ / METERS_PER_DEG_LAT,
         lon: centerLon + localX / mLon,
+    };
+}
+
+/**
+ * WGS84 → local terrain (m). +X = est, +Z = sud
+ * (PlaneGeometry + rotateX(-π/2) : le nord géographique est en −Z).
+ * @param {number} centerLat
+ * @param {number} centerLon
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {{ x: number, z: number }}
+ */
+export function wgs84ToLocalTerrain(centerLat, centerLon, lat, lon) {
+    const mLon = metersPerDegreeLon(centerLat);
+    return {
+        x: (lon - centerLon) * mLon,
+        z: (centerLat - lat) * METERS_PER_DEG_LAT,
     };
 }
 
@@ -141,6 +161,20 @@ function delay(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function minMaxFinite(values) {
+    let min = Infinity;
+    let max = -Infinity;
+    let count = 0;
+    for (let i = 0; i < values.length; i += 1) {
+        const value = values[i];
+        if (typeof value !== "number" || !Number.isFinite(value)) continue;
+        if (value < min) min = value;
+        if (value > max) max = value;
+        count += 1;
+    }
+    return { min, max, count };
+}
+
 /**
  * @param {number} centerLat
  * @param {number} centerLon
@@ -152,7 +186,7 @@ export async function fetchIgnHeightGrid(
     centerLat,
     centerLon,
     sizeMeters,
-    segments = 100,
+    segments = 320,
     onProgress
 ) {
     const samples = buildIgnSampleGrid(centerLat, centerLon, sizeMeters, segments);
@@ -177,8 +211,8 @@ export async function fetchIgnHeightGrid(
         }
     }
 
-    const valid = elevations.filter((value) => value !== null);
-    if (!valid.length) {
+    const { min, max, count } = minMaxFinite(elevations);
+    if (!count) {
         throw new Error(
             "Aucune altitude IGN pour cette zone (hors France métropolitaine / DOM ou zone restreinte)"
         );
@@ -186,14 +220,61 @@ export async function fetchIgnHeightGrid(
 
     return {
         elevations,
-        minElev: Math.min(...valid),
-        maxElev: Math.max(...valid),
+        minElev: min,
+        maxElev: max,
         centerLat,
         centerLon,
         sizeMeters,
         segments,
         sampleCount: samples.length,
     };
+}
+
+/**
+ * Agrandit une grille d’altitudes (65×65 → maillage lab) par interpolation bilinéaire.
+ * @param {(number | null)[]} src
+ * @param {number} srcSegments
+ * @param {number} dstSegments
+ * @returns {(number | null)[]}
+ */
+export function upsampleIgnElevations(src, srcSegments, dstSegments) {
+    const srcN = srcSegments + 1;
+    const dstN = dstSegments + 1;
+    if (srcN === dstN) return src.slice();
+    /** @type {(number | null)[]} */
+    const out = new Array(dstN * dstN);
+    const at = (i, j) => {
+        const v = src[j * srcN + i];
+        return typeof v === "number" && Number.isFinite(v) ? v : null;
+    };
+    for (let j = 0; j < dstN; j += 1) {
+        const fv = dstN === 1 ? 0 : (j / (dstN - 1)) * (srcN - 1);
+        const j0 = Math.floor(fv);
+        const j1 = Math.min(srcN - 1, j0 + 1);
+        const ty = fv - j0;
+        for (let i = 0; i < dstN; i += 1) {
+            const fu = dstN === 1 ? 0 : (i / (dstN - 1)) * (srcN - 1);
+            const i0 = Math.floor(fu);
+            const i1 = Math.min(srcN - 1, i0 + 1);
+            const tx = fu - i0;
+            const z00 = at(i0, j0);
+            const z10 = at(i1, j0);
+            const z01 = at(i0, j1);
+            const z11 = at(i1, j1);
+            const samples = [z00, z10, z01, z11].filter((z) => z != null);
+            if (!samples.length) {
+                out[j * dstN + i] = null;
+                continue;
+            }
+            const a = z00 ?? samples[0];
+            const b = z10 ?? a;
+            const c = z01 ?? a;
+            const d = z11 ?? b;
+            out[j * dstN + i] =
+                a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+        }
+    }
+    return out;
 }
 
 /**
@@ -250,6 +331,26 @@ export function applyMeshHeightsToTerrainPositions(positions, meshHeights, sizeM
 }
 
 /**
+ * UV monde : u = est, v = nord géographique (−Z, car +Z = sud).
+ * Texture geo : **nord en haut** + flipY = true.
+ * @param {import("three").BufferGeometry} geometry
+ * @param {number} sizeMeters
+ */
+export function applyTerrainGeoUVs(geometry, sizeMeters) {
+    const positions = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+    if (!positions || !uv) return;
+    const half = sizeMeters * 0.5;
+    const size = sizeMeters || 1;
+    for (let i = 0; i < positions.count; i += 1) {
+        const u = (positions.getX(i) + half) / size;
+        const v = 1 - (positions.getZ(i) + half) / size;
+        uv.setXY(i, u, v);
+    }
+    uv.needsUpdate = true;
+}
+
+/**
  * @param {number} sizeMeters
  * @param {number} lat
  * @param {number} lon
@@ -301,9 +402,10 @@ export function elevationsToHeightmapDataUrl(elevations, resolution) {
     canvas.height = resolution;
     const ctx = canvas.getContext("2d");
     if (!ctx) return "";
-    const finite = elevations.filter((value) => value !== null);
-    const min = Math.min(...finite);
-    const max = Math.max(...finite);
+    const finiteStats = minMaxFinite(elevations);
+    if (!finiteStats.count) return "";
+    const min = finiteStats.min;
+    const max = finiteStats.max;
     const span = max - min || 1;
     const image = ctx.createImageData(resolution, resolution);
     for (let j = 0; j < resolution; j += 1) {
@@ -403,9 +505,20 @@ function getDialogMount() {
     return document.getElementById("lab-workspace") || document.body;
 }
 
+function dismissIgnPickerOverlays() {
+    document.querySelectorAll(".lab-dialog-overlay--ign").forEach((node) => {
+        node.dispatchEvent(new Event("lab-ign-dismiss"));
+        try {
+            node.remove();
+        } catch {
+            /* ignore */
+        }
+    });
+}
+
 /**
  * Choix d’une zone via zoom / pan sur la carte, puis import IGN.
- * @param {{ defaultLat?: number, defaultLon?: number, defaultSize?: number, defaultZoom?: number }} [opts]
+ * @param {{ defaultLat?: number, defaultLon?: number, defaultSize?: number, defaultZoom?: number, maxSize?: number, title?: string, confirmLabel?: string, hint?: string }} [opts]
  * @returns {Promise<{ lat: number, lon: number, sizeMeters: number, zoom: number } | null>}
  */
 export async function labIgnTerrainPicker({
@@ -413,15 +526,19 @@ export async function labIgnTerrainPicker({
     defaultLon = 2.3522,
     defaultSize = 500,
     defaultZoom = 15,
+    maxSize = 2000,
+    title = "Relief IGN — choisir sur la carte",
+    confirmLabel = "Générer le heightmap",
+    hint = "Zoomez (niveau&nbsp;16–17 pour une colline) et centrez le carré cyan sur le sommet. Le relief 3D montre le <strong>dénivelé</strong> dans la zone, pas l’altitude absolue (~160&nbsp;m au Mont Valérien).",
 } = {}) {
+    dismissIgnPickerOverlays();
     const root = document.createElement("div");
-    root.className = "lab-dialog-overlay";
+    root.className = "lab-dialog-overlay lab-dialog-overlay--ign";
     root.innerHTML = `
         <div class="lab-dialog lab-dialog--wide lab-dialog--ign" role="dialog" aria-modal="true">
-            <h2 class="lab-dialog__title">Relief IGN — choisir sur la carte</h2>
+            <h2 class="lab-dialog__title">${escapeHtml(title)}</h2>
             <p class="lab-dialog__rich" id="lab-ign-hint">
-                Zoomez (niveau&nbsp;16–17 pour une colline) et centrez le carré cyan sur le sommet.
-                Le relief 3D montre le <strong>dénivelé</strong> dans la zone, pas l’altitude absolue (~160&nbsp;m au Mont Valérien).
+                ${hint}
             </p>
             <div class="lab-dialog__ign-toolbar">
                 <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-ign-geoloc title="Centrer sur ma position">Ma position</button>
@@ -452,7 +569,7 @@ export async function labIgnTerrainPicker({
             </p>
             <div class="lab-dialog__actions">
                 <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost" data-ign-cancel>Annuler</button>
-                <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-ign-confirm>Générer le heightmap</button>
+                <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-ign-confirm>${escapeHtml(confirmLabel)}</button>
             </div>
         </div>
     `;
@@ -495,7 +612,7 @@ export async function labIgnTerrainPicker({
     function syncFromMapView() {
         if (!map || !footprint) return;
         const bounds = map.getBounds();
-        const zone = mapBoundsToImportZone(bounds);
+        const zone = mapBoundsToImportZone(bounds, { max: maxSize });
         updatePickDisplay(
             { lat: zone.lat, lon: zone.lon, sizeMeters: zone.sizeMeters },
             zone.clamped
@@ -633,8 +750,17 @@ export async function labIgnTerrainPicker({
             if (done) return;
             done = true;
             cleanup();
-            map?.remove();
-            root.remove();
+            try {
+                map?.remove();
+            } catch {
+                /* ignore */
+            }
+            map = null;
+            try {
+                root.remove();
+            } catch {
+                /* ignore */
+            }
             resolve(value);
         };
 
@@ -645,6 +771,7 @@ export async function labIgnTerrainPicker({
             }
         };
         document.addEventListener("keydown", onKeydown, true);
+        root.addEventListener("lab-ign-dismiss", () => finish(null));
 
         root.querySelector("[data-ign-geoloc]")?.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -656,9 +783,8 @@ export async function labIgnTerrainPicker({
             button.addEventListener("click", (event) => event.stopPropagation());
         });
         root.querySelector("[data-ign-cancel]")?.addEventListener("click", () => finish(null));
-        root.addEventListener("click", (event) => {
-            if (event.target === root) finish(null);
-        });
+        const dialogEl = root.querySelector(".lab-dialog");
+        dialogEl?.addEventListener("pointerdown", (event) => event.stopPropagation());
         root.querySelector("[data-ign-confirm]")?.addEventListener("click", () => {
             try {
                 if (map) syncFromMapView();

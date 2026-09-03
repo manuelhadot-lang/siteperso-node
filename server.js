@@ -142,9 +142,30 @@ function isIgnElevationPost(req) {
     return req.method === "POST" && req.path === "/api/ign/elevation";
 }
 
+/** GET tuiles ortho IGN — Image/fetch sans cookie (même cas que l’altimétrie). */
+function isIgnOrthoGet(req) {
+    return (req.method === "GET" || req.method === "HEAD") && req.path === "/api/ign/ortho-tile";
+}
+
 /** POST Overpass OSM (routes) — même contrainte cookie / CORS. */
 function isOsmOverpassPost(req) {
     return req.method === "POST" && req.path === "/api/osm/overpass";
+}
+
+/** GET Mapillary (skybox) — même contrainte cookie. */
+function isMapillaryGet(req) {
+    return (
+        (req.method === "GET" || req.method === "HEAD") &&
+        (req.path === "/api/mapillary/nearby-pano" || req.path === "/api/mapillary/image")
+    );
+}
+
+/** GET bâtiments BD TOPO IGN — données publiques. */
+function isIgnBdTopoGet(req) {
+    return (
+        (req.method === "GET" || req.method === "HEAD") &&
+        (req.path === "/api/ign/bdtopo-buildings")
+    );
 }
 
 function siteAccessRequiresSimulateCookie() {
@@ -164,6 +185,14 @@ function isSafeSiteRedirectTarget(url) {
 
 function escapeHtmlAttr(text) {
     return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+// Escape pour insérer une valeur dans une chaîne JavaScript délimitée par des quotes simples.
+function escapeJsString(text) {
+    return String(text)
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/\r?\n/g, "\\n");
 }
 
 function setSiteAccessCookie(res, token) {
@@ -331,6 +360,9 @@ app.get('/site-access-unload.js', (req, res) => {
 app.use((req, res, next) => {
     if (!siteAccessPasswordConfigured()) return next();
     if (req.method === 'GET' || req.method === 'HEAD') {
+        if (isIgnOrthoGet(req)) return next();
+        if (isMapillaryGet(req)) return next();
+        if (isIgnBdTopoGet(req)) return next();
         if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
         const dest = req.originalUrl || req.url || '/';
         const safe = isSafeSiteRedirectTarget(dest) ? dest : '/';
@@ -743,7 +775,391 @@ app.post("/api/ign/elevation", async (req, res) => {
     }
 });
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+/** Tuiles orthophoto IGN (WMTS PM) — évite le CORS navigateur. */
+const IGN_ORTHO_LAYER = "ORTHOIMAGERY.ORTHOPHOTOS";
+const IGN_ORTHO_MIN_Z = 10;
+const IGN_ORTHO_MAX_Z = 19;
+
+app.get("/api/ign/ortho-tile", async (req, res) => {
+    try {
+        const z = Number(req.query.z);
+        const x = Number(req.query.x);
+        const y = Number(req.query.y);
+        if (!Number.isInteger(z) || z < IGN_ORTHO_MIN_Z || z > IGN_ORTHO_MAX_Z) {
+            return res.status(400).json({ error: "Zoom ortho invalide" });
+        }
+        const n = 2 ** z;
+        if (!Number.isInteger(x) || x < 0 || x >= n || !Number.isInteger(y) || y < 0 || y >= n) {
+            return res.status(400).json({ error: "Tuile ortho invalide" });
+        }
+        const urlWmts =
+            "https://data.geopf.fr/wmts?" +
+            new URLSearchParams({
+                SERVICE: "WMTS",
+                REQUEST: "GetTile",
+                VERSION: "1.0.0",
+                LAYER: IGN_ORTHO_LAYER,
+                STYLE: "normal",
+                FORMAT: "image/jpeg",
+                TILEMATRIXSET: "PM",
+                TILEMATRIX: String(z),
+                TILEROW: String(y),
+                TILECOL: String(x),
+            }).toString();
+        const urlRest = `https://data.geopf.fr/wmts/1.0.0/${IGN_ORTHO_LAYER}/normal/PM/${z}/${y}/${x}.jpeg`;
+        let response = await fetch(urlWmts);
+        if (!response.ok || !(response.headers.get("content-type") || "").startsWith("image/")) {
+            response = await fetch(urlRest);
+        }
+        if (!response.ok) {
+            return res.status(502).json({ error: `Tuile IGN (${response.status})` });
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.startsWith("image/") || buffer.length < 32 || buffer[0] !== 0xff) {
+            return res.status(502).json({ error: "Tuile ortho IGN invalide" });
+        }
+        res.setHeader("Content-Type", contentType.startsWith("image/") ? contentType : "image/jpeg");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(buffer);
+    } catch (error) {
+        console.error("[api/ign/ortho-tile]", error);
+        return res.status(502).json({ error: "Orthophoto IGN indisponible" });
+    }
+});
+
+/** Mapillary — panorama 360° près d’un point (token développeur requis). */
+const MAPILLARY_GRAPH = "https://graph.mapillary.com";
+const MAPILLARY_FIELDS =
+    "id,geometry,captured_at,compass_angle,is_pano,thumb_2048_url,thumb_original_url,width,height";
+
+function getMapillaryToken() {
+    const t = process.env.MAPILLARY_ACCESS_TOKEN || process.env.MAPILLARY_TOKEN || "";
+    return String(t).trim();
+}
+
+/**
+ * Distance haversine approx (m).
+ * @param {number} lat1
+ * @param {number} lon1
+ * @param {number} lat2
+ * @param {number} lon2
+ */
+function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * @param {string} token
+ * @param {Record<string, string | number | boolean>} params
+ */
+async function mapillaryFetchImages(token, params) {
+    const q = new URLSearchParams({
+        access_token: token,
+        fields: MAPILLARY_FIELDS,
+        ...Object.fromEntries(
+            Object.entries(params).map(([k, v]) => [k, String(v)])
+        ),
+    });
+    const res = await fetch(`${MAPILLARY_GRAPH}/images?${q.toString()}`, {
+        headers: { Accept: "application/json" },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const msg =
+            (data && data.error && data.error.message) ||
+            `Mapillary HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        throw err;
+    }
+    return Array.isArray(data?.data) ? data.data : [];
+}
+
+/**
+ * Cherche un panorama Mapillary près de (lat, lon), en élargissant la zone.
+ * GET /api/mapillary/nearby-pano?lat=&lon=&minDistanceM=&preferFar=1
+ */
+app.get("/api/mapillary/nearby-pano", async (req, res) => {
+    try {
+        const token = getMapillaryToken();
+        if (!token) {
+            return res.status(503).json({
+                error:
+                    "Token Mapillary manquant — ajoutez MAPILLARY_ACCESS_TOKEN dans .env (https://www.mapillary.com/dashboard/developers)",
+            });
+        }
+        const lat = Number(req.query.lat);
+        const lon = Number(req.query.lon);
+        if (![lat, lon].every(Number.isFinite)) {
+            return res.status(400).json({ error: "lat / lon invalides" });
+        }
+        const minDistanceM = Math.max(0, Number(req.query.minDistanceM) || 0);
+        const preferFar = req.query.preferFar === "1" || req.query.preferFar === "true";
+
+        /** @type {object[]} */
+        let candidates = [];
+
+        // 1) Recherche rayon 50 m (API préfère déjà les 360°).
+        try {
+            candidates = await mapillaryFetchImages(token, {
+                lat,
+                lng: lon,
+                radius: 50,
+                limit: 20,
+            });
+        } catch (e) {
+            console.warn("[mapillary] radius search:", e.message || e);
+        }
+
+        // 2) Bbox de plus en plus large, panoramas seulement.
+        const halfDegs = [0.002, 0.004, 0.008, 0.02, 0.04];
+        for (const half of halfDegs) {
+            if (candidates.some((img) => img.is_pano)) break;
+            const bbox = `${lon - half},${lat - half},${lon + half},${lat + half}`;
+            try {
+                const more = await mapillaryFetchImages(token, {
+                    bbox,
+                    is_pano: true,
+                    limit: 50,
+                });
+                candidates = candidates.concat(more);
+            } catch (e) {
+                console.warn("[mapillary] bbox search:", e.message || e);
+            }
+        }
+
+        if (!candidates.length) {
+            return res.status(404).json({
+                error: "Aucune image Mapillary près de ce point (essayez une zone urbaine)",
+            });
+        }
+
+        const scored = candidates
+            .map((img) => {
+                const g = img.geometry?.coordinates;
+                const ilon = Array.isArray(g) ? Number(g[0]) : NaN;
+                const ilat = Array.isArray(g) ? Number(g[1]) : NaN;
+                const dist = Number.isFinite(ilat) && Number.isFinite(ilon)
+                    ? haversineMeters(lat, lon, ilat, ilon)
+                    : 1e9;
+                return { img, dist, ilat, ilon };
+            })
+            .filter((row) => row.dist >= minDistanceM);
+
+        const pool = scored.length ? scored : candidates.map((img) => ({
+            img,
+            dist: 0,
+            ilat: lat,
+            ilon: lon,
+        }));
+
+        pool.sort((a, b) => {
+            const pa = a.img.is_pano ? 0 : 1;
+            const pb = b.img.is_pano ? 0 : 1;
+            if (pa !== pb) return pa - pb;
+            if (preferFar) {
+                // Préfère ~300–2500 m du centre, puis le plus proche dans cette bande.
+                const score = (d) => {
+                    if (d < 80) return 1e6 + d;
+                    if (d > 4000) return d;
+                    return Math.abs(d - 800);
+                };
+                return score(a.dist) - score(b.dist);
+            }
+            return a.dist - b.dist;
+        });
+
+        const best = pool[0];
+        const thumb =
+            best.img.thumb_original_url ||
+            best.img.thumb_2048_url ||
+            null;
+        if (!thumb) {
+            return res.status(404).json({ error: "Image Mapillary sans URL de téléchargement" });
+        }
+
+        return res.json({
+            id: best.img.id,
+            isPano: Boolean(best.img.is_pano),
+            distanceM: Math.round(best.dist),
+            lat: best.ilat,
+            lon: best.ilon,
+            compassAngle: best.img.compass_angle ?? null,
+            capturedAt: best.img.captured_at ?? null,
+            width: best.img.width ?? null,
+            height: best.img.height ?? null,
+            thumbUrl: thumb,
+            proxyUrl: `/api/mapillary/image?id=${encodeURIComponent(best.img.id)}`,
+            attribution: "© Mapillary contributors",
+        });
+    } catch (error) {
+        console.error("[api/mapillary/nearby-pano]", error);
+        return res.status(502).json({
+            error: error instanceof Error ? error.message : "Mapillary indisponible",
+        });
+    }
+});
+
+/**
+ * Proxy l’image Mapillary (évite CORS) — id d’image Graph API.
+ */
+app.get("/api/mapillary/image", async (req, res) => {
+    try {
+        const token = getMapillaryToken();
+        if (!token) {
+            return res.status(503).json({ error: "Token Mapillary manquant" });
+        }
+        const id = String(req.query.id || "").trim();
+        if (!/^\d+$/.test(id)) {
+            return res.status(400).json({ error: "id image invalide" });
+        }
+        const metaRes = await fetch(
+            `${MAPILLARY_GRAPH}/${id}?` +
+                new URLSearchParams({
+                    access_token: token,
+                    fields: "thumb_original_url,thumb_2048_url,is_pano",
+                }).toString()
+        );
+        const meta = await metaRes.json().catch(() => ({}));
+        if (!metaRes.ok) {
+            return res.status(502).json({
+                error: (meta && meta.error && meta.error.message) || "Métadonnées Mapillary",
+            });
+        }
+        const url = meta.thumb_original_url || meta.thumb_2048_url;
+        if (!url || typeof url !== "string") {
+            return res.status(404).json({ error: "URL image absente" });
+        }
+        const imgRes = await fetch(url);
+        if (!imgRes.ok) {
+            return res.status(502).json({ error: `Téléchargement image (${imgRes.status})` });
+        }
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.setHeader("X-Mapillary-Is-Pano", meta.is_pano ? "1" : "0");
+        return res.send(buffer);
+    } catch (error) {
+        console.error("[api/mapillary/image]", error);
+        return res.status(502).json({ error: "Image Mapillary indisponible" });
+    }
+});
+
+const OSM_MAP_API_URL = "https://api.openstreetmap.org/api/0.6/map";
+const OSM_FETCH_HEADERS = {
+    Accept: "application/xml, application/json",
+    "User-Agent": "siteperso-lab3d/1.0 (educational; contact: local-dev)",
+};
+
+/**
+ * Lit les attributs XML d’une balise ouvrante.
+ * @param {string} attrs
+ * @returns {Record<string, string>}
+ */
+function parseXmlAttrs(attrs) {
+    /** @type {Record<string, string>} */
+    const out = {};
+    const re = /([a-zA-Z_:][\w:.-]*)\s*=\s*"([^"]*)"/g;
+    let m;
+    while ((m = re.exec(attrs))) out[m[1]] = m[2];
+    return out;
+}
+
+/**
+ * Convertit le XML /api/0.6/map en éléments façon Overpass (type, tags, geometry).
+ * @param {string} xml
+ * @param {string[]} layers
+ */
+function parseOsmMapXmlToElements(xml, layers) {
+    /** @type {Map<string, { lat: number, lon: number }>} */
+    const nodes = new Map();
+    const nodeRe = /<node\b([^>]*)\/?>/g;
+    let nm;
+    while ((nm = nodeRe.exec(xml))) {
+        const a = parseXmlAttrs(nm[1]);
+        if (!a.id || a.lat == null || a.lon == null) continue;
+        const lat = Number(a.lat);
+        const lon = Number(a.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        nodes.set(a.id, { lat, lon });
+    }
+
+    const wantHighway = layers.includes("highway");
+    const wantBuilding = layers.includes("building");
+    /** @type {object[]} */
+    const elements = [];
+    const wayRe = /<way\b([^>]*)>([\s\S]*?)<\/way>/g;
+    let wm;
+    while ((wm = wayRe.exec(xml))) {
+        const a = parseXmlAttrs(wm[1]);
+        const body = wm[2];
+        /** @type {Record<string, string>} */
+        const tags = {};
+        const tagRe = /<tag\b([^>]*)\/?>/g;
+        let tm;
+        while ((tm = tagRe.exec(body))) {
+            const ta = parseXmlAttrs(tm[1]);
+            if (ta.k) tags[ta.k] = ta.v ?? "";
+        }
+        const isHighway = Boolean(tags.highway) && tags.area !== "yes";
+        const isBuilding = Boolean(tags.building) && tags.building !== "no";
+        if (!(wantHighway && isHighway) && !(wantBuilding && isBuilding)) continue;
+
+        /** @type {{ lat: number, lon: number }[]} */
+        const geometry = [];
+        const ndRe = /<nd\b([^>]*)\/?>/g;
+        let dm;
+        while ((dm = ndRe.exec(body))) {
+            const da = parseXmlAttrs(dm[1]);
+            const pt = da.ref ? nodes.get(da.ref) : null;
+            if (pt) geometry.push({ lat: pt.lat, lon: pt.lon });
+        }
+        if (geometry.length < 2) continue;
+        elements.push({
+            type: "way",
+            id: Number(a.id) || a.id,
+            tags,
+            geometry,
+        });
+    }
+    return elements;
+}
+
+/**
+ * Source fiable : API carte OSM (pas Overpass — souvent bloqué / saturé).
+ * @param {number} south
+ * @param {number} west
+ * @param {number} north
+ * @param {number} east
+ * @param {string[]} layers
+ */
+async function fetchOsmMapElements(south, west, north, east, layers) {
+    const area = Math.abs(north - south) * Math.abs(east - west);
+    if (area > 0.24) {
+        throw new Error("Zone trop grande pour l’API OSM Map — réduisez la taille du terrain");
+    }
+    const url =
+        `${OSM_MAP_API_URL}?bbox=` +
+        [west, south, east, north].map((v) => Number(v).toFixed(6)).join(",");
+    const response = await fetch(url, { headers: OSM_FETCH_HEADERS });
+    if (!response.ok) {
+        throw new Error(`API OSM Map (${response.status})`);
+    }
+    const xml = await response.text();
+    if (!xml || xml.length < 40 || !xml.includes("<osm")) {
+        throw new Error("Réponse OSM Map invalide");
+    }
+    return parseOsmMapXmlToElements(xml, layers);
+}
 
 app.post("/api/osm/overpass", async (req, res) => {
     try {
@@ -762,25 +1178,102 @@ app.post("/api/osm/overpass", async (req, res) => {
         if (latSpan > 0.08 || lonSpan > 0.12) {
             return res.status(400).json({ error: "Zone trop grande pour OSM — réduisez la taille du terrain" });
         }
-        const query = `[out:json][timeout:50];
-way["highway"](${south},${west},${north},${east});
-out geom;`;
-        const response = await fetch(OVERPASS_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `data=${encodeURIComponent(query)}`,
-        });
-        if (!response.ok) {
-            return res.status(502).json({ error: `Overpass OSM (${response.status})` });
+        const queryLayers = Array.isArray(req.body?.include)
+            ? req.body.include.filter((v) => v === "highway" || v === "building")
+            : ["highway"];
+        if (!queryLayers.length) queryLayers.push("highway");
+
+        const elements = await fetchOsmMapElements(south, west, north, east, queryLayers);
+        if (!elements.length) {
+            return res.status(404).json({
+                error: "Aucune route / bâtiment OSM dans cette zone — zoomez sur un quartier",
+                elements: [],
+            });
         }
-        const data = await response.json();
-        if (!Array.isArray(data?.elements)) {
-            return res.status(502).json({ error: "Réponse Overpass invalide" });
-        }
-        return res.json(data);
+        return res.json({ elements, source: "osm-map-api" });
     } catch (error) {
         console.error("[api/osm/overpass]", error);
-        return res.status(502).json({ error: "Service OpenStreetMap indisponible" });
+        return res.status(502).json({
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Service OpenStreetMap indisponible",
+        });
+    }
+});
+
+/**
+ * Bâtiments BD TOPO® v3 (Géoplateforme WFS) — empreintes + hauteur IGN.
+ * GET /api/ign/bdtopo-buildings?south=&west=&north=&east=&count=
+ */
+app.get("/api/ign/bdtopo-buildings", async (req, res) => {
+    try {
+        const south = Number(req.query.south);
+        const west = Number(req.query.west);
+        const north = Number(req.query.north);
+        const east = Number(req.query.east);
+        if (![south, west, north, east].every(Number.isFinite)) {
+            return res.status(400).json({ error: "BBox invalide (south, west, north, east)" });
+        }
+        if (south >= north || west >= east) {
+            return res.status(400).json({ error: "BBox incohérente" });
+        }
+        const latSpan = north - south;
+        const lonSpan = east - west;
+        if (latSpan > 0.08 || lonSpan > 0.12) {
+            return res.status(400).json({
+                error: "Zone trop grande pour BD TOPO — réduisez la taille du terrain",
+            });
+        }
+        const count = Math.max(1, Math.min(800, Number(req.query.count) || 500));
+        const bbox = `${west},${south},${east},${north},EPSG:4326`;
+        const q = new URLSearchParams({
+            SERVICE: "WFS",
+            VERSION: "2.0.0",
+            REQUEST: "GetFeature",
+            TYPENAMES: "BDTOPO_V3:batiment",
+            OUTPUTFORMAT: "application/json",
+            SRSNAME: "EPSG:4326",
+            BBOX: bbox,
+            COUNT: String(count),
+        });
+        const url = `https://data.geopf.fr/wfs/ows?${q.toString()}`;
+        const upstream = await fetch(url, {
+            headers: { Accept: "application/json" },
+        });
+        const text = await upstream.text();
+        if (!upstream.ok) {
+            let msg = `BD TOPO HTTP ${upstream.status}`;
+            try {
+                const j = JSON.parse(text);
+                if (j?.exceptions?.[0]?.text) msg = String(j.exceptions[0].text);
+            } catch {
+                /* ignore */
+            }
+            return res.status(502).json({ error: msg });
+        }
+        let geo;
+        try {
+            geo = JSON.parse(text);
+        } catch {
+            return res.status(502).json({ error: "Réponse BD TOPO invalide" });
+        }
+        const features = Array.isArray(geo?.features) ? geo.features : [];
+        return res.json({
+            type: "FeatureCollection",
+            features,
+            count: features.length,
+            source: "ign-bdtopo-wfs",
+            attribution: "© IGN — BD TOPO®",
+        });
+    } catch (error) {
+        console.error("[api/ign/bdtopo-buildings]", error);
+        return res.status(502).json({
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Service BD TOPO indisponible",
+        });
     }
 });
 
@@ -789,7 +1282,9 @@ app.get('/api/version', (req, res) => {
         ok: true,
         service: "siteperso-main-server",
         ignElevationProxy: true,
+        ignOrthoTileProxy: true,
         osmOverpassProxy: true,
+        ignBdTopoBuildingsProxy: true,
         simEngineBuildTag: SIM_ENGINE_BUILD_TAG,
         simUiVersion: SIM_UI_VERSION,
         simulateurDir: dirSimulateur,
@@ -1486,8 +1981,21 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                     </tr>
                 </thead>
                 <tbody>`;
-        
-        baseEleves[classe].forEach((e, index) => {
+
+        const sortedEleves = [...(baseEleves[classe] || [])].sort((a, b) => {
+            const an = String(a?.nom || "");
+            const bn = String(b?.nom || "");
+            const ap = String(a?.prenom || "");
+            const bp = String(b?.prenom || "");
+            // Ordre alphabétique "professionnel" : nom puis prénom, insensible à la casse.
+            const byNom = an.localeCompare(bn, "fr", { sensitivity: "base" });
+            if (byNom !== 0) return byNom;
+            const byPrenom = ap.localeCompare(bp, "fr", { sensitivity: "base" });
+            if (byPrenom !== 0) return byPrenom;
+            return String(a?.code || "").localeCompare(String(b?.code || ""), "fr", { sensitivity: "base" });
+        });
+
+        sortedEleves.forEach((e, index) => {
             let notesStr = Object.entries(e.notes).length > 0 
                 ? Object.entries(e.notes).map(([q, n]) => `
                     <span style="display:inline-block; background:#444; padding:2px 5px; border-radius:4px; margin-right:5px; margin-bottom:2px;">
@@ -1502,7 +2010,11 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                 : `<span style="color:#666;">Aucune note</span>`;
             
             htmlEleves += `
-                <tr style="background:${index % 2 === 0 ? '#1a1a1a' : '#252525'}; border-bottom:1px solid #333;">
+                <tr
+                    style="background:${index % 2 === 0 ? '#1a1a1a' : '#252525'}; border-bottom:1px solid #333; cursor:pointer;"
+                    onclick="openEditEleve(event, '${escapeJsString(classe)}', '${escapeJsString(e.code)}', '${escapeJsString(e.nom)}', '${escapeJsString(e.prenom)}')"
+                    title="Clique pour modifier cet élève"
+                >
                     <td style="padding:8px;">${escapeHtml(e.nom)}</td>
                     <td style="padding:8px;">${escapeHtml(e.prenom)}</td>
                     <td style="padding:8px; text-align:center; font-family:monospace; color:#00d1ff;">${escapeHtml(e.code)}</td>
@@ -1592,6 +2104,49 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                     <input type="text" name="code" placeholder="Code (ex: JD123)" required style="padding:8px; border-radius:4px; border:none; background:#333; color:white;">
                     <button type="submit" style="background:#10b981; color:white; border:none; padding:8px 20px; border-radius:4px; font-weight:bold; cursor:pointer;">➕ Ajouter l'élève</button>
                 </form>
+                <!-- Modal édition : déclenchée par clic sur la ligne -->
+                <div id="edit-eleve-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:99999; align-items:center; justify-content:center;">
+                    <form action="/admin/modifier-eleve" method="POST" style="width:420px; background:#0f172a; border:1px solid #00d1ff; border-radius:10px; padding:16px; display:grid; gap:10px;">
+                        <h3 style="margin:0; color:#00d1ff;">✏️ Modifier un élève</h3>
+                        <input type="hidden" name="classe" id="edit-classe">
+                        <input type="hidden" name="codeOriginal" id="edit-code-original">
+                        <label style="display:grid; gap:4px; font-size:0.85rem; color:#e2e8f0;">
+                            Nom
+                            <input type="text" name="nom" id="edit-nom" required style="width:100%; padding:8px; background:#111827; border:1px solid #334155; border-radius:6px; color:white;">
+                        </label>
+                        <label style="display:grid; gap:4px; font-size:0.85rem; color:#e2e8f0;">
+                            Prénom
+                            <input type="text" name="prenom" id="edit-prenom" required style="width:100%; padding:8px; background:#111827; border:1px solid #334155; border-radius:6px; color:white;">
+                        </label>
+                        <label style="display:grid; gap:4px; font-size:0.85rem; color:#e2e8f0;">
+                            Code accès (pour notes)
+                            <input type="text" name="code" id="edit-code" required style="width:100%; padding:8px; background:#111827; border:1px solid #334155; border-radius:6px; color:white; font-family:monospace;">
+                        </label>
+                        <div style="display:flex; gap:10px; margin-top:6px;">
+                            <button type="submit" style="flex:1; background:#10b981; color:white; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">Enregistrer</button>
+                            <button type="button" onclick="closeEditEleve()" style="flex:1; background:#334155; color:white; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">Annuler</button>
+                        </div>
+                    </form>
+                </div>
+
+                <script>
+                    function openEditEleve(event, classe, code, nom, prenom) {
+                        // Évite d’ouvrir l’édition si l’on clique dans une zone de formulaire (ex: suppression)
+                        if (event?.target?.closest && event.target.closest('form')) return;
+                        const modal = document.getElementById('edit-eleve-modal');
+                        if (!modal) return;
+                        document.getElementById('edit-classe').value = classe;
+                        document.getElementById('edit-code-original').value = code;
+                        document.getElementById('edit-nom').value = nom;
+                        document.getElementById('edit-prenom').value = prenom;
+                        document.getElementById('edit-code').value = code;
+                        modal.style.display = 'flex';
+                    }
+                    function closeEditEleve() {
+                        const modal = document.getElementById('edit-eleve-modal');
+                        if (modal) modal.style.display = 'none';
+                    }
+                </script>
                 ${htmlEleves || "<p style='color:#666; margin-top:20px;'>Aucun élève inscrit pour le moment.</p>"}
             </section>
         </div>
@@ -1906,6 +2461,44 @@ app.post('/admin/supprimer-eleve', authentificationProf, (req, res) => {
         
         fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
     }
+    res.redirect('/espace-correction');
+});
+
+// Route pour modifier un élève (édition depuis l’interface prof)
+app.post('/admin/modifier-eleve', authentificationProf, (req, res) => {
+    const { classe, codeOriginal, nom, prenom, code } = req.body;
+    const classeStr = String(classe || "").trim();
+    const codeOrig = String(codeOriginal || "").trim();
+    const nextNom = String(nom || "").trim();
+    const nextPrenom = String(prenom || "").trim();
+    const nextCode = String(code || "").trim();
+
+    if (!classeStr || !codeOrig || !nextNom || !nextPrenom || !nextCode) {
+        return res.redirect('/espace-correction');
+    }
+    if (!baseEleves[classeStr]) {
+        return res.redirect('/espace-correction');
+    }
+
+    const eleve = baseEleves[classeStr].find(e => e.code === codeOrig);
+    if (!eleve) {
+        return res.redirect('/espace-correction');
+    }
+
+    // Si le code change, on empêche les doublons.
+    if (nextCode !== codeOrig) {
+        for (let c in baseEleves) {
+            if (!baseEleves[c]) continue;
+            const exists = baseEleves[c].some(e => e.code === nextCode);
+            if (exists) return res.status(400).send("Code élève déjà utilisé.");
+        }
+    }
+
+    eleve.nom = nextNom;
+    eleve.prenom = nextPrenom;
+    eleve.code = nextCode;
+
+    fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
     res.redirect('/espace-correction');
 });
 

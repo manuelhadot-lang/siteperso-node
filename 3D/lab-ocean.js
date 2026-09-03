@@ -1,16 +1,17 @@
 /** Océan réaliste — vagues Gerstner, reflets miroir, écume, normal map. */
 import * as THREE from "three";
-import { GRID_SIZE } from "./grid-constants.js";
 import { bindRangeSliderWheel } from "./wheel-utils.js";
 
 export const OCEAN_SCENE_ITEM_ID = "env-ocean";
 
 const WATER_NORMALS_URL = "/3D/textures/waternormals.jpg";
 /** Maillage plus dense pour vagues et littoral plus fins. */
-const SEGMENTS = 280;
+const SEGMENTS = 320;
+const OCEAN_SIZE_MIN = 50;
+const OCEAN_SIZE_MAX = 2000;
 
 const DEFAULTS = {
-    size: GRID_SIZE * 3.6,
+    size: 2000,
     level: -0.05,
     color: "#074455",
     sunColor: "#fff1d6",
@@ -31,14 +32,17 @@ const DEFAULTS = {
  * dans le reflet sans créer d’artefacts latéraux. */
 const MIRROR_CLIP_BIAS = 0.005;
 
-/** Trains de Gerstner — doivent rester identiques au vertex shader. */
+/** Trains de Gerstner — doivent rester identiques au vertex shader.
+ * Fréquences incommensurables + houle longue pour éviter un motif qui se répète. */
 const WAVE_TRAINS = [
-    { amp: 0.42, freq: 0.95, speed: 1.05, dir: [1.0, 0.22], steep: 0.9, timeMul: 1 },
-    { amp: 0.28, freq: 1.65, speed: 0.88, dir: [-0.6, 1.0], steep: 0.75, timeMul: 1.08 },
-    { amp: 0.16, freq: 2.85, speed: 1.35, dir: [0.4, -0.85], steep: 0.55, timeMul: 0.92 },
-    { amp: 0.1, freq: 4.6, speed: 1.72, dir: [-0.9, -0.35], steep: 0.4, timeMul: 1.18 },
-    { amp: 0.055, freq: 7.8, speed: 2.15, dir: [0.15, 0.98], steep: 0.28, timeMul: 1.4 },
-    { amp: 0.03, freq: 12.5, speed: 2.55, dir: [-0.72, 0.55], steep: 0.18, timeMul: 1.65 },
+    { amp: 0.48, freq: 0.078, speed: 0.38, dir: [0.96, 0.28], steep: 0.5, timeMul: 1 },
+    { amp: 0.3, freq: 0.127, speed: 0.47, dir: [-0.38, 0.925], steep: 0.45, timeMul: 1.06 },
+    { amp: 0.22, freq: 0.91, speed: 1.05, dir: [1.0, 0.22], steep: 0.85, timeMul: 1 },
+    { amp: 0.16, freq: 1.618, speed: 0.88, dir: [-0.6, 1.0], steep: 0.7, timeMul: 1.08 },
+    { amp: 0.11, freq: 2.414, speed: 1.35, dir: [0.4, -0.85], steep: 0.5, timeMul: 0.92 },
+    { amp: 0.07, freq: 3.732, speed: 1.72, dir: [-0.9, -0.35], steep: 0.35, timeMul: 1.18 },
+    { amp: 0.04, freq: 6.18, speed: 2.15, dir: [0.15, 0.98], steep: 0.25, timeMul: 1.4 },
+    { amp: 0.022, freq: 9.51, speed: 2.55, dir: [-0.72, 0.55], steep: 0.16, timeMul: 1.65 },
 ].map((wave) => {
     const len = Math.hypot(wave.dir[0], wave.dir[1]) || 1;
     return { ...wave, dir: [wave.dir[0] / len, wave.dir[1] / len] };
@@ -81,7 +85,14 @@ float sampleTerrainHeightV(vec2 worldXZ) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
     return uTerrainHMin - 2.0;
   }
-  float enc = texture2D(uTerrainHeight, uv).r;
+  // Moyenne 5 taps (~1,2 m) pour lisser le littoral face au maillage.
+  float du = 1.2 / max(uTerrainSize, 1.0);
+  float enc =
+    texture2D(uTerrainHeight, uv).r * 0.36 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(du, 0.0), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(-du, 0.0), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(0.0, du), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(0.0, -du), 0.0, 1.0)).r * 0.16;
   return mix(uTerrainHMin, uTerrainHMax, enc) + uTerrainYOffset;
 }
 
@@ -110,8 +121,8 @@ vec3 gerstner(vec2 xz, float amp, float freq, float speed, vec2 dir, float steep
 
 void main() {
   vec3 pos = position;
-  vec2 xz = pos.xz;
-  vBaseXZ = (modelMatrix * vec4(pos.x, 0.0, pos.z, 1.0)).xz;
+  vec2 xz = (modelMatrix * vec4(pos.x, 0.0, pos.z, 1.0)).xz;
+  vBaseXZ = xz;
   float t = uTime * uWaveSpeed;
   float h = uWaveHeight;
   float f = uWaveScale;
@@ -132,12 +143,14 @@ void main() {
   vec3 binormal = vec3(0.0, 0.0, 1.0);
   vec3 disp = vec3(0.0);
 
-  disp += gerstner(xz, h * 0.42, f * 0.95, 1.05, vec2(1.0, 0.22), steep * 0.9, t, tangent, binormal);
-  disp += gerstner(xz, h * 0.28, f * 1.65, 0.88, vec2(-0.6, 1.0), steep * 0.75, t * 1.08, tangent, binormal);
-  disp += gerstner(xz, h * 0.16, f * 2.85, 1.35, vec2(0.4, -0.85), steep * 0.55, t * 0.92, tangent, binormal);
-  disp += gerstner(xz, h * 0.10, f * 4.6, 1.72, vec2(-0.9, -0.35), steep * 0.4, t * 1.18, tangent, binormal);
-  disp += gerstner(xz, h * 0.055, f * 7.8, 2.15, vec2(0.15, 0.98), steep * 0.28, t * 1.4, tangent, binormal);
-  disp += gerstner(xz, h * 0.03, f * 12.5, 2.55, vec2(-0.72, 0.55), steep * 0.18, t * 1.65, tangent, binormal);
+  disp += gerstner(xz, h * 0.48, f * 0.078, 0.38, vec2(0.96, 0.28), steep * 0.5, t, tangent, binormal);
+  disp += gerstner(xz, h * 0.30, f * 0.127, 0.47, vec2(-0.38, 0.925), steep * 0.45, t * 1.06, tangent, binormal);
+  disp += gerstner(xz, h * 0.22, f * 0.91, 1.05, vec2(1.0, 0.22), steep * 0.85, t, tangent, binormal);
+  disp += gerstner(xz, h * 0.16, f * 1.618, 0.88, vec2(-0.6, 1.0), steep * 0.7, t * 1.08, tangent, binormal);
+  disp += gerstner(xz, h * 0.11, f * 2.414, 1.35, vec2(0.4, -0.85), steep * 0.5, t * 0.92, tangent, binormal);
+  disp += gerstner(xz, h * 0.07, f * 3.732, 1.72, vec2(-0.9, -0.35), steep * 0.35, t * 1.18, tangent, binormal);
+  disp += gerstner(xz, h * 0.04, f * 6.18, 2.15, vec2(0.15, 0.98), steep * 0.25, t * 1.4, tangent, binormal);
+  disp += gerstner(xz, h * 0.022, f * 9.51, 2.55, vec2(-0.72, 0.55), steep * 0.16, t * 1.65, tangent, binormal);
 
   disp *= shoreDamp;
   pos += disp;
@@ -189,16 +202,28 @@ varying float vWaveElev;
 varying vec2 vBaseXZ;
 varying float vShoreDamp;
 
-vec4 getNoise(vec2 uv) {
-  vec2 uv0 = (uv / 103.0) + vec2(time / 17.0, time / 29.0);
-  vec2 uv1 = uv / 107.0 - vec2(time / -19.0, time / 31.0);
-  vec2 uv2 = uv / vec2(8907.0, 9803.0) + vec2(time / 101.0, time / 97.0);
-  vec2 uv3 = uv / vec2(1091.0, 1027.0) - vec2(time / 109.0, time / -113.0);
-  vec4 noise = texture2D(normalSampler, uv0)
-             + texture2D(normalSampler, uv1)
-             + texture2D(normalSampler, uv2)
-             + texture2D(normalSampler, uv3);
-  return noise * 0.5 - 1.0;
+mat2 rot2(float a) {
+  float c = cos(a);
+  float s = sin(a);
+  return mat2(c, -s, s, c);
+}
+
+vec4 sampleRipple(vec2 worldXZ, float meters, float angle, vec2 drift) {
+  vec2 uv = rot2(angle) * worldXZ / max(meters, 1.0);
+  uv += drift;
+  vec2 warp = texture2D(normalSampler, uv * 0.31 + vec2(0.17, 0.53)).rg - 0.5;
+  return texture2D(normalSampler, uv + warp * 0.22);
+}
+
+vec4 getNoise(vec2 worldXZ) {
+  float s = max(uSurfaceScale, 0.15);
+  float t = time;
+  vec4 n = vec4(0.0);
+  n += sampleRipple(worldXZ, 38.0 / s, 0.37, vec2(t * 0.021, t * 0.014));
+  n += sampleRipple(worldXZ, 67.0 / s, 1.21, vec2(-t * 0.017, t * 0.019));
+  n += sampleRipple(worldXZ, 109.0 / s, 2.08, vec2(t * 0.009, -t * 0.011));
+  n += sampleRipple(worldXZ, 181.0 / s, 2.84, vec2(-t * 0.006, t * 0.008));
+  return n * 0.5 - 1.0;
 }
 
 float sampleTerrainHeight(vec2 worldXZ) {
@@ -207,13 +232,19 @@ float sampleTerrainHeight(vec2 worldXZ) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
     return uTerrainHMin - 2.0;
   }
-  float enc = texture2D(uTerrainHeight, uv).r;
+  float du = 1.2 / max(uTerrainSize, 1.0);
+  float enc =
+    texture2D(uTerrainHeight, uv).r * 0.36 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(du, 0.0), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(-du, 0.0), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(0.0, du), 0.0, 1.0)).r * 0.16 +
+    texture2D(uTerrainHeight, clamp(uv + vec2(0.0, -du), 0.0, 1.0)).r * 0.16;
   return mix(uTerrainHMin, uTerrainHMax, enc) + uTerrainYOffset;
 }
 
 void main() {
   vec3 geoN = normalize(vNormalW);
-  vec4 noise = getNoise(vWorldPosition.xz * size * max(uSurfaceScale, 0.05));
+  vec4 noise = getNoise(vWorldPosition.xz);
   float detailStrength = clamp(uSurfaceDetail, 0.0, 2.5);
   float detailMix = mix(0.18, 0.78, vShoreDamp) * detailStrength;
   vec3 detailN = normalize(noise.xzy * vec3(1.6, 1.0, 1.6));
@@ -272,27 +303,26 @@ void main() {
   if (uTerrainEnabled > 0.5) {
     float terrainH = sampleTerrainHeight(vBaseXZ);
     waterDepth = vWorldPosition.y - terrainH;
-    float shoreW = max(uShoreWidth, 0.1);
+    float shoreW = max(uShoreWidth, 1.4);
 
-    // Transition littorale plus douce et précise.
-    edgeFade = smoothstep(-0.02, 0.12, waterDepth);
-    if (edgeFade < 0.003) discard;
+    // Fondu large : masque les crénelures du maillage à la ligne d’eau.
+    edgeFade = smoothstep(-shoreW * 0.35, shoreW * 1.55, waterDepth);
+    if (edgeFade < 0.004) discard;
 
-    float shallow = 1.0 - smoothstep(0.0, shoreW * 2.4, max(waterDepth, 0.0));
-    shoreMask = pow(shallow, 1.15);
+    float shallow = 1.0 - smoothstep(0.0, shoreW * 2.8, max(waterDepth, 0.0));
+    shoreMask = pow(shallow, 1.05);
 
     float wash = sin(time * 2.2 + vBaseXZ.x * 0.7 + vBaseXZ.y * 0.45) * 0.5 + 0.5;
     float wash2 = sin(time * 3.4 - vBaseXZ.x * 0.4 + vBaseXZ.y * 0.85) * 0.5 + 0.5;
     float wash3 = sin(time * 1.6 + vBaseXZ.x * 1.1 - vBaseXZ.y * 0.3) * 0.5 + 0.5;
-    float bandInner = smoothstep(shoreW * 0.95, 0.0, waterDepth);
-    float bandOuter = smoothstep(-0.02, 0.08, waterDepth);
+    float bandInner = smoothstep(shoreW * 1.15, 0.0, waterDepth);
+    float bandOuter = smoothstep(-shoreW * 0.2, shoreW * 0.35, waterDepth);
     float band = bandInner * bandOuter;
     float crestNoise = clamp(noise.x * 0.45 + noise.y * 0.25 + 0.5, 0.0, 1.0);
     shoreFoam = band * mix(0.5, 1.0, wash) * mix(0.65, 1.0, wash2) * mix(0.75, 1.0, wash3);
-    shoreFoam *= (0.7 + crestNoise * 0.4) * uFoamAmount * 1.45;
-    // Fine ligne d’écume au contact terre/eau.
-    float lip = smoothstep(0.07, 0.0, abs(waterDepth - 0.015)) * (0.55 + wash * 0.45);
-    shoreFoam = max(shoreFoam, lip * uFoamAmount * 1.1);
+    shoreFoam *= (0.7 + crestNoise * 0.4) * uFoamAmount * 1.25;
+    float lip = smoothstep(shoreW * 0.22, 0.0, abs(waterDepth - shoreW * 0.08)) * (0.55 + wash * 0.45);
+    shoreFoam = max(shoreFoam, lip * uFoamAmount * 0.85);
   }
 
   float depthTint = mix(0.32, 1.0, ndotv);
@@ -349,6 +379,7 @@ function createFallbackNormals() {
     ctx.putImageData(img, 0, 0);
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 8;
     return tex;
 }
 
@@ -356,12 +387,13 @@ function createFallbackNormals() {
  * @param {string} url
  * @returns {Promise<THREE.Texture>}
  */
-function loadNormals(url) {
+export function loadWaterNormals(url) {
     return new Promise((resolve) => {
         new THREE.TextureLoader().load(
             url,
             (tex) => {
                 tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                tex.anisotropy = 8;
                 resolve(tex);
             },
             undefined,
@@ -373,7 +405,7 @@ function loadNormals(url) {
 /**
  * Mesh océan avec reflets miroir + Gerstner.
  */
-class RealisticOcean extends THREE.Mesh {
+export class RealisticOcean extends THREE.Mesh {
     /**
      * @param {THREE.BufferGeometry} geometry
      * @param {{
@@ -445,7 +477,7 @@ class RealisticOcean extends THREE.Mesh {
                 uTerrainYOffset: { value: 0 },
                 uTerrainHMin: { value: -8 },
                 uTerrainHMax: { value: 18 },
-                uShoreWidth: { value: 0.85 },
+                uShoreWidth: { value: 2.2 },
             },
             vertexShader: VERTEX_SHADER,
             fragmentShader: FRAGMENT_SHADER,
@@ -478,6 +510,8 @@ class RealisticOcean extends THREE.Mesh {
                 const hide =
                     ud.labNoMirror === true ||
                     ud.labHelper === true ||
+                    (name === "lab-ocean" && obj !== this) ||
+                    (name === "lab-river" && obj !== this) ||
                     name === "lab-avatar-place-marker" ||
                     name.startsWith("avatar-place-") ||
                     type === "BoxHelper" ||
@@ -617,7 +651,7 @@ class RealisticOcean extends THREE.Mesh {
  */
 export function initOcean({
     scene,
-    camera: _camera,
+    camera,
     renderer: _renderer,
     sceneRegistry = null,
     showStatus = () => {},
@@ -640,10 +674,16 @@ export function initOcean({
     let fogBackup = null;
 
     function softenFogForOcean() {
-        if (!scene.fog || fogBackup) return;
-        fogBackup = { near: scene.fog.near, far: scene.fog.far };
-        scene.fog.near = Math.max(scene.fog.near, 40);
-        scene.fog.far = Math.max(scene.fog.far, 360);
+        const reach = Math.max(420, state.size * 0.9 + 120);
+        if (scene.fog instanceof THREE.Fog) {
+            if (!fogBackup) fogBackup = { near: scene.fog.near, far: scene.fog.far };
+            scene.fog.near = Math.min(Math.max(28, state.size * 0.025), reach * 0.18);
+            scene.fog.far = Math.max(scene.fog.far, reach);
+        }
+        if (camera?.far < reach) {
+            camera.far = reach;
+            camera.updateProjectionMatrix();
+        }
     }
 
     function restoreFog() {
@@ -748,7 +788,7 @@ export function initOcean({
         u.uTerrainYOffset.value = info.yOffset;
         u.uTerrainHMin.value = info.hMin;
         u.uTerrainHMax.value = info.hMax;
-        u.uShoreWidth.value = Math.max(0.45, Math.min(3.2, state.waveHeight * 1.35 + 0.65));
+        u.uShoreWidth.value = Math.max(2.0, Math.min(5.5, state.waveHeight * 1.6 + 2.0));
     }
 
     function applySettings() {
@@ -766,12 +806,13 @@ export function initOcean({
         u.uFoamAmount.value = state.foam;
         u.uSurfaceDetail.value = state.surfaceWaves;
         u.uSurfaceScale.value = state.surfaceScale;
-        u.size.value = 0.45 + state.waveScale * 4.5;
+        u.size.value = 1;
         u.sunDirection.value.copy(sunDir);
         mesh.material.transparent = true;
         mesh.position.y = state.level;
         mesh.userData.oceanClipBias = MIRROR_CLIP_BIAS;
         syncTerrainToOcean();
+        softenFogForOcean();
     }
 
     function registerSceneItem() {
@@ -809,7 +850,7 @@ export function initOcean({
         creating = true;
         createBtn && (createBtn.disabled = true);
         try {
-            if (!normalsTex) normalsTex = await loadNormals(WATER_NORMALS_URL);
+            if (!normalsTex) normalsTex = await loadWaterNormals(WATER_NORMALS_URL);
             updateSunFromScene();
 
             const geometry = new THREE.PlaneGeometry(state.size, state.size, SEGMENTS, SEGMENTS);
@@ -866,11 +907,17 @@ export function initOcean({
      * @param {{ recordHistory?: boolean }} [opts]
      */
     function removeOcean({ recordHistory = true, resetSettings = false } = {}) {
-        if (!mesh) return;
-        const before = recordHistory ? serializeState() : null;
-        scene.remove(mesh);
-        mesh.disposeResources();
-        mesh = null;
+        const before = recordHistory && mesh ? serializeState() : null;
+        if (mesh) {
+            scene.remove(mesh);
+            mesh.disposeResources();
+            mesh = null;
+        }
+        const leftover = scene.getObjectByName("lab-ocean");
+        if (leftover && leftover !== mesh) {
+            scene.remove(leftover);
+            leftover.disposeResources?.();
+        }
         restoreFog();
         sceneRegistry?.unregister(OCEAN_SCENE_ITEM_ID);
         if (resetSettings) {
@@ -888,7 +935,7 @@ export function initOcean({
      * @param {{ recordHistory?: boolean }} [opts]
      */
     function applyOceanSize(nextSize, { recordHistory = true } = {}) {
-        const size = Math.max(20, Math.min(500, Number(nextSize) || state.size));
+        const size = Math.max(OCEAN_SIZE_MIN, Math.min(OCEAN_SIZE_MAX, Number(nextSize) || state.size));
         if (!mesh) {
             state.size = size;
             syncUiFromState();
@@ -1058,7 +1105,10 @@ export function initOcean({
                 return;
             }
             Object.assign(state, {
-                size: Number(data.size) || DEFAULTS.size,
+                size: Math.max(
+                    OCEAN_SIZE_MIN,
+                    Math.min(OCEAN_SIZE_MAX, Number(data.size) || DEFAULTS.size)
+                ),
                 level: Number.isFinite(Number(data.level)) ? Number(data.level) : DEFAULTS.level,
                 color: data.color || DEFAULTS.color,
                 sunColor: data.sunColor || DEFAULTS.sunColor,

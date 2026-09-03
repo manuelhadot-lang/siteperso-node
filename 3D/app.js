@@ -10,12 +10,13 @@ import { initSkybox } from "./lab-skybox.js";
 import { initScenePanel } from "./lab-scene-panel.js";
 import { initTerrainEditor } from "./lab-terrain.js";
 import { initOcean } from "./lab-ocean.js";
+import { initRiver } from "./lab-river.js";
 import { initTextureLibrary } from "./lab-texture-library.js";
 import { initObjectLibrary } from "./lab-object-library.js";
 import * as THREE from "three";
 
 export const LAB_BUILD =
-    "20260819ignOsmRoadTexture_overpassProxy";
+    "20260903";
 
 initSidePanel();
 
@@ -102,20 +103,17 @@ if (viewport && blocker) {
     }
 
     if (fpsModeBtn) {
-        fpsModeBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
+        fpsModeBtn.addEventListener("click", () => {
             gallery.setMovementMode("fps");
         });
     }
     if (designModeBtn) {
-        designModeBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
+        designModeBtn.addEventListener("click", () => {
             gallery.setMovementMode("design");
         });
     }
     if (overviewModeBtn) {
-        overviewModeBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
+        overviewModeBtn.addEventListener("click", () => {
             gallery.setMovementMode("overview");
         });
     }
@@ -142,6 +140,9 @@ if (viewport && blocker) {
         console.info("[LAB]", msg);
     };
 
+    /** @type {ReturnType<typeof initOcean> | null} */
+    let oceanEditor = null;
+
     const terrainEditor = initTerrainEditor({
         scene: gallery.scene,
         camera: gallery.camera,
@@ -155,6 +156,14 @@ if (viewport && blocker) {
         setWorldSize: gallery.setWorldSize,
         showStatus: showLabStatus,
         setMovementMode: gallery.setMovementMode,
+        placePlayerAt: gallery.placePlayerAt,
+        clearSkybox: () => {
+            skyboxController?.clear?.(gallery.scene, gallery.renderer);
+            gallery.restoreDefaultEnvironment?.();
+        },
+        clearOcean: () => {
+            oceanEditor?.remove?.({ recordHistory: false, resetSettings: true });
+        },
     });
 
     let objectLibrary = null;
@@ -175,7 +184,7 @@ if (viewport && blocker) {
         console.warn("[LAB 3D] #lab-section-objlib introuvable");
     }
 
-    const oceanEditor = initOcean({
+    oceanEditor = initOcean({
         scene: gallery.scene,
         camera: gallery.camera,
         renderer: gallery.renderer,
@@ -184,11 +193,29 @@ if (viewport && blocker) {
         getTerrainHeightMap: () => terrainEditor.getHeightMapInfo?.() ?? null,
     });
 
-    const skyboxController = initSkybox({
+    const riverEditor = initRiver({
+        scene: gallery.scene,
+        camera: gallery.camera,
+        renderer: gallery.renderer,
+        sceneRegistry,
+        showStatus: showLabStatus,
+        getTerrain: () => terrainEditor.getTerrain?.() ?? null,
+        getTerrainHeightMap: () => terrainEditor.getHeightMapInfo?.() ?? null,
+        carveRiverBed: (path, width, depth) =>
+            terrainEditor.carveRiverBed?.(path, width, depth) ?? false,
+        restoreRiverBed: () => terrainEditor.restoreRiverBed?.() ?? false,
+        setRiverPlaceModeActive: gallery.setRiverPlaceModeActive,
+        canInteractAt: gallery.canInteractAt,
+    });
+
+    let skyboxController = initSkybox({
         getScene: () => gallery.scene,
         getRenderer: () => gallery.renderer,
         registry: sceneRegistry,
         showStatus: showLabStatus,
+        getIgnCenter: () => terrainEditor.getIgnCenter?.() ?? null,
+        getTerrainSizeMeters: () => terrainEditor.getSizeMeters?.() ?? 200,
+        sampleTerrainY: (x, z) => terrainEditor.sampleTerrainY?.(x, z) ?? 0,
     });
 
     if (spawnCubeBtn && objectInfoPanel && modeBtns.length && snapBtns.length) {
@@ -266,6 +293,7 @@ if (viewport && blocker) {
                 placeAvatarBtn,
                 terrainController: terrainEditor,
                 oceanController: oceanEditor,
+                riverController: riverEditor,
                 skyboxController: skyboxController ?? undefined,
             });
         } catch (error) {
@@ -460,17 +488,19 @@ if (viewport && blocker) {
                     const created = await editor.newScene();
                     // Ne pas toucher à la caméra si l’utilisateur a annulé le dialogue.
                     if (created) {
-                        gallery.resetViewForNewScene();
-                        // Sur une nouvelle scène, on enlève aussi l’océan et la skybox/HDRI,
-                        // sinon ils restent affichés.
                         oceanEditor?.remove?.({ recordHistory: false, resetSettings: true });
-                        skyboxController?.clear?.();
-                        // Par défaut sur une nouvelle scène : mode Conception + repères.
-                        gallery.setMovementMode("design");
+                        riverEditor?.remove?.({ recordHistory: false });
+                        const leftoverOcean = gallery.scene.getObjectByName("lab-ocean");
+                        if (leftoverOcean) gallery.scene.remove(leftoverOcean);
+                        const leftoverRiver = gallery.scene.getObjectByName("lab-river");
+                        if (leftoverRiver) gallery.scene.remove(leftoverRiver);
+                        skyboxController?.clear?.(gallery.scene, gallery.renderer);
+                        gallery.restoreDefaultEnvironment?.();
                         if (sceneRegistry) {
                             sceneRegistry.setVisible("env-grid", true);
                             sceneRegistry.setVisible("env-floor", true);
                         }
+                        gallery.resetViewForNewScene({ resetWorld: true });
                     }
                 },
                 onOpen: () => editor.openScene(),
@@ -480,7 +510,7 @@ if (viewport && blocker) {
                 onSaveDisk: () => editor.saveSceneToDisk(),
                 onClose: async () => {
                     const closed = await editor.closeScene();
-                    if (closed) gallery.resetViewForNewScene();
+                    if (closed) gallery.resetViewForNewScene({ resetWorld: true });
                 },
             });
 

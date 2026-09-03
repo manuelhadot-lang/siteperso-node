@@ -4,6 +4,7 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 import { bindIntensitySliderWheel } from "./lab-lights.js";
 import { applyStudioEnvironment } from "./lab-studio-env.js";
 import { composeEnvMapIntensity } from "./lab-mirror.js";
+import { wgs84ToLocalTerrain } from "./lab-terrain-ign.js";
 
 const { PMREMGenerator } = THREE;
 import {
@@ -16,6 +17,12 @@ export const SKYBOX_BRIGHTNESS_MIN = 0;
 export const SKYBOX_BRIGHTNESS_MAX = 3;
 export const SKYBOX_BRIGHTNESS_STEP = 0.05;
 export const SKYBOX_SCENE_ITEM_ID = "env-skybox";
+
+/** Rayon bulle Mapillary ≈ 15 % de la map (min/max en m) — pas une skybox à l’infini. */
+const MAPILLARY_DOME_FRAC = 0.15;
+const MAPILLARY_DOME_MIN_M = 12;
+const MAPILLARY_DOME_MAX_M = 55;
+const MAPILLARY_EYE_HEIGHT_M = 1.7;
 
 /** Ordre Three.js : +X, -X, +Y, -Y, +Z, -Z */
 const CUBE_FACE_RULES = [
@@ -66,6 +73,13 @@ let skyboxBrightness = 1;
 /** Source sérialisable (fichiers en data URL) pour enregistrer / recharger la skybox. */
 /** @type {{ name: string, type: string, dataUrl: string }[] | null} */
 let skyboxSourceFiles = null;
+/** infinite = HDRI classique ; localized = bulle Mapillary à l’échelle map. */
+/** @type {"infinite" | "localized"} */
+let skyboxDisplayMode = "infinite";
+/** @type {{ lat: number, lon: number, compassAngle: number | null } | null} */
+let localizedPanoMeta = null;
+/** @type {THREE.Mesh | null} */
+let localizedDomeMesh = null;
 
 /** @type {(() => THREE.Scene) | null} */
 let getSceneRef = null;
@@ -75,6 +89,89 @@ let getRendererRef = null;
 let refreshScenePanelRef = null;
 /** @type {(() => void) | null} */
 let openFilePickerRef = null;
+/** @type {(() => ({ lat: number, lon: number } | null)) | null} */
+let getIgnCenterRef = null;
+/** @type {(() => number) | null} */
+let getTerrainSizeRef = null;
+/** @type {((x: number, z: number) => number) | null} */
+let sampleTerrainYRef = null;
+
+/**
+ * @param {THREE.Scene} scene
+ */
+function disposeLocalizedDome(scene) {
+    if (!localizedDomeMesh) return;
+    scene.remove(localizedDomeMesh);
+    localizedDomeMesh.geometry?.dispose?.();
+    const mat = localizedDomeMesh.material;
+    if (mat && !Array.isArray(mat)) {
+        if (mat.map && mat.map !== loadedSkybox?.texture) {
+            mat.map.dispose();
+        }
+        mat.map = null;
+        mat.dispose();
+    }
+    localizedDomeMesh = null;
+}
+
+/**
+ * Rayon de la bulle panorama proportionnel à la taille de map.
+ * @param {number} sizeMeters
+ */
+function mapillaryDomeRadius(sizeMeters) {
+    const size = Math.max(40, Number(sizeMeters) || 200);
+    return THREE.MathUtils.clamp(size * MAPILLARY_DOME_FRAC, MAPILLARY_DOME_MIN_M, MAPILLARY_DOME_MAX_M);
+}
+
+/**
+ * Place / recrée la bulle Mapillary au point de capture, échelle map.
+ * @param {THREE.Scene} scene
+ */
+function syncLocalizedDome(scene) {
+    disposeLocalizedDome(scene);
+    if (!loadedSkybox || loadedSkybox.kind !== "equirect" || skyboxDisplayMode !== "localized") {
+        return;
+    }
+    const center = getIgnCenterRef?.() || null;
+    const meta = localizedPanoMeta;
+    if (!center || !meta) return;
+
+    const sizeMeters = getTerrainSizeRef?.() ?? 200;
+    const radius = mapillaryDomeRadius(sizeMeters);
+    const { x, z } = wgs84ToLocalTerrain(center.lat, center.lon, meta.lat, meta.lon);
+    const half = sizeMeters * 0.5;
+    // Si hors footprint, recentre sur le milieu de map.
+    const onMap = Math.abs(x) <= half && Math.abs(z) <= half;
+    const px = onMap ? x : 0;
+    const pz = onMap ? z : 0;
+    const groundY = sampleTerrainYRef?.(px, pz) ?? 0;
+
+    // Texture en UV classique (SphereGeometry) — pas EquirectangularReflectionMapping.
+    const domeMap = loadedSkybox.texture.clone();
+    domeMap.mapping = THREE.UVMapping;
+    domeMap.needsUpdate = true;
+    if ("colorSpace" in domeMap && "colorSpace" in loadedSkybox.texture) {
+        domeMap.colorSpace = loadedSkybox.texture.colorSpace;
+    }
+
+    const geometry = new THREE.SphereGeometry(radius, 64, 32);
+    const material = new THREE.MeshBasicMaterial({
+        map: domeMap,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+        fog: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = "lab-mapillary-dome";
+    mesh.userData.labMapillaryDome = true;
+    mesh.position.set(px, groundY + MAPILLARY_EYE_HEIGHT_M, pz);
+    // Compass Mapillary : 0 = nord. Monde lab : nord = −Z.
+    const compass = Number.isFinite(meta.compassAngle) ? Number(meta.compassAngle) : 0;
+    mesh.rotation.y = THREE.MathUtils.degToRad(-compass);
+    mesh.renderOrder = -1;
+    scene.add(mesh);
+    localizedDomeMesh = mesh;
+}
 
 /**
  * @param {File} file
@@ -302,6 +399,19 @@ async function buildSkyboxFromFiles(files) {
         return { kind: "equirect", texture };
     }
 
+    if (imageFiles.length === 1 && hdrFiles.length === 0) {
+        const image = await loadImageFile(imageFiles[0]);
+        const texture = new THREE.Texture(image);
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        if ("colorSpace" in texture) texture.colorSpace = THREE.SRGBColorSpace;
+        else texture.encoding = THREE.sRGBEncoding;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        return { kind: "equirect", texture };
+    }
+
     if (files.length === 6 && hdrFiles.length === 6) {
         return { kind: "cubemap", texture: await buildCubeTextureFromHdrFiles(files) };
     }
@@ -315,7 +425,7 @@ async function buildSkyboxFromFiles(files) {
     }
 
     throw new Error(
-        "Choisissez 1 fichier .hdr (panorama) ou 6 faces (HDR/JPEG/PNG) pour une skybox cubemap."
+        "Choisissez 1 fichier .hdr / panorama JPEG-PNG, ou 6 faces (HDR/JPEG/PNG) pour une skybox cubemap."
     );
 }
 
@@ -373,9 +483,25 @@ function showSkyboxOnScene(scene, renderer) {
         activeEnvTexture = pmremGenerator.fromCubemap(loadedSkybox.texture).texture;
     }
 
-    scene.background = loadedSkybox.texture;
-    scene.environment = activeEnvTexture;
-    scene.fog = null;
+    if (skyboxDisplayMode === "localized") {
+        // Pas de skybox à l’infini : bulle locale + IBL adoucie.
+        scene.background = DEFAULT_BACKGROUND.clone();
+        scene.fog = DEFAULT_FOG.clone();
+        if ("backgroundBlurriness" in scene) scene.backgroundBlurriness = 0;
+        if ("backgroundIntensity" in scene) scene.backgroundIntensity = 1;
+        if ("environmentIntensity" in scene) {
+            scene.environmentIntensity = 0.55;
+        }
+        scene.environment = activeEnvTexture;
+        syncLocalizedDome(scene);
+    } else {
+        disposeLocalizedDome(scene);
+        scene.background = loadedSkybox.texture;
+        scene.environment = activeEnvTexture;
+        scene.fog = null;
+        if ("environmentIntensity" in scene) scene.environmentIntensity = 1;
+    }
+
     applySkyboxMaterials(scene);
     applySkyboxBrightness(scene, renderer);
 }
@@ -385,17 +511,29 @@ function showSkyboxOnScene(scene, renderer) {
  * @param {THREE.WebGLRenderer} renderer
  */
 function hideSkyboxFromScene(scene, renderer) {
+    skyboxVisible = false;
+    disposeLocalizedDome(scene);
     if (activeEnvTexture) {
         activeEnvTexture.dispose();
         activeEnvTexture = null;
     }
+
+    scene.background = null;
+    scene.environment = null;
+    if ("backgroundBlurriness" in scene) scene.backgroundBlurriness = 0;
+    if ("backgroundIntensity" in scene) scene.backgroundIntensity = 1;
+    if ("environmentIntensity" in scene) scene.environmentIntensity = 1;
 
     scene.background = DEFAULT_BACKGROUND.clone();
     scene.fog = DEFAULT_FOG.clone();
 
     renderer.toneMapping = THREE.NoToneMapping;
     renderer.toneMappingExposure = 1;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    if ("outputColorSpace" in renderer) {
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else {
+        renderer.outputEncoding = THREE.sRGBEncoding;
+    }
 
     scene.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return;
@@ -413,7 +551,6 @@ function hideSkyboxFromScene(scene, renderer) {
         });
     });
 
-    // Restaurer les reflets studio pour le métal PBR
     applyStudioEnvironment(scene, renderer);
 }
 
@@ -429,6 +566,8 @@ function clearSkyboxFromScene(scene, renderer) {
     skyboxVisible = false;
     skyboxBrightness = 1;
     skyboxSourceFiles = null;
+    skyboxDisplayMode = "infinite";
+    localizedPanoMeta = null;
 
     if (pmremGenerator) {
         pmremGenerator.dispose();
@@ -439,11 +578,26 @@ function clearSkyboxFromScene(scene, renderer) {
 }
 
 /** Retire complètement la skybox / HDRI de la scène courante. */
-export function clearSkybox() {
-    const scene = getSceneRef?.();
-    const renderer = getRendererRef?.();
-    if (!scene || !renderer) return;
-    clearSkyboxFromScene(scene, renderer);
+export function clearSkybox(sceneOverride = null, rendererOverride = null) {
+    const scene = sceneOverride || getSceneRef?.();
+    const renderer = rendererOverride || getRendererRef?.();
+    if (scene && renderer) {
+        clearSkyboxFromScene(scene, renderer);
+        return;
+    }
+    const sc = getSceneRef?.();
+    if (sc) disposeLocalizedDome(sc);
+    loadedSkybox?.texture.dispose();
+    activeEnvTexture?.dispose();
+    pmremGenerator?.dispose();
+    loadedSkybox = null;
+    activeEnvTexture = null;
+    pmremGenerator = null;
+    skyboxVisible = false;
+    skyboxBrightness = 1;
+    skyboxSourceFiles = null;
+    skyboxDisplayMode = "infinite";
+    localizedPanoMeta = null;
 }
 
 /**
@@ -478,10 +632,97 @@ function setSkyboxVisible(visible) {
 }
 
 /**
+ * Charge un panorama équirectangulaire depuis une URL (ex. proxy Mapillary).
+ * @param {string} url
+ * @param {{ name?: string, showStatus?: (msg: string) => void, displayMode?: "infinite" | "localized", panoMeta?: { lat: number, lon: number, compassAngle: number | null } | null }} [opts]
+ */
+async function loadSkyboxFromImageUrl(url, opts = {}) {
+    const scene = getSceneRef?.();
+    const renderer = getRendererRef?.();
+    if (!scene || !renderer) return;
+    const showStatus = opts.showStatus;
+    showStatus?.("Téléchargement du panorama…");
+    const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) {
+        let msg = `Téléchargement impossible (${res.status})`;
+        try {
+            const j = await res.json();
+            if (j?.error) msg = String(j.error);
+        } catch {
+            /* ignore */
+        }
+        throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const file = new File([blob], opts.name || "mapillary-pano.jpg", {
+        type: blob.type || "image/jpeg",
+    });
+    await loadSkyboxFiles([file], showStatus, {
+        displayMode: opts.displayMode || "infinite",
+        panoMeta: opts.panoMeta ?? null,
+    });
+}
+
+/**
+ * Cherche un panorama Mapillary près d’un point et l’applique en bulle à l’échelle map.
+ * @param {{ lat: number, lon: number, preferFar?: boolean, minDistanceM?: number, showStatus?: (msg: string) => void }} opts
+ */
+async function loadMapillarySkyboxNear(opts) {
+    const { lat, lon, preferFar = true, minDistanceM = 0, showStatus } = opts;
+    if (![lat, lon].every(Number.isFinite)) {
+        throw new Error("Coordonnées invalides");
+    }
+    showStatus?.("Recherche Mapillary près du point…");
+    const q = new URLSearchParams({
+        lat: String(lat),
+        lon: String(lon),
+        preferFar: preferFar ? "1" : "0",
+        minDistanceM: String(Math.max(0, minDistanceM || 0)),
+    });
+    const metaRes = await fetch(`/api/mapillary/nearby-pano?${q}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+    });
+    const meta = await metaRes.json().catch(() => ({}));
+    if (!metaRes.ok) {
+        throw new Error(meta?.error || `Mapillary HTTP ${metaRes.status}`);
+    }
+    if (!meta.isPano) {
+        showStatus?.(
+            "Pas de panorama 360° à proximité — image perspective (bulle partielle)"
+        );
+    } else {
+        showStatus?.(
+            `Panorama Mapillary à ~${meta.distanceM} m du point — bulle locale…`
+        );
+    }
+    const proxyUrl = meta.proxyUrl || `/api/mapillary/image?id=${encodeURIComponent(meta.id)}`;
+    const panoLat = Number.isFinite(meta.lat) ? meta.lat : lat;
+    const panoLon = Number.isFinite(meta.lon) ? meta.lon : lon;
+    await loadSkyboxFromImageUrl(proxyUrl, {
+        name: `mapillary-${meta.id}.jpg`,
+        showStatus,
+        displayMode: "localized",
+        panoMeta: {
+            lat: panoLat,
+            lon: panoLon,
+            compassAngle: Number.isFinite(meta.compassAngle) ? meta.compassAngle : null,
+        },
+    });
+    const sizeMeters = getTerrainSizeRef?.() ?? 200;
+    const radius = Math.round(mapillaryDomeRadius(sizeMeters));
+    showStatus?.(
+        `Bulle Mapillary Ø≈${radius * 2} m (~${meta.distanceM} m du centre) — © Mapillary`
+    );
+    return meta;
+}
+
+/**
  * @param {File[]} files
  * @param {(msg: string) => void} [showStatus]
+ * @param {{ displayMode?: "infinite" | "localized", panoMeta?: { lat: number, lon: number, compassAngle: number | null } | null }} [opts]
  */
-async function loadSkyboxFiles(files, showStatus) {
+async function loadSkyboxFiles(files, showStatus, opts = {}) {
     if (!files.length) return;
 
     const scene = getSceneRef?.();
@@ -500,16 +741,24 @@ async function loadSkyboxFiles(files, showStatus) {
         loadedSkybox = skybox;
         skyboxSourceFiles = sourceEntries;
         skyboxVisible = true;
+        skyboxDisplayMode = opts.displayMode === "localized" ? "localized" : "infinite";
+        localizedPanoMeta = skyboxDisplayMode === "localized" ? opts.panoMeta || null : null;
         showSkyboxOnScene(scene, renderer);
         refreshScenePanelRef?.();
         showStatus?.(
-            skybox.kind === "equirect"
-                ? "Panorama HDR appliqué"
-                : "Skybox HDRI appliquée (6 faces)"
+            skyboxDisplayMode === "localized"
+                ? "Bulle panorama Mapillary (échelle map)"
+                : skybox.kind === "equirect"
+                  ? /\.hdr$/i.test(files[0]?.name || "")
+                      ? "Panorama HDR appliqué"
+                      : "Panorama appliqué"
+                  : "Skybox HDRI appliquée (6 faces)"
         );
     } catch (error) {
         console.error("[LAB 3D] Skybox :", error);
         skyboxSourceFiles = null;
+        skyboxDisplayMode = "infinite";
+        localizedPanoMeta = null;
         showStatus?.(
             error instanceof Error ? error.message : "Impossible de charger la skybox"
         );
@@ -526,6 +775,8 @@ function serializeSkybox() {
         kind: loadedSkybox.kind,
         visible: skyboxVisible,
         brightness: skyboxBrightness,
+        displayMode: skyboxDisplayMode,
+        panoMeta: localizedPanoMeta,
         files: skyboxSourceFiles,
     };
 }
@@ -539,7 +790,9 @@ async function deserializeSkybox(data, opts = {}) {
         clearSkybox();
         return;
     }
-    const raw = /** @type {{ files?: unknown, visible?: boolean, brightness?: number }} */ (data);
+    const raw = /** @type {{ files?: unknown, visible?: boolean, brightness?: number, displayMode?: string, panoMeta?: { lat: number, lon: number, compassAngle: number | null } | null }} */ (
+        data
+    );
     if (!Array.isArray(raw.files) || raw.files.length === 0) {
         clearSkybox();
         return;
@@ -559,7 +812,10 @@ async function deserializeSkybox(data, opts = {}) {
         return;
     }
     const files = sourceEntriesToFiles(entries);
-    await loadSkyboxFiles(files, opts.showStatus);
+    await loadSkyboxFiles(files, opts.showStatus, {
+        displayMode: raw.displayMode === "localized" ? "localized" : "infinite",
+        panoMeta: raw.panoMeta || null,
+    });
     if (!loadedSkybox) return;
     if (typeof raw.brightness === "number") {
         setSkyboxBrightness(raw.brightness);
@@ -634,18 +890,40 @@ function wireSkyboxFileInput(fileInput, showStatus) {
  *   getRenderer: () => THREE.WebGLRenderer,
  *   showStatus?: (msg: string) => void,
  *   registry?: ReturnType<import("./lab-scene-registry.js").createSceneRegistry> | null,
+ *   getIgnCenter?: () => ({ lat: number, lon: number } | null),
+ *   getTerrainSizeMeters?: () => number,
+ *   sampleTerrainY?: (x: number, z: number) => number,
  * }} options
  */
-export function initSkybox({ getScene, getRenderer, showStatus, registry }) {
+export function initSkybox({
+    getScene,
+    getRenderer,
+    showStatus,
+    registry,
+    getIgnCenter = null,
+    getTerrainSizeMeters = null,
+    sampleTerrainY = null,
+}) {
     getSceneRef = getScene;
     getRendererRef = getRenderer;
     refreshScenePanelRef = registry ? () => registry.refresh() : null;
+    getIgnCenterRef = getIgnCenter;
+    getTerrainSizeRef = getTerrainSizeMeters;
+    sampleTerrainYRef = sampleTerrainY;
 
     const api = {
         clear: clearSkybox,
         isActive: isSkyboxLoaded,
         serialize: serializeSkybox,
         deserialize: (data) => deserializeSkybox(data, { showStatus }),
+        loadMapillaryNear: (lat, lon, opts = {}) =>
+            loadMapillarySkyboxNear({
+                lat,
+                lon,
+                preferFar: opts.preferFar === true,
+                minDistanceM: opts.minDistanceM ?? 0,
+                showStatus,
+            }),
     };
 
     const fileInput = /** @type {HTMLInputElement | null} */ (
@@ -690,6 +968,32 @@ export function initSkybox({ getScene, getRenderer, showStatus, registry }) {
 
             if (action === "load") {
                 openFilePickerRef();
+                return;
+            }
+
+            if (action === "mapillary") {
+                const center = getIgnCenter?.() || null;
+                if (!center) {
+                    showStatus?.(
+                        "Importez d’abord un heightmap IGN (centre lat/lon requis)"
+                    );
+                    return;
+                }
+                showStatus?.("Mapillary…");
+                try {
+                    await loadMapillarySkyboxNear({
+                        lat: center.lat,
+                        lon: center.lon,
+                        preferFar: false,
+                        minDistanceM: 0,
+                        showStatus,
+                    });
+                } catch (error) {
+                    console.warn("[lab-skybox] Mapillary :", error);
+                    showStatus?.(
+                        error instanceof Error ? error.message : "Mapillary impossible"
+                    );
+                }
                 return;
             }
 

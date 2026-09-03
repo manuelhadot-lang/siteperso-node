@@ -48,6 +48,8 @@ const HELP_BODY = `
     <ul class="lab-help__list">
       <li><strong>Créer sur toute la grille</strong> puis sculptez (mamelon, montagne, cuvette, lisser, dessiner).</li>
       <li><strong>Clic gauche</strong> : sculpter · <strong>clic droit</strong> : tourner la caméra · <strong>molette</strong> : rayon du pinceau.</li>
+      <li><strong>Relief IGN (France)</strong> importe un heightmap réel (altitude, orthophoto, routes, bâtiments BD TOPO) dans le lab. Posez des objets, sculptez, créez un océan. <strong>Conception</strong> pour éditer, <strong>FPS</strong> pour marcher.</li>
+      <li><strong>Sol réel (photo IGN + routes)</strong> relance photo + routes. <strong>Placer les maisons (OSM)</strong> extrude les empreintes de bâtiments. <strong>Remplacer</strong> un calque (orthophoto, routes, herbe, sable, sentier, roche) pour changer une texture. Baissez <strong>Photo aérienne</strong> pour voir herbe / sable / roche du relief.</li>
       <li>Texture / normal map du sol, tile, intensité ; texture du pinceau pour peindre le relief.</li>
       <li>« Afficher le plateau » masque le sol gris d’origine (la collision FPS reste active).</li>
     </ul>
@@ -57,7 +59,7 @@ const HELP_BODY = `
     <h3 class="lab-help__heading">Océan</h3>
     <ul class="lab-help__list">
       <li><strong>Créer un océan</strong> ajoute une surface d’eau animée (vagues Gerstner + reflets).</li>
-      <li>Réglez couleur, opacité, hauteur / fréquence / vitesse des vagues, crêtes, écume, niveau et taille.</li>
+      <li>Réglez couleur, opacité, hauteur / fréquence / vitesse des vagues, crêtes, écume, niveau (jusqu’à 120 m) et taille (jusqu’à 2 km, sans motif répété).</li>
       <li>Une skybox HDRI améliore encore les reflets.</li>
     </ul>
   </section>

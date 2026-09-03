@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css?v=20260819ignOsmRoadTexture_overpassProxy">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260902splat-pbr">
 
 </head>
 
@@ -88,6 +88,7 @@
                     <button type="button" class="lab-menu__trigger" aria-haspopup="true" aria-expanded="false">Skybox</button>
                     <div class="lab-menu__panel" hidden role="menu">
                         <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="load">Charger HDRI…</button>
+                        <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="mapillary" title="Bulle 360° Mapillary à l’échelle de la map (pas une skybox à l’infini)">Bulle Mapillary (point IGN)</button>
                         <button type="button" class="lab-menu__item" role="menuitem" data-skybox-action="clear">Retirer skybox</button>
                     </div>
                 </div>
@@ -440,10 +441,15 @@
                                 type="button"
                                 id="btn-import-terrain-ign"
                                 class="lab-side-panel__tool"
-                                title="Choisir une zone sur la carte (zoom) et générer le heightmap IGN"
+                                title="Importer un relief IGN (RGE ALTI) dans le lab : photo aérienne, routes, bâtiments"
                             >
-                                <span class="lab-side-panel__tool-label">Heightmap IGN (carte)</span>
+                                <span class="lab-side-panel__tool-label">Relief IGN (France)</span>
                             </button>
+                            <p class="lab-terrain__hint">
+                                Charge un heightmap IGN réel (altitude, orthophoto, routes, bâtiments)
+                                pour sculpter et y poser des objets. <strong>Conception</strong> pour éditer,
+                                <strong>FPS</strong> pour marcher.
+                            </p>
                             <label class="lab-terrain__range" title="Taille du terrain (mètres)">
                                 <span>Taille <output id="lab-terrain-size-value">50 m</output></span>
                                 <input id="lab-terrain-size" type="range" min="10" max="2000" step="1" value="50">
@@ -478,11 +484,57 @@
                                 <button type="button" id="btn-terrain-texture" class="lab-terrain__action">Texture générale du sol</button>
                                 <button
                                     type="button"
-                                    id="btn-terrain-osm-roads"
-                                    class="lab-terrain__action"
-                                    title="Routes et rues OpenStreetMap alignées sur la zone IGN"
+                                    id="btn-terrain-real-ground"
+                                    class="lab-terrain__action lab-terrain__action--primary"
+                                    title="Plaque l’orthophoto IGN réelle sur le heightmap, puis le bitume des routes OSM"
                                 >
-                                    Texture routes (OSM)
+                                    Sol réel (photo IGN + routes)
+                                </button>
+                                <p class="lab-terrain__hint">
+                                    Un clic après le heightmap IGN : photo aérienne vraie, routes en asphalte. Remplacez ensuite chaque calque.
+                                </p>
+                                <div id="lab-terrain-layers" class="lab-terrain__layers">
+                                    <div class="lab-terrain__layer">
+                                        <span>Orthophoto</span>
+                                        <button type="button" data-ground-replace="ortho">Remplacer</button>
+                                    </div>
+                                    <div class="lab-terrain__layer">
+                                        <span>Routes</span>
+                                        <button type="button" data-ground-replace="road">Remplacer</button>
+                                    </div>
+                                    <div class="lab-terrain__layer">
+                                        <span>Herbe</span>
+                                        <button type="button" data-ground-replace="grass">Remplacer</button>
+                                    </div>
+                                    <div class="lab-terrain__layer">
+                                        <span>Sable</span>
+                                        <button type="button" data-ground-replace="sand">Remplacer</button>
+                                    </div>
+                                    <div class="lab-terrain__layer">
+                                        <span>Sentier</span>
+                                        <button type="button" data-ground-replace="path">Remplacer</button>
+                                    </div>
+                                    <div class="lab-terrain__layer">
+                                        <span>Roche</span>
+                                        <button type="button" data-ground-replace="rock">Remplacer</button>
+                                    </div>
+                                </div>
+                                <input id="lab-terrain-layer-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+                                <label class="lab-terrain__range" title="0 = textures sol (herbe / sable / roche), 100 = photo aérienne IGN">
+                                    <span>Photo aérienne <output id="lab-terrain-ortho-mix-value">100 %</output></span>
+                                    <input id="lab-terrain-ortho-mix" type="range" min="0" max="100" step="1" value="100">
+                                </label>
+                                <label class="lab-terrain__check" title="Bitume OSM superposé, sans remplacer le sol">
+                                    <input id="lab-terrain-show-roads" type="checkbox" checked>
+                                    <span>Afficher les routes</span>
+                                </label>
+                                <button
+                                    type="button"
+                                    id="btn-terrain-osm-buildings"
+                                    class="lab-terrain__action"
+                                    title="Extrude les bâtiments IGN BD TOPO® (hauteur officielle) ; repli OSM si besoin"
+                                >
+                                    Placer les bâtiments (BD TOPO)
                                 </button>
                                 <input id="lab-terrain-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <div class="lab-terrain__brush-texture">
@@ -583,13 +635,46 @@
                                 </label>
                                 <label class="lab-ocean__range" title="Niveau d’eau (hauteur Y)">
                                     <span>Niveau <output id="lab-ocean-level-value">-0,05 m</output></span>
-                                    <input id="lab-ocean-level" type="range" min="-5" max="8" step="0.05" value="-0.05">
+                                    <input id="lab-ocean-level" type="range" min="-20" max="120" step="0.05" value="-0.05">
                                 </label>
                                 <label class="lab-ocean__range" title="Étendue de l’océan">
-                                    <span>Taille <output id="lab-ocean-size-value">180 m</output></span>
-                                    <input id="lab-ocean-size" type="range" min="20" max="500" step="1" value="180">
+                                    <span>Taille <output id="lab-ocean-size-value">2000 m</output></span>
+                                    <input id="lab-ocean-size" type="range" min="50" max="2000" step="10" value="2000">
                                 </label>
                                 <button type="button" id="btn-ocean-remove" class="lab-ocean__action">Retirer l’océan</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="lab-side-panel__section lab-side-panel__section--collapsed" data-section="river">
+                        <button type="button" class="lab-side-panel__section-toggle" aria-expanded="false" aria-controls="lab-section-river">
+                            <span class="lab-side-panel__section-chevron" aria-hidden="true"></span>
+                            <span>Rivière</span>
+                        </button>
+                        <div id="lab-section-river" class="lab-side-panel__section-body">
+                            <button type="button" id="btn-trace-river" class="lab-side-panel__tool lab-ocean__create" title="Trace un lit creusé puis l’eau — idéale pour y poser l’océan">
+                                <span class="lab-river__icon" aria-hidden="true"></span>
+                                <span class="lab-side-panel__tool-label">Tracer une rivière</span>
+                            </button>
+                            <p class="lab-river__hint">
+                                Creuse un lit en U dans le terrain. Ensuite, créez un océan et baissez le niveau pour remplir le canal.
+                            </p>
+                            <div id="lab-river-tools" class="lab-ocean__tools" hidden>
+                                <div id="lab-river-kinds" class="lab-river__kinds">
+                                    <button type="button" data-river-kind="fleuve">Fleuve</button>
+                                    <button type="button" data-river-kind="riviere" class="is-active">Rivière</button>
+                                    <button type="button" data-river-kind="cours">Cours d’eau</button>
+                                    <button type="button" data-river-kind="ruisseau">Ruisseau</button>
+                                </div>
+                                <label class="lab-ocean__range" title="Largeur du lit">
+                                    <span>Largeur <output id="lab-river-width-value">3,4 m</output></span>
+                                    <input id="lab-river-width" type="range" min="0.3" max="24" step="0.1" value="3.4">
+                                </label>
+                                <div class="lab-river__actions">
+                                    <button type="button" id="btn-river-finish" class="lab-ocean__action">Terminer le tracé</button>
+                                    <button type="button" id="btn-river-undo" class="lab-ocean__action">Retirer le dernier point</button>
+                                    <button type="button" id="btn-river-remove" class="lab-ocean__action">Retirer la rivière</button>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -797,8 +882,8 @@
     }, true);
     </script>
 
-    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260819ignOsmRoadTexture_overpassProxy"></script>
-    <script type="module" src="/3D/app.js?v=20260819ignOsmRoadTexture_overpassProxy"></script>
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260903"></script>
+    <script type="module" src="/3D/app.js?v=20260903"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

@@ -703,11 +703,11 @@ function deserializeObjectSnapshotBody(raw) {
 
 /**
  * @param {ReturnType<typeof serializeObjectSnapshot>[]} objects
- * @param {{ name?: string, terrain?: object | null, ocean?: object | null, skybox?: object | null, vegetationAssets?: object | null, view?: object | null }} [options]
+ * @param {{ name?: string, terrain?: object | null, ocean?: object | null, river?: object | null, skybox?: object | null, vegetationAssets?: object | null, view?: object | null }} [options]
  */
 export function buildSceneDocument(
     objects,
-    { name = "", terrain = null, ocean = null, skybox = null, vegetationAssets = null, view = null } = {}
+    { name = "", terrain = null, ocean = null, river = null, skybox = null, vegetationAssets = null, view = null } = {}
 ) {
     return {
         version: SCENE_VERSION,
@@ -715,6 +715,7 @@ export function buildSceneDocument(
         objects,
         terrain,
         ocean,
+        river,
         skybox,
         vegetationAssets,
         view,

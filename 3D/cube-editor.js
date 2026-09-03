@@ -460,6 +460,7 @@ const NEAREST_PICK_MAX_DIST = 3;
  *   placeAvatarBtn?: HTMLButtonElement | null,
  *   terrainController?: { clear: (opts?: { recordHistory?: boolean }) => void, serialize: () => object | null, deserialize: (data: unknown, opts?: { recordHistory?: boolean }) => Promise<void>, hasTerrain: () => boolean, getTerrain: () => THREE.Object3D | null, tryUndoShortcut?: () => boolean, tryRedoShortcut?: () => boolean, getUndoDepth?: () => number, getRedoDepth?: () => number, isUndoInProgress?: () => boolean, setSceneHistoryPush?: (fn: ((entry: unknown) => void) | null) => void, applyBrushTextureFromDataUrl?: (dataUrl: string, opts?: { activatePaint?: boolean }) => Promise<boolean>, stampBrushAtWorld?: (worldX: number, worldZ: number, radiusMeters: number) => boolean, ensureTerrain?: () => unknown },
  *   oceanController?: { clear?: () => void, remove?: (opts?: { recordHistory?: boolean }) => void, serialize: () => object | null, deserialize: (data: unknown, opts?: { recordHistory?: boolean }) => Promise<void>, isActive?: () => boolean, getWaveHeightAt?: (x: number, z: number) => number | null, tick?: (dt: number) => void, setSceneHistoryPush?: (fn: ((entry: unknown) => void) | null) => void },
+ *   riverController?: { remove?: (opts?: { recordHistory?: boolean }) => void, serialize: () => object | null, deserialize: (data: unknown, opts?: { recordHistory?: boolean, preservePlacing?: boolean }) => Promise<void>, isActive?: () => boolean, isPlacing?: () => boolean, getPointCount?: () => number, setPlacing?: (active: boolean) => void, addPointFromClient?: (x: number, y: number) => boolean, undoLastPoint?: () => boolean, tick?: (dt: number) => void, setSceneHistoryPush?: (fn: ((entry: unknown) => void) | null) => void },
  *   skyboxController?: { clear?: () => void, isActive?: () => boolean, serialize?: () => object | null, deserialize?: (data: unknown) => Promise<void> },
  * }} ctx
  */
@@ -528,6 +529,7 @@ export function initCubeEditor(ctx) {
         placeAvatarBtn,
         terrainController,
         oceanController,
+        riverController,
         skyboxController,
     } = ctx;
 
@@ -535,6 +537,7 @@ export function initCubeEditor(ctx) {
     const history = createHistory();
     terrainController?.setSceneHistoryPush?.((entry) => history.push(entry));
     oceanController?.setSceneHistoryPush?.((entry) => history.push(entry));
+    riverController?.setSceneHistoryPush?.((entry) => history.push(entry));
     let cubeCounter = 0;
     let sphereCounter = 0;
     let triangulationMode = false;
@@ -4203,6 +4206,7 @@ export function initCubeEditor(ctx) {
         }
         terrainController?.clear?.({ recordHistory: false });
         oceanController?.remove?.({ recordHistory: false, resetSettings: true });
+        riverController?.remove?.({ recordHistory: false });
         skyboxController?.clear?.();
         deselectObject();
     }
@@ -4259,6 +4263,7 @@ export function initCubeEditor(ctx) {
             name: getCurrentSceneFileName() || "",
             terrain: terrainController?.serialize() || null,
             ocean: oceanController?.serialize() || null,
+            river: riverController?.serialize() || null,
             skybox: skyboxController?.serialize?.() || null,
             vegetationAssets: Object.keys(assets).length ? assets : null,
             view: serializeView?.() || null,
@@ -4452,6 +4457,14 @@ export function initCubeEditor(ctx) {
                 } catch (error) {
                     console.warn("[lab] océan :", error);
                 }
+                await tickLoadingProgress(86);
+                try {
+                    if (riverController?.deserialize) {
+                        await riverController.deserialize(doc?.river ?? null, { recordHistory: false });
+                    }
+                } catch (error) {
+                    console.warn("[lab] rivière :", error);
+                }
                 await tickLoadingProgress(89);
                 try {
                     if (skyboxController?.deserialize) {
@@ -4502,6 +4515,11 @@ export function initCubeEditor(ctx) {
         }
         try {
             setVegetationPlaceActive?.(false);
+        } catch {
+            /* ignore */
+        }
+        try {
+            riverController?.setPlacing?.(false);
         } catch {
             /* ignore */
         }
@@ -4568,6 +4586,7 @@ export function initCubeEditor(ctx) {
             (editableObjects.length > 0 ||
                 terrainController?.hasTerrain() ||
                 oceanController?.isActive?.() ||
+                riverController?.isActive?.() ||
                 skyboxController?.isActive?.())
         ) {
             const ok = await labConfirm(
@@ -4587,7 +4606,7 @@ export function initCubeEditor(ctx) {
             const picked = await openSceneFromDiskLocation();
             if (!picked) return;
 
-            if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.()) {
+            if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.() || riverController?.isActive?.()) {
                 const ok = await labConfirm(
                     "Ouvrir un fichier du disque ? La scène actuelle non enregistrée sera remplacée.",
                     { title: "Ouvrir depuis le disque", confirmLabel: "Continuer" }
@@ -4619,7 +4638,7 @@ export function initCubeEditor(ctx) {
             if (pendingDiskPick) {
                 const picked = await pendingDiskPick;
                 if (!picked) return;
-                if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.()) {
+                if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.() || riverController?.isActive?.()) {
                     const ok = await labConfirm(
                         "Ouvrir un fichier du disque ? La scène actuelle non enregistrée sera remplacée.",
                         { title: "Ouvrir depuis le disque", confirmLabel: "Continuer" }
@@ -4632,7 +4651,7 @@ export function initCubeEditor(ctx) {
 
             if (!pickedName) return;
 
-            if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.()) {
+            if (editableObjects.length > 0 || terrainController?.hasTerrain() || oceanController?.isActive?.() || riverController?.isActive?.()) {
                 const ok = await labConfirm(
                     "Ouvrir une scène ? La scène actuelle non enregistrée sera remplacée.",
                     { title: "Ouvrir", confirmLabel: "Continuer" }
@@ -4659,6 +4678,7 @@ export function initCubeEditor(ctx) {
             editableObjects.length > 0 ||
             terrainController?.hasTerrain() ||
             oceanController?.isActive?.() ||
+            riverController?.isActive?.() ||
             skyboxController?.isActive?.()
         ) {
             const ok = await labConfirm(
@@ -5318,6 +5338,7 @@ export function initCubeEditor(ctx) {
         if (avatarPlaceActive) {
             setLightPlaceActive(null);
             setVegetationPlaceActive(false);
+            riverController?.setPlacing?.(false);
             csgTool?.cancelPickMode?.();
             enterExplore?.();
             ensureAvatarPlaceMarker();
@@ -5576,6 +5597,7 @@ export function initCubeEditor(ctx) {
         if (lightPlaceType) {
             setAvatarPlaceActive(false);
             setVegetationPlaceActive(false);
+            riverController?.setPlacing?.(false);
             csgTool?.cancelPickMode?.();
             enterExplore?.();
             ensureLightPlaceMarker();
@@ -5627,6 +5649,7 @@ export function initCubeEditor(ctx) {
         if (vegetationPlaceActive) {
             setAvatarPlaceActive(false);
             setLightPlaceActive(null);
+            riverController?.setPlacing?.(false);
             terrainController?.setEditing?.(false);
             enterExplore?.();
             showStatus("Clic court = placer · glisser = regarder · Échap = quitter");
@@ -6983,6 +7006,14 @@ export function initCubeEditor(ctx) {
                 }
                 break;
             }
+            case "river": {
+                const target = direction === "undo" ? entry.before : entry.after;
+                void riverController?.deserialize?.(target ?? null, {
+                    recordHistory: false,
+                    preservePlacing: true,
+                });
+                break;
+            }
             default:
                 break;
         }
@@ -7010,6 +7041,19 @@ export function initCubeEditor(ctx) {
             // Triangulation : Ctrl+Z annule d’abord la sélection △ (pas l’historique scène).
             if (triangulationActive && faceDrawController?.undoTriangleSelection?.()) {
                 return;
+            }
+            if (riverController?.isPlacing?.()) {
+                const top = history.peekUndo?.();
+                const topType = top && typeof top === "object" ? /** @type {{ type?: string }} */ (top).type : null;
+                if (topType === "river" && history.canUndo()) {
+                    performUndo();
+                    showStatus("Cours d’eau : dernier point annulé");
+                    return;
+                }
+                if (riverController.undoLastPoint?.()) {
+                    showStatus("Cours d’eau : dernier point annulé");
+                    return;
+                }
             }
             const sceneAt = history.canUndo() ? history.peekUndoAt() : 0;
             const terrainAt =
@@ -8913,6 +8957,9 @@ export function initCubeEditor(ctx) {
             ignoreClickAfterGizmo = false;
             return;
         }
+        if (riverController?.isPlacing?.()) {
+            return;
+        }
         if (avatarPlaceActive) {
             placeAvatarAtClient(event.clientX, event.clientY);
             return;
@@ -9013,8 +9060,9 @@ export function initCubeEditor(ctx) {
 
     /** Cale les barques sur la houle, sauf pendant une manipulation au gizmo. */
     function updateFloatingBoats(step) {
-        if (!oceanController?.isActive?.()) return;
         const dt = THREE.MathUtils.clamp(step ?? 1 / 60, 0.001, 0.05);
+        riverController?.tick?.(dt);
+        if (!oceanController?.isActive?.()) return;
 
         // Avancer la houle AVANT d’échantillonner / de rendre.
         oceanController.tick?.(dt);
