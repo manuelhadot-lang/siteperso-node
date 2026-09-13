@@ -145,6 +145,9 @@ export function initTerrainEditor(options) {
     const ignMeshBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-import-terrain-ign-mesh")
     );
+    const giroGeoBtn = /** @type {HTMLButtonElement | null} */ (
+        document.getElementById("btn-open-giro-geo")
+    );
     const tools = document.getElementById("lab-terrain-tools");
     const sizeInput = /** @type {HTMLInputElement | null} */ (
         document.getElementById("lab-terrain-size")
@@ -1951,6 +1954,26 @@ export function initTerrainEditor(options) {
     ignMeshBtn?.addEventListener("click", async (event) => {
         event.stopPropagation();
         ignImportBtn?.click();
+    });
+
+    giroGeoBtn?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const center = ignCenterOrNull();
+        const lat = center?.lat ?? 48.85837;
+        const lon = center?.lon ?? 2.29448;
+        const size = Math.max(200, Math.min(5000, Math.round(sizeMeters) || 800));
+        const q = new URLSearchParams({
+            lat: String(lat),
+            lon: String(lon),
+            size: String(size),
+        });
+        const url = `/3D/geo/?${q}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+        showStatus?.(
+            center
+                ? `Vue Giro3D ouverte (${Math.round(size)} m autour du heightmap)`
+                : "Vue Giro3D (Tour Eiffel par défaut) — importez un heightmap pour centrer"
+        );
     });
 
     window.addEventListener("message", (event) => {

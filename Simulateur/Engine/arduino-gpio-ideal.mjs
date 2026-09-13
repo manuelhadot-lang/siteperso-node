@@ -106,6 +106,34 @@ export function getIdealVoltmeterVoltage(vmLabel, components, wires, tSec = 0, a
     return null;
 }
 
+/**
+ * Composants dont l'état évolue pendant la simulation sans que SPICE soit
+ * relancé : basculement d'une borne 0/1, appui sur un bouton, curseur de
+ * potentiomètre ou de LDR, GPIO d'une carte, générateurs.
+ */
+const LIVE_STATE_TYPES = new Set([
+    "logic_terminal",
+    "push_button",
+    "switch_spdt",
+    "potentiometer",
+    "ldr",
+    "gsin",
+    "gsqr",
+    "gimp",
+]);
+
+/**
+ * Le modèle idéal ne doit passer devant la mesure SPICE que si le circuit
+ * contient un état vivant : sinon SPICE, exact, ferait foi et le modèle idéal,
+ * approché, ne peut que le contredire.
+ */
+export function idealModelHasPriority(components) {
+    if (!Array.isArray(components)) return false;
+    return components.some(
+        (c) => c && (isMicroBoardType(c.type) || LIVE_STATE_TYPES.has(c.type))
+    );
+}
+
 function cd4511LabelWiredToSeg7(segLabel, wires, autoJunctions = [], components = []) {
     for (const seg of ["a", "b", "c", "d", "e", "f", "g"]) {
         const segJ = `${segLabel}_${seg}`;

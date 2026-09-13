@@ -2105,7 +2105,12 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             if (n0 === n1) {
                 warnings.push(`${label} ${c.id} : les deux bornes sont sur le même nœud (${n0}).`);
             } else {
-                lines.push(`${spiceBranchName("VI", c.id)} ${n0} ${n1} DC 0`);
+                // Comme le voltmètre et le haut-parleur, la borne « + » de
+                // l'ampèremètre est la borne droite (#1). SPICE compte le courant
+                // positif quand il entre par le nœud déclaré en premier : c'est
+                // donc #1 qui doit venir en tête, sinon la mesure est de signe
+                // opposé au branchement dessiné.
+                lines.push(`${spiceBranchName("VI", c.id)} ${n1} ${n0} DC 0`);
             }
         }
     }
@@ -2294,13 +2299,13 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const ammetersRms = [];
     for (const c of components) {
         if (!isAmmeterRmsType(c.type)) continue;
-        const np = nodeFor(`${c.id}#0`);
-        const nm = nodeFor(`${c.id}#1`);
+        const nMinus = nodeFor(`${c.id}#0`);
+        const nPlus = nodeFor(`${c.id}#1`);
         ammetersRms.push({
             id: c.id,
             branch: spiceBranchName("VI", c.id),
-            nodePlus: np,
-            nodeMinus: nm,
+            nodePlus: nPlus,
+            nodeMinus: nMinus,
         });
     }
 
@@ -2418,14 +2423,14 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
     const ammeters = [];
     for (const c of components) {
         if (c.type !== "ammeter") continue;
-        const np = nodeFor(`${c.id}#0`);
-        const nm = nodeFor(`${c.id}#1`);
+        const nMinus = nodeFor(`${c.id}#0`);
+        const nPlus = nodeFor(`${c.id}#1`);
         const branch = spiceBranchName("VI", c.id);
         ammeters.push({
             id: c.id,
             branch,
-            nodePlus: np,
-            nodeMinus: nm,
+            nodePlus: nPlus,
+            nodeMinus: nMinus,
         });
     }
 

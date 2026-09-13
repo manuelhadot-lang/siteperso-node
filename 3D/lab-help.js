@@ -49,6 +49,7 @@ const HELP_BODY = `
       <li><strong>Créer sur toute la grille</strong> puis sculptez (mamelon, montagne, cuvette, lisser, dessiner).</li>
       <li><strong>Clic gauche</strong> : sculpter · <strong>clic droit</strong> : tourner la caméra · <strong>molette</strong> : rayon du pinceau.</li>
       <li><strong>Relief IGN (France)</strong> importe un heightmap réel (altitude, orthophoto, routes, bâtiments BD TOPO) dans le lab. Posez des objets, sculptez, créez un océan. <strong>Conception</strong> pour éditer, <strong>FPS</strong> pour marcher.</li>
+      <li><strong>Vue geo Giro3D (IGN)</strong> ouvre le moteur dédié (MNT tuilé, ortho, façades et toits) dans un onglet séparé, centré sur le heightmap s’il existe.</li>
       <li><strong>Sol réel (photo IGN + routes)</strong> relance photo + routes. <strong>Placer les maisons (OSM)</strong> extrude les empreintes de bâtiments. <strong>Remplacer</strong> un calque (orthophoto, routes, herbe, sable, sentier, roche) pour changer une texture. Baissez <strong>Photo aérienne</strong> pour voir herbe / sable / roche du relief.</li>
       <li>Texture / normal map du sol, tile, intensité ; texture du pinceau pour peindre le relief.</li>
       <li>« Afficher le plateau » masque le sol gris d’origine (la collision FPS reste active).</li>

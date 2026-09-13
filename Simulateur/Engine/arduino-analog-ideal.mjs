@@ -95,9 +95,44 @@ function voltageFromVoltmetersOnNet(net, voltmeters) {
     return null;
 }
 
+/** Types traversés comme un simple fil : impédance nulle, aucune chute de tension. */
+const SHORTING_TYPES = new Set(["ammeter", "ammeter_rms"]);
+
+/**
+ * Réseau électrique d'une jonction, en traversant les composants d'impédance
+ * nulle. Sans cela un ampèremètre coupe la branche qu'il mesure : la maille
+ * paraît ouverte et le nœud amont remonte à la tension d'alimentation au lieu
+ * de la valeur du diviseur.
+ */
+function reachableJonctionsThroughShorts(jonctionId, ctx) {
+    const { components = [], wires, autoJunctions = [] } = ctx;
+    const all = new Set();
+    const queue = [];
+    if (jonctionId) queue.push(jonctionId);
+    while (queue.length) {
+        const j = queue.shift();
+        if (!j) continue;
+        let grew = false;
+        for (const id of reachableJonctions(j, wires, autoJunctions)) {
+            if (all.has(id)) continue;
+            all.add(id);
+            grew = true;
+        }
+        if (!grew && !all.has(j)) all.add(j);
+        for (const comp of components) {
+            if (!comp.label || !SHORTING_TYPES.has(comp.type)) continue;
+            const inn = `${comp.label}_in`;
+            const out = `${comp.label}_out`;
+            if (all.has(inn) && !all.has(out)) queue.push(out);
+            if (all.has(out) && !all.has(inn)) queue.push(inn);
+        }
+    }
+    return all;
+}
+
 function collectResistiveLegs(jonctionId, ctx, visiting) {
-    const { components, wires, autoJunctions = [] } = ctx;
-    const net = reachableJonctions(jonctionId, wires, autoJunctions);
+    const { components } = ctx;
+    const net = reachableJonctionsThroughShorts(jonctionId, ctx);
     const legs = [];
     for (const comp of components) {
         if ((comp.type !== "resistor" && comp.type !== "ldr") || !comp.label) continue;
@@ -219,7 +254,7 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
     visiting.add(jonctionId);
 
     const { components, wires, autoJunctions = [], tSec = 0, getVoltageAtJonction, voltmeters } = ctx;
-    const net = reachableJonctions(jonctionId, wires, autoJunctions);
+    const net = reachableJonctionsThroughShorts(jonctionId, ctx);
 
     const regV = tryLm7805OutputVoltage(jonctionId, ctx, resolveNetVoltage, visiting);
     if (Number.isFinite(regV)) return regV;

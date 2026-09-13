@@ -41,6 +41,7 @@ import {
     getIdealSeg7FromArduino,
     getIdealBargraphFromArduino,
     getIdealVoltmeterVoltage,
+    idealModelHasPriority,
 } from './Engine/arduino-gpio-ideal.mjs';
 import { isGroveLcdWiredToBoard, refreshGroveLcdDisplayCache, getIdealGroveLcdDisplay } from './Engine/grove-lcd-ideal.mjs';
 import { isJoyitTft18WiredToBoard, refreshJoyitTft18DisplayCache, getIdealJoyitTft18Display } from './Engine/tft18-ideal.mjs';
@@ -901,11 +902,15 @@ function prepareVmTiming(vmPlots) {
     }
 }
 
-export function getAnimatedVoltmeterVoltage(label) {
-    syncArduinoSketchesFromEditor();
+/** Tension du modèle idéal : approchée, mais suit les états changés en direct. */
+function idealVoltmeterVoltage(label) {
     const elapsed = anim.startMs > 0 ? (performance.now() - anim.startMs) / 1000 : 0;
-    const ideal = getIdealVoltmeterVoltage(label, circuit.components, circuit.wires, elapsed, circuit.autoJunctions);
-    if (ideal != null && Number.isFinite(ideal)) return ideal;
+    const v = getIdealVoltmeterVoltage(label, circuit.components, circuit.wires, elapsed, circuit.autoJunctions);
+    return v != null && Number.isFinite(v) ? v : null;
+}
+
+/** Tension échantillonnée dans le tracé transitoire SPICE, animée en temps réel. */
+function plottedVoltmeterVoltage(label) {
     const plot = anim.vmPlots[label];
     if (!plot?.time?.length) return null;
     const period = anim.vmPeriods[label] ?? 1;
@@ -915,6 +920,27 @@ export function getAnimatedVoltmeterVoltage(label) {
     const plotSpan = plot.time[plot.time.length - 1] - plot.time[0];
     const tAbs = plot.time[0] + (plotSpan > 0 ? tSample % plotSpan : tSample);
     return quantizeVoltmeterReading(interpolateVoltagePlot(plot, tAbs), plot.voltage);
+}
+
+/**
+ * Tension affichée par un voltmètre, par ordre de confiance décroissante.
+ * SPICE fait foi, sauf si le circuit contient un état vivant (borne 0/1,
+ * bouton, potentiomètre, carte Arduino…) : sa mesure serait alors figée, et
+ * seul le modèle idéal suit l'action de l'utilisateur.
+ * @param {string} label
+ * @param {number | null} [spiceVolts] mesure SPICE du point de fonctionnement
+ */
+export function getAnimatedVoltmeterVoltage(label, spiceVolts = null) {
+    syncArduinoSketchesFromEditor();
+    const spice = Number.isFinite(spiceVolts) ? spiceVolts : null;
+    const sources = idealModelHasPriority(circuit.components)
+        ? [() => idealVoltmeterVoltage(label), () => plottedVoltmeterVoltage(label), () => spice]
+        : [() => plottedVoltmeterVoltage(label), () => spice, () => idealVoltmeterVoltage(label)];
+    for (const source of sources) {
+        const v = source();
+        if (v != null && Number.isFinite(v)) return v;
+    }
+    return null;
 }
 
 export function hasVoltmeterAnimation() {

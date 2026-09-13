@@ -2728,15 +2728,15 @@ function drawComponentBody(comp) {
         let displayValue = flags.isSimulating ? '—' : '0.0';
         let rawV = null;
         if (flags.isSimulating) {
-            const animV = getAnimatedVoltmeterVoltage(comp.label);
-            if (animV != null && Number.isFinite(animV)) {
-                rawV = animV;
-            } else if (simulationResults.voltmeters && simulationResults.voltmeters[comp.label] !== undefined) {
-                let measureData = simulationResults.voltmeters[comp.label];
+            let spiceV = null;
+            if (simulationResults.voltmeters && simulationResults.voltmeters[comp.label] !== undefined) {
+                const measureData = simulationResults.voltmeters[comp.label];
                 if (measureData && typeof measureData === 'object' && measureData.voltage !== undefined) {
-                    rawV = measureData.voltage;
-                } else if (typeof measureData === 'number') { rawV = measureData; }
+                    spiceV = measureData.voltage;
+                } else if (typeof measureData === 'number') { spiceV = measureData; }
             }
+            const v = getAnimatedVoltmeterVoltage(comp.label, spiceV);
+            if (v != null && Number.isFinite(v)) rawV = v;
         }
         if (rawV != null && Number.isFinite(rawV)) {
             displayValue = formatMeterValue(quantizeVoltmeterReading(rawV));

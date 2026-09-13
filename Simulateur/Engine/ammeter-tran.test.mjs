@@ -24,8 +24,10 @@ const state = {
     ],
     wires: [
         { solid: true, fromKey: "GND1#0", toKey: "GImp1#1", points: [] },
-        { solid: true, fromKey: "GImp1#0", toKey: "A1#0", points: [] },
-        { solid: true, fromKey: "A1#1", toKey: "R1#0", points: [] },
+        // Le courant entre par la borne « + » de l'ampèremètre, la borne droite (#1) :
+        // la mesure doit donc être positive.
+        { solid: true, fromKey: "GImp1#0", toKey: "A1#1", points: [] },
+        { solid: true, fromKey: "A1#0", toKey: "R1#0", points: [] },
         { solid: true, fromKey: "R1#1", toKey: "LED1#0", points: [] },
         { solid: true, fromKey: "LED1#1", toKey: "GND1#0", points: [] },
     ],
@@ -46,6 +48,13 @@ const i = am.A1?.current;
 if (!Number.isFinite(i) || Math.abs(i) < 1e-5) {
     console.error("FAIL: courant crête attendu > 10 µA, obtenu", i);
     console.error("wrdata head:", waveTxt.slice(0, 400));
+    process.exit(1);
+}
+if (i < 0) {
+    console.error(
+        "FAIL: courant entrant par la borne « + » (#1) : mesure attendue positive, obtenu",
+        i
+    );
     process.exit(1);
 }
 console.log("OK ammeter i=", i);

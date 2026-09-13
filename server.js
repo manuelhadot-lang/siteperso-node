@@ -147,6 +147,11 @@ function isIgnOrthoGet(req) {
     return (req.method === "GET" || req.method === "HEAD") && req.path === "/api/ign/ortho-tile";
 }
 
+/** GET WMS-R IGN (MNT BIL) — Giro3D charge les tuiles sans cookie. */
+function isIgnWmsGet(req) {
+    return (req.method === "GET" || req.method === "HEAD") && req.path === "/api/ign/wms-r";
+}
+
 /** POST Overpass OSM (routes) — même contrainte cookie / CORS. */
 function isOsmOverpassPost(req) {
     return req.method === "POST" && req.path === "/api/osm/overpass";
@@ -164,7 +169,7 @@ function isMapillaryGet(req) {
 function isIgnBdTopoGet(req) {
     return (
         (req.method === "GET" || req.method === "HEAD") &&
-        (req.path === "/api/ign/bdtopo-buildings")
+        (req.path === "/api/ign/bdtopo-buildings" || req.path === "/api/ign/wfs-bdtopo")
     );
 }
 
@@ -361,6 +366,7 @@ app.use((req, res, next) => {
     if (!siteAccessPasswordConfigured()) return next();
     if (req.method === 'GET' || req.method === 'HEAD') {
         if (isIgnOrthoGet(req)) return next();
+        if (isIgnWmsGet(req)) return next();
         if (isMapillaryGet(req)) return next();
         if (isIgnBdTopoGet(req)) return next();
         if (hasSiteAccessFromCookies(req.headers.cookie)) return next();
@@ -689,6 +695,12 @@ app.use('/Simulateur', express.static(dirSimulateur, {
         res.setHeader('X-Sim-UI', SIM_UI_VERSION);
     },
 }));
+app.use('/3D/geo', express.static(path.join(__dirname, '3D', 'geo', 'dist'), {
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'no-store');
+    },
+    index: 'index.html',
+}));
 app.use('/3D', express.static(path.join(__dirname, '3D'), {
     setHeaders(res) {
         res.setHeader('Cache-Control', 'no-store');
@@ -825,6 +837,72 @@ app.get("/api/ign/ortho-tile", async (req, res) => {
     } catch (error) {
         console.error("[api/ign/ortho-tile]", error);
         return res.status(502).json({ error: "Orthophoto IGN indisponible" });
+    }
+});
+
+/** Proxy WMS-R IGN (MNT BIL) — Giro3D, évite le CORS navigateur. */
+app.get("/api/ign/wms-r", async (req, res) => {
+    try {
+        const upstream = new URL("https://data.geopf.fr/wms-r");
+        for (const [key, value] of Object.entries(req.query || {})) {
+            if (value == null) continue;
+            if (Array.isArray(value)) {
+                for (const item of value) upstream.searchParams.append(key, String(item));
+            } else {
+                upstream.searchParams.set(key, String(value));
+            }
+        }
+        const response = await fetch(upstream.toString());
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const contentType = response.headers.get("content-type") || "application/octet-stream";
+        res.status(response.status);
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        return res.send(buffer);
+    } catch (error) {
+        console.error("[api/ign/wms-r]", error);
+        return res.status(502).json({ error: "WMS IGN indisponible" });
+    }
+});
+
+/** Proxy WFS BD TOPO en Lambert 93 — bâtiments Giro3D. */
+app.get("/api/ign/wfs-bdtopo", async (req, res) => {
+    try {
+        const xmin = Number(req.query.xmin);
+        const ymin = Number(req.query.ymin);
+        const xmax = Number(req.query.xmax);
+        const ymax = Number(req.query.ymax);
+        if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+            return res.status(400).json({ error: "BBox Lambert 93 invalide" });
+        }
+        if (xmax - xmin > 8000 || ymax - ymin > 8000) {
+            return res.status(400).json({ error: "Zone trop grande pour BD TOPO" });
+        }
+        const count = Math.max(1, Math.min(800, Number(req.query.count) || 500));
+        const bbox = `${xmin},${ymin},${xmax},${ymax},EPSG:2154`;
+        const q = new URLSearchParams({
+            SERVICE: "WFS",
+            VERSION: "2.0.0",
+            REQUEST: "GetFeature",
+            TYPENAMES: "BDTOPO_V3:batiment",
+            OUTPUTFORMAT: "application/json",
+            SRSNAME: "EPSG:2154",
+            BBOX: bbox,
+            COUNT: String(count),
+        });
+        const upstream = await fetch(`https://data.geopf.fr/wfs/ows?${q.toString()}`, {
+            headers: { Accept: "application/json" },
+        });
+        const text = await upstream.text();
+        if (!upstream.ok) {
+            return res.status(502).type("application/json").send(text || JSON.stringify({ error: "BD TOPO indisponible" }));
+        }
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.send(text);
+    } catch (error) {
+        console.error("[api/ign/wfs-bdtopo]", error);
+        return res.status(502).json({ error: "Service BD TOPO indisponible" });
     }
 });
 

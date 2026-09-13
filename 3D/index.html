@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css?v=20260902splat-pbr">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260903giro">
 
 </head>
 
@@ -450,6 +450,14 @@
                                 pour sculpter et y poser des objets. <strong>Conception</strong> pour éditer,
                                 <strong>FPS</strong> pour marcher.
                             </p>
+                            <button
+                                type="button"
+                                id="btn-open-giro-geo"
+                                class="lab-side-panel__tool"
+                                title="Ouvre Giro3D : MNT tuilé IGN + ortho + bâtiments BD TOPO (moteur geo dédié)"
+                            >
+                                <span class="lab-side-panel__tool-label">Vue geo Giro3D (IGN)</span>
+                            </button>
                             <label class="lab-terrain__range" title="Taille du terrain (mètres)">
                                 <span>Taille <output id="lab-terrain-size-value">50 m</output></span>
                                 <input id="lab-terrain-size" type="range" min="10" max="2000" step="1" value="50">
@@ -882,8 +890,8 @@
     }, true);
     </script>
 
-    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260903"></script>
-    <script type="module" src="/3D/app.js?v=20260903"></script>
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260903giro"></script>
+    <script type="module" src="/3D/app.js?v=20260903giro"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

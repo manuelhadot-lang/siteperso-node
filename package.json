@@ -7,6 +7,9 @@
   "type": "commonjs",
     "scripts": {
         "start": "node server.js",
+        "geo:install": "npm install --prefix 3D/geo",
+        "geo:build": "npm run build --prefix 3D/geo",
+        "geo:dev": "npm run dev --prefix 3D/geo",
         "sim:ports": "node scripts/check-sim-ports.mjs",
     "repair-esp32-toolchain": "node scripts/repair-esp32-toolchain.cjs",
     "check-ngspice": "node tools/check-ngspice.cjs",

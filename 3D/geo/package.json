@@ -1,0 +1,20 @@
+{
+  "name": "lab3d-giro-geo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@giro3d/giro3d": "^2.0.3",
+    "ol": "^10.8.0",
+    "proj4": "^2.19.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}
