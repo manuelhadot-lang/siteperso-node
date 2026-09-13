@@ -2119,6 +2119,7 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
         <div style="background:#1e293b; padding:15px; border-radius:10px; border:1px solid #00d1ff; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
             <h2 style="margin:0; color:#00d1ff; font-size:1.2rem;">🧩 Générateur de QCM</h2>
             <a href="/admin/export-csv" style="background:#eab308; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">📊 Exporter les Notes (.csv)</a>
+            <a href="/admin/etiquettes-codes" target="_blank" style="background:#38bdf8; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">🏷️ Étiquettes codes (A4)</a>
             <a href="/admin/backup-zip" style="background:#f97316; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💾 SAUVEGARDE TOTALE (.zip)</a>
             <form action="/admin/restore-zip" method="POST" enctype="multipart/form-data" style="display:inline-flex; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;" onsubmit="return confirm('Remplacer les données actuelles (élèves, dates, quiz, tchat…) par ce ZIP ?');">
                 <input type="file" name="backup" accept=".zip,application/zip" required style="color:#e2e8f0; max-width:220px;">
@@ -2171,7 +2172,10 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
             </section>
 
             <section style="background:#1e1e1e; padding:20px; border-radius:10px; grid-column: 1 / -1; border-top: 4px solid #10b981;">
-                <h2 style="color:#10b981; margin-top:0;">👥 Inscription des Élèves</h2>
+                <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+                    <h2 style="color:#10b981; margin:0;">👥 Inscription des Élèves</h2>
+                    <a href="/admin/etiquettes-codes" target="_blank" style="background:#38bdf8; color:#0f172a; text-decoration:none; padding:8px 14px; border-radius:5px; font-weight:bold;">🏷️ Imprimer les codes (étiquettes A4)</a>
+                </div>
                 <form action="/admin/ajouter-eleve" method="POST" style="display:flex; gap:10px; flex-wrap:wrap; background:#111; padding:15px; border-radius:8px;">
                     <select name="classe" required style="padding:8px; border-radius:4px; border:none; background:#333; color:white; cursor:pointer;">
                         <option value="" disabled selected>Choisir une classe...</option>
@@ -2228,6 +2232,115 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                 ${htmlEleves || "<p style='color:#666; margin-top:20px;'>Aucun élève inscrit pour le moment.</p>"}
             </section>
         </div>
+
+        <div id="unsaved-banner" hidden style="position:fixed; left:16px; right:16px; bottom:16px; z-index:100000; background:#7c2d12; border:1px solid #fb923c; color:#ffedd5; padding:12px 16px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.45); display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <span>⚠️ Modifications non sauvegardées — cliquez sur <b>Sauvegarder Projets</b> ou <b>Sauvegarder Docs</b> avant de quitter.</span>
+            <button type="button" id="unsaved-dismiss" style="background:#fb923c; color:#0f172a; border:none; padding:8px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">J’ai compris</button>
+        </div>
+
+        <script>
+            (function () {
+                let dirty = false;
+                const banner = document.getElementById('unsaved-banner');
+                const MSG = 'Des modifications n\\u2019ont pas été sauvegardées.\\n\\nQuitter sans enregistrer ?';
+
+                function setDirty(value) {
+                    const next = Boolean(value);
+                    if (next && !dirty) {
+                        try {
+                            history.pushState({ adminGuard: 1 }, '', location.href);
+                        } catch (_) {}
+                    }
+                    dirty = next;
+                    if (!banner) return;
+                    if (dirty) {
+                        banner.hidden = false;
+                        banner.style.display = 'flex';
+                    } else {
+                        banner.hidden = true;
+                        banner.style.display = 'none';
+                    }
+                }
+
+                function askLeave() {
+                    return window.confirm(MSG);
+                }
+
+                document.addEventListener('input', (event) => {
+                    const t = event.target;
+                    if (!t || !t.closest || !t.closest('form')) return;
+                    if (!t.matches('input, select, textarea')) return;
+                    if (t.type === 'file') return;
+                    setDirty(true);
+                }, true);
+
+                document.addEventListener('change', (event) => {
+                    const t = event.target;
+                    if (!t || !t.closest || !t.closest('form')) return;
+                    if (!t.matches('input, select, textarea')) return;
+                    if (t.type === 'file') return;
+                    setDirty(true);
+                }, true);
+
+                // Soumission volontaire : on laisse partir sans alerte
+                document.addEventListener('submit', () => {
+                    setDirty(false);
+                }, true);
+
+                window.addEventListener('beforeunload', (event) => {
+                    if (!dirty) return;
+                    event.preventDefault();
+                    event.returnValue = '';
+                });
+
+                // Liens : confirmer avant de quitter
+                document.addEventListener('click', (event) => {
+                    if (!dirty) return;
+                    const link = event.target && event.target.closest
+                        ? event.target.closest('a[href]')
+                        : null;
+                    if (!link) return;
+                    if (link.target === '_blank') return;
+                    const href = link.getAttribute('href') || '';
+                    if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+                    if (
+                        href.indexOf('/admin/export-csv') !== -1 ||
+                        href.indexOf('/admin/backup-zip') !== -1 ||
+                        href.indexOf('/download-copie/') !== -1
+                    ) {
+                        return;
+                    }
+                    if (!askLeave()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                    }
+                    setDirty(false);
+                }, true);
+
+                // Bouton retour du navigateur
+                window.addEventListener('popstate', () => {
+                    if (!dirty) return;
+                    if (!askLeave()) {
+                        try {
+                            history.pushState({ adminGuard: 1 }, '', location.href);
+                        } catch (_) {}
+                        return;
+                    }
+                    setDirty(false);
+                    history.back();
+                });
+
+                const dismiss = document.getElementById('unsaved-dismiss');
+                if (dismiss) {
+                    dismiss.addEventListener('click', () => {
+                        if (!banner) return;
+                        banner.hidden = true;
+                        banner.style.display = 'none';
+                    });
+                }
+            })();
+        </script>
     </body>
     </html>`);
 });
@@ -2252,6 +2365,227 @@ app.get('/download-copie/:projet/:file', authentificationProf, (req, res) => {
         return res.status(403).send("Accès interdit.");
     }
     res.download(path.join(dirUploads, projet, file));
+});
+
+// Étiquettes A4 à découper : codes d’accès élèves
+app.get('/admin/etiquettes-codes', authentificationProf, (req, res) => {
+    const filterClasse = String(req.query.classe || '').trim();
+    const classes = Object.keys(baseEleves || {}).sort((a, b) =>
+        a.localeCompare(b, 'fr', { sensitivity: 'base' })
+    );
+
+    /** @type {{ classe: string, nom: string, prenom: string, code: string }[]} */
+    const eleves = [];
+    for (const classe of classes) {
+        if (filterClasse && classe !== filterClasse) continue;
+        const list = Array.isArray(baseEleves[classe]) ? [...baseEleves[classe]] : [];
+        list.sort((a, b) => {
+            const n = String(a?.nom || '').localeCompare(String(b?.nom || ''), 'fr', { sensitivity: 'base' });
+            if (n !== 0) return n;
+            return String(a?.prenom || '').localeCompare(String(b?.prenom || ''), 'fr', { sensitivity: 'base' });
+        });
+        for (const e of list) {
+            if (!e || !e.code) continue;
+            eleves.push({
+                classe,
+                nom: String(e.nom || ''),
+                prenom: String(e.prenom || ''),
+                code: String(e.code || ''),
+            });
+        }
+    }
+
+    const optionsClasses = [
+        `<option value=""${filterClasse ? '' : ' selected'}>Toutes les classes</option>`,
+        ...classes.map(
+            (c) =>
+                `<option value="${escapeHtmlAttr(c)}"${c === filterClasse ? ' selected' : ''}>${escapeHtml(
+                    c.replace(/_/g, ' ')
+                )}</option>`
+        ),
+    ].join('');
+
+    const labelsHtml = eleves.length
+        ? eleves
+              .map(
+                  (e) => `
+            <article class="label">
+                <div class="label__brand">STI2D — code d’accès</div>
+                <div class="label__classe">${escapeHtml(e.classe.replace(/_/g, ' '))}</div>
+                <div class="label__name">${escapeHtml(e.prenom)} <strong>${escapeHtml(e.nom)}</strong></div>
+                <div class="label__code">${escapeHtml(e.code)}</div>
+                <div class="label__hint">À conserver précieusement</div>
+            </article>`
+              )
+              .join('')
+        : `<p class="empty">Aucun élève à imprimer${
+              filterClasse ? ` pour « ${escapeHtml(filterClasse.replace(/_/g, ' '))} »` : ''
+          }.</p>`;
+
+    res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Étiquettes codes élèves — A4</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #94a3b8;
+    --accent: #0284c7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #e2e8f0;
+  }
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-bottom: 2px solid #38bdf8;
+  }
+  .toolbar a, .toolbar button, .toolbar select {
+    font: inherit;
+  }
+  .toolbar a {
+    color: #93c5fd;
+    text-decoration: none;
+  }
+  .toolbar button {
+    background: #38bdf8;
+    color: #0f172a;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .toolbar select {
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #e2e8f0;
+  }
+  .toolbar .meta {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.9rem;
+  }
+  .sheet-wrap {
+    padding: 16px;
+  }
+  .hint-screen {
+    max-width: 210mm;
+    margin: 0 auto 12px;
+    color: #334155;
+    font-size: 0.9rem;
+  }
+  .sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: white;
+    padding: 8mm 8mm 6mm;
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.18);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 34.5mm;
+    gap: 0;
+  }
+  .label {
+    border: 1px dashed var(--line);
+    padding: 3.5mm 4mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.5mm;
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .label__brand {
+    font-size: 8.5pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .label__classe {
+    font-size: 9pt;
+    color: var(--muted);
+  }
+  .label__name {
+    font-size: 11pt;
+    line-height: 1.2;
+  }
+  .label__code {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 18pt;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+  }
+  .label__hint {
+    font-size: 7.5pt;
+    color: var(--muted);
+  }
+  .empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  @media print {
+    body { background: white; }
+    .toolbar, .hint-screen { display: none !important; }
+    .sheet-wrap { padding: 0; }
+    .sheet {
+      width: 210mm;
+      min-height: auto;
+      margin: 0;
+      padding: 8mm 8mm 6mm;
+      box-shadow: none;
+    }
+    .label { border-color: #64748b; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <a href="/espace-correction">← Retour Gestion Professeur</a>
+    <form method="GET" action="/admin/etiquettes-codes" style="display:flex; gap:8px; align-items:center; margin:0;">
+      <label for="classe">Classe</label>
+      <select id="classe" name="classe" onchange="this.form.submit()">${optionsClasses}</select>
+    </form>
+    <button type="button" onclick="window.print()">🖨️ Imprimer / PDF</button>
+    <span class="meta">${eleves.length} étiquette${eleves.length > 1 ? 's' : ''} · 2 × 8 par page A4</span>
+  </div>
+  <div class="sheet-wrap">
+    <p class="hint-screen">Imprimez en <b>A4 portrait</b>, marges « aucune » / « minimales », puis découpez le long des pointillés.</p>
+    <div class="sheet">
+      <div class="grid">
+        ${labelsHtml}
+      </div>
+    </div>
+  </div>
+</body>
+</html>`);
 });
 
 // Route pour exporter les notes en CSV (Excel)
