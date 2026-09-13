@@ -4,203 +4,203 @@
     "title": "Éval. n°1 — résistances, Ohm, binaire, multiples",
     "questions": [
       {
-        "text": "Si U = 9 V et I = 3 A, alors R = ?",
+        "text": "Convertir 10000000₂ (8 bits) en décimal :",
         "answers": [
-          "27 Ω",
-          "0,33 Ω",
-          "3 Ω"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "10 Ω, 10 Ω et 10 Ω en parallèle :",
-        "answers": [
-          "10 Ω",
-          "30 Ω",
-          "≈ 3,33 Ω"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Une résistance de puissance 1/4 W peut dissiper au max :",
-        "answers": [
-          "1 W",
-          "4 W",
-          "0,25 W"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "La puissance P s'exprime en :",
-        "answers": [
-          "Watts (W)",
-          "Volts (V)",
-          "Ampères (A)"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 50 (décimal) en binaire 8 bits :",
-        "answers": [
-          "01010000",
-          "00101010",
-          "00110010"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Dans un circuit série, la plus grande chute de tension est sur :",
-        "answers": [
-          "La plus petite résistance",
-          "La plus grande résistance",
-          "Toujours la première"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Résistances en série : Rtot = ?",
-        "answers": [
-          "R1 + R2 + …",
-          "min(R1, R2)",
-          "(R1×R2)/(R1+R2)"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "LSB signifie :",
-        "answers": [
-          "Bit de poids fort",
-          "Bit de poids faible (Least Significant Bit)",
-          "Longueur du mot"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "2200 Ω = ?",
-        "answers": [
-          "2,2 kΩ",
-          "0,22 kΩ",
-          "2,2 MΩ"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 75 (décimal) en binaire 8 bits :",
-        "answers": [
-          "01001100",
-          "01001010",
-          "01001011"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "La puissance électrique vaut souvent :",
-        "answers": [
-          "P = U / I",
-          "P = U × I",
-          "P = U + I"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Combien de bits dans 2 octets ?",
-        "answers": [
-          "2",
-          "8",
-          "16"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "1 mV = ?",
-        "answers": [
-          "0,01 V",
-          "0,001 V",
-          "1000 V"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Trois résistances de 30 Ω en série :",
-        "answers": [
-          "90 Ω",
-          "10 Ω",
-          "30 Ω"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Le poids du bit b2 est :",
-        "answers": [
-          "2",
-          "4",
-          "8"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Une capacité de 4700 µF = ?",
-        "answers": [
-          "470 mF",
-          "4,7 mF",
-          "4,7 nF"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir 16 (décimal) en hexadécimal :",
-        "answers": [
-          "F",
-          "10",
-          "16"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir FF₁₆ (8 bits) en décimal :",
-        "answers": [
-          "240",
-          "255",
+          "64",
+          "128",
           "256"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "L'intensité I s'exprime en :",
+        "text": "Si on double R en gardant U constant, P :",
         "answers": [
-          "Watts (W)",
-          "Volts (V)",
-          "Ampères (A)"
+          "Ne change pas",
+          "Est multipliée par 2",
+          "Est divisée par 2"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "Un circuit ouvert correspond idéalement à :",
+        "text": "Une capacité de 4700 µF = ?",
         "answers": [
-          "R = 0",
-          "U = 0",
-          "R ≈ ∞ (I ≈ 0)"
+          "4,7 nF",
+          "470 mF",
+          "4,7 mF"
         ],
         "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Pont diviseur : R1 = 2 kΩ, R2 = 2 kΩ, U = 5 V. Tension milieu = ?",
+        "answers": [
+          "1 V",
+          "5 V",
+          "2,5 V"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
+        "answers": [
+          "4 V",
+          "6 V",
+          "8 V"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "P = 2 W sous 10 V → I = ?",
+        "answers": [
+          "0,2 A",
+          "20 A",
+          "5 A"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "1 Go (giga-octet, usage courant) ≈ ?",
+        "answers": [
+          "10³ octets",
+          "10⁶ octets",
+          "10⁹ octets"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 0xA0 (8 bits) en décimal :",
+        "answers": [
+          "10",
+          "160",
+          "170"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Combien de valeurs non signées sur 8 bits ?",
+        "answers": [
+          "256 (0 à 255)",
+          "8",
+          "128"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Une résistance de puissance 1/4 W peut dissiper au max :",
+        "answers": [
+          "1 W",
+          "0,25 W",
+          "4 W"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "MSB signifie :",
+        "answers": [
+          "Bit de poids fort (Most Significant Bit)",
+          "Octet mémoire",
+          "Bit de poids faible"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "La puissance électrique vaut souvent :",
+        "answers": [
+          "P = U / I",
+          "P = U + I",
+          "P = U × I"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si U = 12 V et R = 4 Ω, alors I = ?",
+        "answers": [
+          "48 A",
+          "3 A",
+          "0,33 A"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 75 (décimal) en binaire 8 bits :",
+        "answers": [
+          "01001010",
+          "01001100",
+          "01001011"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "Sur le neutre uniquement",
+          "En parallèle",
+          "En série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1 mV = ?",
+        "answers": [
+          "0,001 V",
+          "1000 V",
+          "0,01 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir FF₁₆ (8 bits) en décimal :",
+        "answers": [
+          "256",
+          "255",
+          "240"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R1 = 1,2 kΩ // R2 = 1,8 kΩ ≈ ?",
+        "answers": [
+          "600 Ω",
+          "720 Ω",
+          "3 kΩ"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Trois résistances 120 Ω, 180 Ω, 300 Ω en série. Rtot = ?",
+        "answers": [
+          "40 Ω",
+          "600 Ω",
+          "120 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Combien d'octets dans 64 bits ?",
+        "answers": [
+          "16",
+          "8",
+          "4"
+        ],
+        "correct": 1,
         "image": null
       }
     ],
@@ -212,369 +212,41 @@
     "title": "Éval. n°2 — résistances, Ohm, binaire, multiples",
     "questions": [
       {
-        "text": "U = 3,3 V, R = 330 Ω → I ≈ ?",
+        "text": "Mot 8 bits : b7, b6 et b5 à 1 (11100000₂) → ?",
         "answers": [
-          "1 A",
-          "100 mA",
-          "10 mA"
+          "240",
+          "192",
+          "224"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "La base 16 utilise les chiffres :",
+        "text": "1 µA = ?",
         "answers": [
-          "0–9 seulement",
-          "0 et 1 seulement",
-          "0–9 et A–F"
+          "10⁻³ A",
+          "10⁻⁹ A",
+          "10⁻⁶ A"
         ],
         "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Un court-circuit correspond idéalement à :",
-        "answers": [
-          "R ≈ 0 Ω",
-          "R ≈ ∞",
-          "I = 0"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "1 MΩ = ?",
-        "answers": [
-          "1 000 000 Ω",
-          "0,001 Ω",
-          "1000 Ω"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 00100000₂ (8 bits) en décimal :",
-        "answers": [
-          "32",
-          "64",
-          "16"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 128 (décimal) en binaire 8 bits :",
-        "answers": [
-          "10000000",
-          "11000000",
-          "01000000"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Un circuit ouvert correspond idéalement à :",
-        "answers": [
-          "R = 0",
-          "U = 0",
-          "R ≈ ∞ (I ≈ 0)"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "La puissance électrique vaut souvent :",
-        "answers": [
-          "P = U / I",
-          "P = U × I",
-          "P = U + I"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Deux résistances de 100 Ω en série :",
-        "answers": [
-          "200 Ω",
-          "100 Ω",
-          "50 Ω"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Attention : 1 ko (décimal) vaut souvent :",
-        "answers": [
-          "1024 octets",
-          "1000 octets",
-          "8 bits"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir 180 (décimal) en binaire 8 bits :",
-        "answers": [
-          "10110100",
-          "10110000",
-          "11000000"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "220 Ω et 330 Ω en série :",
-        "answers": [
-          "110 Ω",
-          "550 Ω",
-          "72,6 Ω"
-        ],
-        "correct": 1,
         "image": null
       },
       {
         "text": "Association : (100 Ω // 100 Ω) puis + 50 Ω en série :",
         "answers": [
-          "50 Ω",
           "150 Ω",
+          "50 Ω",
           "100 Ω"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "Convertir 10000000₂ (8 bits) en décimal :",
+        "text": "Convertir 7F₁₆ (8 bits) en décimal :",
         "answers": [
-          "256",
-          "64",
-          "128"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Convertir 00000001₂ (8 bits) en décimal :",
-        "answers": [
-          "0",
           "128",
-          "1"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "1 kV = ?",
-        "answers": [
-          "1000 V",
-          "100 V",
-          "0,001 V"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Trois résistances de 30 Ω en série :",
-        "answers": [
-          "90 Ω",
-          "10 Ω",
-          "30 Ω"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Formule équivalente : I = ?",
-        "answers": [
-          "R / U",
-          "U × R",
-          "U / R"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Combien de bits dans 2 octets ?",
-        "answers": [
-          "2",
-          "8",
-          "16"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Combien d'octets dans 32 bits ?",
-        "answers": [
-          "4",
-          "8",
-          "32"
-        ],
-        "correct": 0,
-        "image": null
-      }
-    ],
-    "date": "2026-09-13",
-    "published": false
-  },
-  "quiz_elec_mixte_3": {
-    "id": "quiz_elec_mixte_3",
-    "title": "Éval. n°3 — résistances, Ohm, binaire, multiples",
-    "questions": [
-      {
-        "text": "Formule de deux résistances en parallèle :",
-        "answers": [
-          "Rtot = R1 + R2",
-          "Rtot = (R1×R2)/(R1+R2)",
-          "Rtot = R1 − R2"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir 15 (décimal) en hexadécimal :",
-        "answers": [
-          "E",
-          "F",
-          "10"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir A5₁₆ en binaire 8 bits :",
-        "answers": [
-          "01011010",
-          "10100101",
-          "10100110"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "1 Mio (mébioctet) vaut :",
-        "answers": [
-          "1024 kio",
-          "1000 ko",
-          "1024 octets"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Un voltmètre se branche :",
-        "answers": [
-          "En parallèle",
-          "Sur le neutre uniquement",
-          "En série"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Autre expression : P = ?",
-        "answers": [
-          "U² / R",
-          "U / R²",
-          "U² × R"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Le poids du bit b7 (octet) est :",
-        "answers": [
           "255",
-          "64",
-          "128"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "10 Ω, 10 Ω et 10 Ω en parallèle :",
-        "answers": [
-          "10 Ω",
-          "≈ 3,33 Ω",
-          "30 Ω"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "En série, le courant est :",
-        "answers": [
-          "Le même dans chaque résistance",
-          "Plus fort dans la plus grande R",
-          "Plus fort dans la plus petite R"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "1500 mA = ?",
-        "answers": [
-          "15 A",
-          "0,15 A",
-          "1,5 A"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Convertir 1111₂ en décimal :",
-        "answers": [
-          "16",
-          "14",
-          "15"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Convertir 00001100₂ (8 bits) en décimal :",
-        "answers": [
-          "3",
-          "12",
-          "48"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "R = 220 Ω, I = 20 mA → U = ?",
-        "answers": [
-          "0,044 V",
-          "4400 V",
-          "4,4 V"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Association : (100 Ω // 100 Ω) puis + 50 Ω en série :",
-        "answers": [
-          "150 Ω",
-          "100 Ω",
-          "50 Ω"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "En informatique, 1 octet = ?",
-        "answers": [
-          "1000 bits",
-          "1024 bits",
-          "8 bits"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Convertir 3C₁₆ en binaire 8 bits :",
-        "answers": [
-          "00110000",
-          "11000011",
-          "00111100"
+          "127"
         ],
         "correct": 2,
         "image": null
@@ -590,33 +262,361 @@
         "image": null
       },
       {
-        "text": "Deux résistances 470 Ω en série :",
+        "text": "P = U² / R : U = 12 V, R = 24 Ω → P = ?",
         "answers": [
-          "235 Ω",
-          "470 Ω",
-          "940 Ω"
+          "6 W",
+          "2 W",
+          "288 W"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : b3+b2+b1+b0 à 1 (00001111₂) → ?",
+        "answers": [
+          "15",
+          "240",
+          "16"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Deux branches en parallèle sous 10 V : 100 Ω et 200 Ω. I total = ?",
+        "answers": [
+          "150 mA",
+          "50 mA",
+          "100 mA"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "100 Ω // 100 Ω = ?",
+        "answers": [
+          "200 Ω",
+          "100 Ω",
+          "50 Ω"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "Un circuit ouvert correspond idéalement à :",
+        "text": "Combien de bits dans 2 octets ?",
         "answers": [
-          "R = 0",
-          "R ≈ ∞ (I ≈ 0)",
-          "U = 0"
+          "8",
+          "16",
+          "2"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "Le préfixe giga (G) signifie :",
+        "text": "R = 220 Ω, I = 20 mA → U = ?",
         "answers": [
-          "× 10³",
-          "× 10⁹",
-          "× 10⁶"
+          "4,4 V",
+          "0,044 V",
+          "4400 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "204",
+          "216"
         ],
         "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R1 = 1,2 kΩ // R2 = 1,8 kΩ ≈ ?",
+        "answers": [
+          "720 Ω",
+          "3 kΩ",
+          "600 Ω"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "En série",
+          "En parallèle",
+          "Sur le neutre uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 75 (décimal) en binaire 8 bits :",
+        "answers": [
+          "01001010",
+          "01001100",
+          "01001011"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente : I = ?",
+        "answers": [
+          "R / U",
+          "U × R",
+          "U / R"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 00001111₂ (8 bits) en décimal :",
+        "answers": [
+          "240",
+          "16",
+          "15"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : seuls b7 et b0 à 1 → valeur = ?",
+        "answers": [
+          "129",
+          "127",
+          "128"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente : R = ?",
+        "answers": [
+          "U / I",
+          "U × I",
+          "I / U"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "1 MΩ = ?",
+        "answers": [
+          "0,001 Ω",
+          "1000 Ω",
+          "1 000 000 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13",
+    "published": false
+  },
+  "quiz_elec_mixte_3": {
+    "id": "quiz_elec_mixte_3",
+    "title": "Éval. n°3 — résistances, Ohm, binaire, multiples",
+    "questions": [
+      {
+        "text": "Convertir 1010₂ en décimal :",
+        "answers": [
+          "12",
+          "8",
+          "10"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "I = 40 mA dans 560 Ω → P ≈ ?",
+        "answers": [
+          "0,022 W",
+          "22,4 W",
+          "0,90 W"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "1 Go (giga-octet, usage courant) ≈ ?",
+        "answers": [
+          "10⁶ octets",
+          "10⁹ octets",
+          "10³ octets"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. I total = ?",
+        "answers": [
+          "60 mA",
+          "40 mA",
+          "120 mA"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le préfixe nano (n) signifie :",
+        "answers": [
+          "× 10⁻³",
+          "× 10⁻⁹",
+          "× 10⁻⁶"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "5 V = ? mV",
+        "answers": [
+          "5000 mV",
+          "5 mV",
+          "0,005 mV"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le préfixe méga (M) signifie :",
+        "answers": [
+          "× 10⁶",
+          "× 10⁻⁶",
+          "× 10³"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 10000000₂ (8 bits) en décimal :",
+        "answers": [
+          "128",
+          "256",
+          "64"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Batterie 3,7 V, charge 180 Ω → I ≈ ?",
+        "answers": [
+          "≈ 666 mA",
+          "≈ 2 mA",
+          "≈ 20,6 mA"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "4 × 100 Ω toutes en parallèle :",
+        "answers": [
+          "100 Ω",
+          "25 Ω",
+          "400 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1 kio (kibioctet) vaut :",
+        "answers": [
+          "1024 octets",
+          "1000 bits",
+          "1000 octets"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Sur 8 bits non signés, la plus grande valeur est :",
+        "answers": [
+          "256",
+          "128",
+          "255"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "216",
+          "204"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Association : (100 Ω // 100 Ω) puis + 50 Ω en série :",
+        "answers": [
+          "150 Ω",
+          "100 Ω",
+          "50 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Alim 5 V, R = 220 Ω → I ≈ ? puis P ≈ ?",
+        "answers": [
+          "≈ 230 mA et ≈ 1,1 W",
+          "≈ 23 mA et ≈ 1,1 W",
+          "≈ 23 mA et ≈ 0,11 W"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Qu'est-ce qu'un bit ?",
+        "answers": [
+          "Un groupe de 8 chiffres",
+          "La plus petite unité d'information (0 ou 1)",
+          "Une unité de tension"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La loi d'Ohm s'écrit :",
+        "answers": [
+          "U = R / I",
+          "U = R + I",
+          "U = R × I"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si un octet vaut 0xC3, sa valeur décimale est :",
+        "answers": [
+          "203",
+          "163",
+          "195"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
+        "answers": [
+          "8 V",
+          "4 V",
+          "6 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "LED 2 V, alimentation 12 V, I = 20 mA → R = ?",
+        "answers": [
+          "600 Ω",
+          "100 Ω",
+          "500 Ω"
+        ],
+        "correct": 2,
         "image": null
       }
     ],
@@ -628,173 +628,143 @@
     "title": "Éval. n°4 — résistances, Ohm, binaire, multiples",
     "questions": [
       {
-        "text": "Convertir 00100000₂ (8 bits) en décimal :",
+        "text": "5 V = ? mV",
         "answers": [
-          "32",
-          "16",
-          "64"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 0F₁₆ en binaire 8 bits :",
-        "answers": [
-          "11110000",
-          "00001111",
-          "00001010"
+          "0,005 mV",
+          "5000 mV",
+          "5 mV"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "1 kio (kibioctet) vaut :",
+        "text": "Octet 01101110₂ en hexadécimal :",
         "answers": [
-          "1000 octets",
+          "E6",
+          "76",
+          "6E"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 3C₁₆ en binaire 8 bits :",
+        "answers": [
+          "00111100",
+          "00110000",
+          "11000011"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "204",
+          "216"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En informatique, 1 octet = ?",
+        "answers": [
           "1000 bits",
-          "1024 octets"
+          "1024 bits",
+          "8 bits"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "Autre expression : P = ?",
+        "text": "Si U = 9 V et I = 3 A, alors R = ?",
         "answers": [
-          "U² × R",
-          "U / R²",
-          "U² / R"
+          "27 Ω",
+          "0,33 Ω",
+          "3 Ω"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "1 Mio (mébioctet) vaut :",
+        "text": "Mot 8 bits : tous les bits impairs b1,b3,b5,b7 → ?",
         "answers": [
-          "1000 ko",
-          "1024 kio",
-          "1024 octets"
+          "85",
+          "170",
+          "255"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "Si U = 12 V et R = 4 Ω, alors I = ?",
+        "text": "Deux résistances de 100 Ω en série :",
         "answers": [
-          "48 A",
-          "0,33 A",
-          "3 A"
+          "50 Ω",
+          "100 Ω",
+          "200 Ω"
         ],
         "correct": 2,
         "image": null
       },
       {
-        "text": "L'intensité I s'exprime en :",
+        "text": "Mixte : 50 Ω en série avec (150 Ω // 75 Ω). Rtot = ?",
         "answers": [
-          "Ampères (A)",
-          "Volts (V)",
-          "Watts (W)"
+          "100 Ω",
+          "125 Ω",
+          "75 Ω"
         ],
         "correct": 0,
         "image": null
       },
       {
-        "text": "10 Ω, 10 Ω et 10 Ω en parallèle :",
-        "answers": [
-          "10 Ω",
-          "≈ 3,33 Ω",
-          "30 Ω"
-        ],
-        "correct": 1,
-        "image": null
-      },
-      {
-        "text": "Convertir A₁₆ en décimal :",
-        "answers": [
-          "10",
-          "11",
-          "16"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Le préfixe micro (µ) signifie :",
+        "text": "Le préfixe méga (M) signifie :",
         "answers": [
           "× 10⁻⁶",
           "× 10⁶",
-          "× 10⁻³"
-        ],
-        "correct": 0,
-        "image": null
-      },
-      {
-        "text": "Convertir 24 (décimal) en binaire 8 bits :",
-        "answers": [
-          "00110000",
-          "00011000",
-          "00010100"
+          "× 10³"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "La tension U s'exprime en :",
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
         "answers": [
-          "Watts (W)",
-          "Ohms (Ω)",
-          "Volts (V)"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "En parallèle, la tension aux bornes de chaque branche est :",
-        "answers": [
-          "Plus forte sur la plus grande R",
-          "Plus forte sur la plus petite R",
-          "La même"
-        ],
-        "correct": 2,
-        "image": null
-      },
-      {
-        "text": "Le poids du bit b1 est :",
-        "answers": [
-          "2",
-          "4",
-          "1"
+          "8 V",
+          "4 V",
+          "6 V"
         ],
         "correct": 0,
         "image": null
       },
       {
-        "text": "4 × 100 Ω toutes en série :",
+        "text": "Résistances en série : Rtot = ?",
         "answers": [
-          "400 Ω",
-          "25 Ω",
-          "100 Ω"
+          "R1 + R2 + …",
+          "min(R1, R2)",
+          "(R1×R2)/(R1+R2)"
         ],
         "correct": 0,
         "image": null
       },
       {
-        "text": "220 Ω et 330 Ω en série :",
+        "text": "Le préfixe nano (n) signifie :",
         "answers": [
-          "72,6 Ω",
-          "550 Ω",
-          "110 Ω"
+          "× 10⁻³",
+          "× 10⁻⁹",
+          "× 10⁻⁶"
         ],
         "correct": 1,
         "image": null
       },
       {
-        "text": "Le préfixe kilo (k) signifie :",
+        "text": "R = 47 Ω sous U = 4,7 V → I = ?",
         "answers": [
-          "× 10³",
-          "× 10⁶",
-          "× 10⁻³"
+          "1 A",
+          "10 mA",
+          "100 mA"
         ],
-        "correct": 0,
+        "correct": 2,
         "image": null
       },
       {
@@ -808,23 +778,53 @@
         "image": null
       },
       {
-        "text": "Convertir AA₁₆ en décimal :",
+        "text": "Mot 8 bits : b7+b3 à 1 (10001000₂) → ?",
         "answers": [
-          "170",
-          "255",
-          "160"
+          "136",
+          "8",
+          "128"
         ],
         "correct": 0,
         "image": null
       },
       {
-        "text": "2200 Ω = ?",
+        "text": "Le nibble de poids fort de 10110100₂ est :",
         "answers": [
-          "2,2 MΩ",
-          "2,2 kΩ",
-          "0,22 kΩ"
+          "1011₂ (= 11)",
+          "0100₂ (= 4)",
+          "1100₂"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "I = 40 mA dans 560 Ω → P ≈ ?",
+        "answers": [
+          "0,022 W",
+          "0,90 W",
+          "22,4 W"
         ],
         "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si on double R en gardant U constant, P :",
+        "answers": [
+          "Est divisée par 2",
+          "Est multipliée par 2",
+          "Ne change pas"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "47 kΩ = ? Ω",
+        "answers": [
+          "4,7 Ω",
+          "470 Ω",
+          "47000 Ω"
+        ],
+        "correct": 2,
         "image": null
       }
     ],
