@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Convertisseur de bases | STI2D</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .base-tool {
+            max-width: 640px;
+            margin: 0 auto 3rem;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.75rem;
+        }
+
+        .base-tool__intro {
+            color: var(--secondary-text);
+            margin: 0 0 1.5rem;
+            line-height: 1.5;
+        }
+
+        .base-field {
+            margin-bottom: 1.25rem;
+        }
+
+        .base-field label {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.45rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.95rem;
+            color: var(--accent-color);
+        }
+
+        .base-field label span {
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.8rem;
+            color: var(--secondary-text);
+            font-weight: normal;
+            letter-spacing: 0;
+        }
+
+        .base-field input {
+            width: 100%;
+            box-sizing: border-box;
+            background: #0f172a;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+            font-size: 1.15rem;
+            padding: 0.85rem 1rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .base-field input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 209, 255, 0.15);
+        }
+
+        .base-field input.is-invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+        }
+
+        .base-field input.is-source {
+            border-color: var(--success);
+        }
+
+        .base-tool__status {
+            min-height: 1.4em;
+            margin: 0.25rem 0 1rem;
+            color: #f87171;
+            font-size: 0.9rem;
+        }
+
+        .base-tool__actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .base-tool__actions button {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            color: var(--secondary-text);
+            border-radius: 8px;
+            padding: 0.55rem 1rem;
+            cursor: pointer;
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.9rem;
+        }
+
+        .base-tool__actions button:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .base-tool__hint {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            color: var(--secondary-text);
+            font-size: 0.85rem;
+            line-height: 1.55;
+        }
+
+        .base-tool__hint code {
+            color: var(--accent-color);
+            background: rgba(0, 209, 255, 0.08);
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-main">
+            <a href="/" class="logo-container">
+                <span class="logo-title">STI2D</span>
+            </a>
+            <h1>Convertisseur de bases</h1>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="base-tool">
+            <p class="base-tool__intro">
+                Saisissez un nombre dans l’une des trois bases : les deux autres se mettent à jour automatiquement.
+            </p>
+
+            <div class="base-field">
+                <label for="base2">Base 2 <span>chiffres 0 et 1</span></label>
+                <input id="base2" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1010" aria-describedby="base-status">
+            </div>
+
+            <div class="base-field">
+                <label for="base10">Base 10 <span>chiffres 0 à 9</span></label>
+                <input id="base10" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="10" aria-describedby="base-status">
+            </div>
+
+            <div class="base-field">
+                <label for="base16">Base 16 <span>chiffres 0–9 et A–F</span></label>
+                <input id="base16" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="A" aria-describedby="base-status">
+            </div>
+
+            <p id="base-status" class="base-tool__status" role="status" aria-live="polite"></p>
+
+            <div class="base-tool__actions">
+                <button type="button" id="btn-clear">Effacer</button>
+                <button type="button" id="btn-example">Exemple (255)</button>
+            </div>
+
+            <p class="base-tool__hint">
+                Exemple : <code>11111111</code><sub>2</sub> =
+                <code>255</code><sub>10</sub> =
+                <code>FF</code><sub>16</sub>.
+                Les espaces et le préfixe <code>0x</code> sont ignorés.
+            </p>
+        </div>
+
+        <p style="text-align:center; margin-bottom:40px;">
+            <a href="/apps" style="color: #94a3b8; text-decoration: none;">← Retour à la boîte à outils</a>
+        </p>
+    </main>
+
+    <script>
+        (function () {
+            const fields = {
+                2: document.getElementById('base2'),
+                10: document.getElementById('base10'),
+                16: document.getElementById('base16'),
+            };
+            const statusEl = document.getElementById('base-status');
+            const DIGITS = {
+                2: /^[01]+$/,
+                10: /^[0-9]+$/,
+                16: /^[0-9A-F]+$/,
+            };
+
+            function normalize(raw, base) {
+                let s = String(raw || '').trim().replace(/\s+/g, '');
+                if (base === 16) {
+                    s = s.replace(/^0x/i, '').toUpperCase();
+                }
+                return s;
+            }
+
+            function clearMarks() {
+                Object.values(fields).forEach((el) => {
+                    el.classList.remove('is-invalid', 'is-source');
+                });
+            }
+
+            function setOthers(sourceBase, value) {
+                Object.entries(fields).forEach(([base, el]) => {
+                    const b = Number(base);
+                    if (b === sourceBase) return;
+                    el.classList.remove('is-invalid', 'is-source');
+                    if (b === 16) {
+                        el.value = value.toString(16).toUpperCase();
+                    } else {
+                        el.value = value.toString(b);
+                    }
+                });
+            }
+
+            function convertFrom(sourceBase) {
+                const el = fields[sourceBase];
+                const raw = normalize(el.value, sourceBase);
+                clearMarks();
+                el.classList.add('is-source');
+
+                if (!raw) {
+                    Object.entries(fields).forEach(([base, other]) => {
+                        if (Number(base) !== sourceBase) other.value = '';
+                    });
+                    statusEl.textContent = '';
+                    return;
+                }
+
+                if (!DIGITS[sourceBase].test(raw)) {
+                    el.classList.remove('is-source');
+                    el.classList.add('is-invalid');
+                    const tip = sourceBase === 2
+                        ? 'uniquement 0 et 1'
+                        : sourceBase === 10
+                          ? 'uniquement des chiffres 0–9'
+                          : 'uniquement 0–9 et A–F';
+                    statusEl.textContent = `Entrée invalide en base ${sourceBase} (${tip}).`;
+                    return;
+                }
+
+                let value;
+                try {
+                    value = BigInt(sourceBase === 16 ? `0x${raw}` : sourceBase === 2 ? `0b${raw}` : raw);
+                } catch {
+                    el.classList.remove('is-source');
+                    el.classList.add('is-invalid');
+                    statusEl.textContent = 'Nombre trop grand ou invalide.';
+                    return;
+                }
+
+                setOthers(sourceBase, value);
+                statusEl.textContent = '';
+            }
+
+            Object.entries(fields).forEach(([base, el]) => {
+                const b = Number(base);
+                el.addEventListener('input', () => convertFrom(b));
+                el.addEventListener('focus', () => {
+                    clearMarks();
+                    el.classList.add('is-source');
+                });
+            });
+
+            document.getElementById('btn-clear').addEventListener('click', () => {
+                Object.values(fields).forEach((el) => {
+                    el.value = '';
+                    el.classList.remove('is-invalid', 'is-source');
+                });
+                statusEl.textContent = '';
+                fields[10].focus();
+            });
+
+            document.getElementById('btn-example').addEventListener('click', () => {
+                fields[10].value = '255';
+                convertFrom(10);
+                fields[10].focus();
+            });
+        })();
+    </script>
+    <script src="/site-access-unload.js" defer></script>
+</body>
+</html>
