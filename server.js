@@ -2121,14 +2121,18 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
             <a href="/admin/export-csv" style="background:#eab308; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">📊 Exporter les Notes (.csv)</a>
             <a href="/admin/etiquettes-codes" target="_blank" style="background:#38bdf8; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">🏷️ Étiquettes codes (A4)</a>
             <a href="/admin/backup-zip" style="background:#f97316; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💾 SAUVEGARDE TOTALE (.zip)</a>
-            <form action="/admin/restore-zip" method="POST" enctype="multipart/form-data" style="display:inline-flex; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;" onsubmit="return confirm('Remplacer les données actuelles (élèves, dates, quiz, tchat…) par ce ZIP ?');">
+            <form action="/admin/restore-zip" method="POST" enctype="multipart/form-data" style="display:inline-flex; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;" onsubmit="return confirm(this.keepQuizzes && this.keepQuizzes.checked ? 'Restaurer le ZIP en CONSERVANT les quiz actuels (élèves, dates, tchat…) ?' : 'Remplacer TOUTES les données actuelles, y compris les quiz, par ce ZIP ?');">
                 <input type="file" name="backup" accept=".zip,application/zip" required style="color:#e2e8f0; max-width:220px;">
+                <label style="display:inline-flex; align-items:center; gap:6px; color:#e2e8f0; font-size:0.85rem; cursor:pointer; max-width:220px;">
+                    <input type="checkbox" name="keepQuizzes" value="1" checked>
+                    Conserver les quiz actuels
+                </label>
                 <button type="submit" style="background:#a855f7; color:white; border:none; padding:10px 20px; border-radius:5px; font-weight:bold; cursor:pointer;">♻️ RESTAURER (.zip)</button>
             </form>
             <a href="/gestion-quiz" style="background:#00d1ff; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">🛠️ Créer / Modifier un Quiz</a>
             <a href="/contact.html?prof=1" target="_blank" style="background:#10b981; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💬 Accéder au Tchat</a>
         </div>
-        <p style="color:#94a3b8; font-size:0.85rem; margin:-8px 0 20px;">Après un redéploiement Render : téléchargez d’abord le ZIP de sauvegarde, puis utilisez <b>Restaurer</b> avec ce même fichier pour récupérer élèves, dates, quiz et tchat.</p>
+        <p style="color:#94a3b8; font-size:0.85rem; margin:-8px 0 20px;">Après un redéploiement Render : téléchargez d’abord le ZIP de sauvegarde, puis utilisez <b>Restaurer</b> avec ce même fichier pour récupérer élèves, dates, quiz et tchat. Laissez cochée <b>Conserver les quiz actuels</b> si vous ne voulez récupérer que les élèves (ou d’autres données) sans écraser les quiz déjà sur le site.</p>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:20px;">
             <section style="background:#1e1e1e; padding:15px; border-radius:10px;">
@@ -2629,18 +2633,38 @@ app.post("/admin/restore-zip", authentificationProf, (req, res) => {
             if (!req.file || !req.file.buffer) {
                 return res.send(adminAlertRedirect("Aucun fichier ZIP sélectionné."));
             }
+            // Case à cocher du formulaire (défaut : conserver les quiz du site actuel)
+            const keepQuizzes =
+                req.body?.keepQuizzes === "1" ||
+                req.body?.keepQuizzes === "on" ||
+                req.body?.keepQuizzes === true;
             const extracted = extractAllowedFilesFromZip(req.file.buffer, BACKUP_JSON_FILES);
             const restored = [];
+            const skipped = [];
             for (const fileName of BACKUP_JSON_FILES) {
                 const raw = extracted[fileName];
                 if (!raw) continue;
+                if (keepQuizzes && fileName === "quizzes.json") {
+                    skipped.push("quizzes.json (conservé)");
+                    continue;
+                }
                 applyBackupJsonFile(fileName, parseJsonText(raw.toString("utf8")));
                 restored.push(fileName);
             }
-            if (restored.length === 0) {
+            if (restored.length === 0 && skipped.length === 0) {
                 return res.send(adminAlertRedirect("Aucun fichier de sauvegarde reconnu dans ce ZIP."));
             }
-            return res.send(adminAlertRedirect("Restauration OK : " + restored.join(", ")));
+            if (restored.length === 0 && skipped.length > 0) {
+                return res.send(
+                    adminAlertRedirect(
+                        "Rien à restaurer hors quiz — les quiz actuels ont été conservés."
+                    )
+                );
+            }
+            const extra = skipped.length ? " · " + skipped.join(", ") : "";
+            return res.send(
+                adminAlertRedirect("Restauration OK : " + restored.join(", ") + extra)
+            );
         } catch (e) {
             return res.send(adminAlertRedirect(e.message || "Restauration impossible."));
         }
