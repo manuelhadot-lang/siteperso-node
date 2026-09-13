@@ -1,1 +1,830 @@
-{}
+{
+  "quiz_elec_mixte_1": {
+    "id": "quiz_elec_mixte_1",
+    "title": "Éval. élec. & numérique n°1 (binaire, Ohm, résistances)",
+    "questions": [
+      {
+        "text": "L'unité de la résistance est :",
+        "answers": [
+          "Ampère (A)",
+          "Volt (V)",
+          "Ohm (Ω)"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 1111₂ en décimal :",
+        "answers": [
+          "14",
+          "15",
+          "16"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Deux résistances égales R en parallèle :",
+        "answers": [
+          "2R",
+          "R",
+          "R/2"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Rouge = ?",
+        "answers": [
+          "20",
+          "2",
+          "3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Marron = ?",
+        "answers": [
+          "1",
+          "10",
+          "2"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Que vaut le bit de poids fort (MSB) dans un octet 10000000 ?",
+        "answers": [
+          "128",
+          "1",
+          "64"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Un court-circuit correspond idéalement à :",
+        "answers": [
+          "R ≈ 0 Ω",
+          "R ≈ ∞",
+          "I = 0"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "La loi d'Ohm s'écrit :",
+        "answers": [
+          "U = R / I",
+          "U = R × I",
+          "U = R + I"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un circuit ouvert correspond idéalement à :",
+        "answers": [
+          "R ≈ ∞ (I ≈ 0)",
+          "R = 0",
+          "U = 0"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Un ampèremètre se branche :",
+        "answers": [
+          "À la masse uniquement",
+          "En série",
+          "En parallèle"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1010₂ + 0011₂ = ?",
+        "answers": [
+          "1101₂",
+          "1110₂",
+          "1001₂"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir A₁₆ en décimal :",
+        "answers": [
+          "10",
+          "11",
+          "16"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 13 (décimal) en binaire :",
+        "answers": [
+          "1011",
+          "1110",
+          "1101"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 1010₂ en décimal :",
+        "answers": [
+          "12",
+          "10",
+          "8"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un nibble correspond à :",
+        "answers": [
+          "2 bits",
+          "4 bits",
+          "8 bits"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Résistances en série : Rtot = ?",
+        "answers": [
+          "(R1×R2)/(R1+R2)",
+          "min(R1, R2)",
+          "R1 + R2 + …"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Couleurs Rouge-Rouge-Marron :",
+        "answers": [
+          "22 Ω",
+          "2,2 kΩ",
+          "220 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si on double R en gardant U constant, P :",
+        "answers": [
+          "Ne change pas",
+          "Est divisée par 2",
+          "Est multipliée par 2"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "100 Ω // 100 Ω = ?",
+        "answers": [
+          "200 Ω",
+          "50 Ω",
+          "100 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur une résistance, la chute de tension est :",
+        "answers": [
+          "Proportionnelle au courant",
+          "Toujours 5 V",
+          "Indépendante du courant"
+        ],
+        "correct": 0,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13"
+  },
+  "quiz_elec_mixte_2": {
+    "id": "quiz_elec_mixte_2",
+    "title": "Éval. élec. & numérique n°2 (binaire, Ohm, résistances)",
+    "questions": [
+      {
+        "text": "Combien de valeurs différentes peut coder un octet (8 bits) ?",
+        "answers": [
+          "8",
+          "255",
+          "256"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Addition binaire : 1 + 1 = ?",
+        "answers": [
+          "10₂ (soit 0 avec retenue 1)",
+          "11₂",
+          "2"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente de la loi d'Ohm pour R :",
+        "answers": [
+          "R = U × I",
+          "R = U / I",
+          "R = I / U"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 15 (décimal) en hexadécimal :",
+        "answers": [
+          "10",
+          "E",
+          "F"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "On peut aussi écrire P = ?",
+        "answers": [
+          "R × I²",
+          "R + I²",
+          "R / I²"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Tolérance Argent = ?",
+        "answers": [
+          "±20 %",
+          "±10 %",
+          "±5 %"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le dernier anneau (or, argent…) indique surtout :",
+        "answers": [
+          "La puissance",
+          "La valeur exacte",
+          "La tolérance"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Violet = ?",
+        "answers": [
+          "6",
+          "8",
+          "7"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Un court-circuit correspond idéalement à :",
+        "answers": [
+          "R ≈ 0 Ω",
+          "I = 0",
+          "R ≈ ∞"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Résistances en série : Rtot = ?",
+        "answers": [
+          "min(R1, R2)",
+          "(R1×R2)/(R1+R2)",
+          "R1 + R2 + …"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Noir = ?",
+        "answers": [
+          "0",
+          "10",
+          "1"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "1 kΩ = ?",
+        "answers": [
+          "1000 Ω",
+          "100 Ω",
+          "0,001 Ω"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 1010₂ en décimal :",
+        "answers": [
+          "8",
+          "12",
+          "10"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Deux résistances égales R en parallèle :",
+        "answers": [
+          "2R",
+          "R/2",
+          "R"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 2A₁₆ en décimal :",
+        "answers": [
+          "32",
+          "42",
+          "40"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 10000000₂ en décimal :",
+        "answers": [
+          "64",
+          "128",
+          "256"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La loi d'Ohm s'écrit :",
+        "answers": [
+          "U = R × I",
+          "U = R + I",
+          "U = R / I"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Si U = 9 V et I = 3 A, alors R = ?",
+        "answers": [
+          "0,33 Ω",
+          "27 Ω",
+          "3 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "En série, le courant est :",
+        "answers": [
+          "Plus fort dans la plus petite R",
+          "Plus fort dans la plus grande R",
+          "Le même dans chaque résistance"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Décaler à gauche de 1 bit revient souvent à :",
+        "answers": [
+          "Ajouter 1",
+          "Diviser par 2",
+          "Multiplier par 2"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13"
+  },
+  "quiz_elec_mixte_3": {
+    "id": "quiz_elec_mixte_3",
+    "title": "Éval. élec. & numérique n°3 (binaire, Ohm, résistances)",
+    "questions": [
+      {
+        "text": "Combien de symboles utilise le système binaire ?",
+        "answers": [
+          "2 (0 et 1)",
+          "16 (0 à F)",
+          "10 (0 à 9)"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le 1er anneau d'une résistance (sauf or/argent) indique :",
+        "answers": [
+          "Le multiplicateur",
+          "Le 1er chiffre significatif",
+          "La tolérance"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Résultat de 1 AND 1 en logique binaire :",
+        "answers": [
+          "1",
+          "2",
+          "0"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Deux résistances de 100 Ω en série :",
+        "answers": [
+          "50 Ω",
+          "100 Ω",
+          "200 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Tolérance Argent = ?",
+        "answers": [
+          "±5 %",
+          "±10 %",
+          "±20 %"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En hexadécimal, la lettre C correspond à :",
+        "answers": [
+          "11",
+          "13",
+          "12"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "On peut aussi écrire P = ?",
+        "answers": [
+          "R × I²",
+          "R / I²",
+          "R + I²"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Marron = ?",
+        "answers": [
+          "10",
+          "2",
+          "1"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "L'unité de la résistance est :",
+        "answers": [
+          "Volt (V)",
+          "Ohm (Ω)",
+          "Ampère (A)"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Résistances en série : Rtot = ?",
+        "answers": [
+          "R1 + R2 + …",
+          "min(R1, R2)",
+          "(R1×R2)/(R1+R2)"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Une résistance de puissance 1/4 W peut dissiper au max :",
+        "answers": [
+          "1 W",
+          "0,25 W",
+          "4 W"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 1111₂ en décimal :",
+        "answers": [
+          "14",
+          "15",
+          "16"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "P = U² / R : si U double et R fixe, P :",
+        "answers": [
+          "Est multipliée par 2",
+          "Est multipliée par 4",
+          "Ne change pas"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1010₂ + 0011₂ = ?",
+        "answers": [
+          "1001₂",
+          "1101₂",
+          "1110₂"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente de la loi d'Ohm pour R :",
+        "answers": [
+          "R = I / U",
+          "R = U / I",
+          "R = U × I"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Orange = ?",
+        "answers": [
+          "30",
+          "4",
+          "3"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "1 kΩ = ?",
+        "answers": [
+          "100 Ω",
+          "0,001 Ω",
+          "1000 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "En série",
+          "En parallèle",
+          "Sur le neutre uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Combien d'octets dans 32 bits ?",
+        "answers": [
+          "32",
+          "4",
+          "8"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R = 220 Ω, I = 20 mA → U = ?",
+        "answers": [
+          "0,044 V",
+          "4,4 V",
+          "4400 V"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13"
+  },
+  "quiz_elec_mixte_4": {
+    "id": "quiz_elec_mixte_4",
+    "title": "Éval. élec. & numérique n°4 (binaire, Ohm, résistances)",
+    "questions": [
+      {
+        "text": "En série, le courant est :",
+        "answers": [
+          "Le même dans chaque résistance",
+          "Plus fort dans la plus petite R",
+          "Plus fort dans la plus grande R"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Tolérance Or = ?",
+        "answers": [
+          "±1 %",
+          "±10 %",
+          "±5 %"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Résultat de 1 OR 0 :",
+        "answers": [
+          "1",
+          "Indéterminé",
+          "0"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Multiplicateur Or (anneau) = ?",
+        "answers": [
+          "×10",
+          "×0,1",
+          "×0,01"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En hexadécimal, la lettre C correspond à :",
+        "answers": [
+          "13",
+          "11",
+          "12"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Rouge = ?",
+        "answers": [
+          "20",
+          "2",
+          "3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente de la loi d'Ohm pour I :",
+        "answers": [
+          "I = U × R",
+          "I = U / R",
+          "I = R / U"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Code couleur : Orange = ?",
+        "answers": [
+          "3",
+          "4",
+          "30"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 1100100₂ en décimal :",
+        "answers": [
+          "100",
+          "104",
+          "98"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V, une résistance de 1,2 kΩ consomme I = ?",
+        "answers": [
+          "100 mA",
+          "1,2 A",
+          "10 mA"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "On peut aussi écrire P = ?",
+        "answers": [
+          "R + I²",
+          "R / I²",
+          "R × I²"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "La puissance électrique P vaut souvent :",
+        "answers": [
+          "P = U × I",
+          "P = U / I",
+          "P = U + I"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "La loi d'Ohm s'écrit :",
+        "answers": [
+          "U = R + I",
+          "U = R / I",
+          "U = R × I"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 64 (décimal) en binaire :",
+        "answers": [
+          "1100000",
+          "100000",
+          "1000000"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 1111₂ en décimal :",
+        "answers": [
+          "14",
+          "15",
+          "16"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si I = 2 A et R = 10 Ω, alors U = ?",
+        "answers": [
+          "20 V",
+          "12 V",
+          "5 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "L'intensité I s'exprime en :",
+        "answers": [
+          "Ampères (A)",
+          "Volts (V)",
+          "Watts (W)"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Que vaut le bit de poids fort (MSB) dans un octet 10000000 ?",
+        "answers": [
+          "128",
+          "64",
+          "1"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Résistances en série : Rtot = ?",
+        "answers": [
+          "R1 + R2 + …",
+          "min(R1, R2)",
+          "(R1×R2)/(R1+R2)"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Décaler à gauche de 1 bit revient souvent à :",
+        "answers": [
+          "Ajouter 1",
+          "Diviser par 2",
+          "Multiplier par 2"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13"
+  }
+}
