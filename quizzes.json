@@ -204,7 +204,8 @@
         "image": null
       }
     ],
-    "date": "2026-09-13"
+    "date": "2026-09-13",
+    "published": false
   },
   "quiz_elec_mixte_2": {
     "id": "quiz_elec_mixte_2",
@@ -411,7 +412,8 @@
         "image": null
       }
     ],
-    "date": "2026-09-13"
+    "date": "2026-09-13",
+    "published": false
   },
   "quiz_elec_mixte_3": {
     "id": "quiz_elec_mixte_3",
@@ -618,7 +620,8 @@
         "image": null
       }
     ],
-    "date": "2026-09-13"
+    "date": "2026-09-13",
+    "published": false
   },
   "quiz_elec_mixte_4": {
     "id": "quiz_elec_mixte_4",
@@ -825,6 +828,7 @@
         "image": null
       }
     ],
-    "date": "2026-09-13"
+    "date": "2026-09-13",
+    "published": false
   }
 }

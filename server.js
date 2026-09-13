@@ -2655,26 +2655,89 @@ app.post('/api/upload-asset', authentificationProf, uploadQuiz.single('file'), (
     else res.status(500).json({ error: "Erreur upload" });
 });
 
+function writeQuizzesToDisk() {
+    fs.writeFileSync("./quizzes.json", JSON.stringify(quizzes, null, 2));
+}
+
+function isProfAuthorized(req) {
+    if (!ADMIN_USER || !ADMIN_PASS) return false;
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Basic ")) return false;
+    try {
+        const credentials = Buffer.from(auth.split(" ")[1], "base64").toString().split(":");
+        return credentials[0] === ADMIN_USER && credentials[1] === ADMIN_PASS;
+    } catch {
+        return false;
+    }
+}
+
+function quizListItem(q) {
+    return {
+        id: q.id,
+        title: q.title,
+        count: Array.isArray(q.questions) ? q.questions.length : 0,
+        published: q.published === true,
+        date: q.date || null,
+    };
+}
+
 // 2. API pour sauvegarder un quiz
 app.post('/api/save-quiz', authentificationProf, (req, res) => {
     const { id, title, questions } = req.body;
     const quizId = id || 'quiz_' + Date.now();
-    quizzes[quizId] = { id: quizId, title, questions, date: new Date().toISOString().split('T')[0] };
-    fs.writeFileSync('./quizzes.json', JSON.stringify(quizzes, null, 2));
+    const previous = quizzes[quizId];
+    quizzes[quizId] = {
+        id: quizId,
+        title,
+        questions,
+        date: new Date().toISOString().split('T')[0],
+        published: previous?.published === true,
+    };
+    writeQuizzesToDisk();
     res.json({ success: true, id: quizId });
 });
 
-// 3. API pour récupérer la liste des quiz (Public pour l'index, ou Prof)
+// 3. Liste des quiz — public : uniquement ceux proposés aux élèves
+//    Prof (?all=1 + Basic auth) : tous, avec l’état published
 app.get('/api/list-quizzes', (req, res) => {
-    const list = Object.values(quizzes).map(q => ({ id: q.id, title: q.title, count: q.questions.length }));
+    const wantAll = String(req.query.all || '') === '1';
+    const asProf = wantAll && isProfAuthorized(req);
+    const list = Object.values(quizzes)
+        .filter((q) => asProf || q.published === true)
+        .map(quizListItem);
     res.json(list);
 });
 
-// 4. API pour récupérer un quiz complet (Client)
+// 3b. Activer / désactiver un quiz pour les élèves (persisté dans quizzes.json)
+app.post('/api/publish-quiz', authentificationProf, (req, res) => {
+    const { id, published, exclusive } = req.body || {};
+    if (!id || !quizzes[id]) {
+        return res.status(404).json({ error: "Quiz introuvable" });
+    }
+    if (exclusive === true) {
+        for (const q of Object.values(quizzes)) {
+            q.published = q.id === id;
+        }
+    } else {
+        quizzes[id].published = published === true;
+    }
+    writeQuizzesToDisk();
+    res.json({
+        success: true,
+        id,
+        published: quizzes[id].published === true,
+        list: Object.values(quizzes).map(quizListItem),
+    });
+});
+
+// 4. API pour récupérer un quiz complet (élèves : seulement s’il est publié)
 app.get('/api/get-quiz/:id', (req, res) => {
     const q = quizzes[req.params.id];
-    if (q) res.json(q);
-    else res.status(404).json({ error: "Quiz introuvable" });
+    if (!q) return res.status(404).json({ error: "Quiz introuvable" });
+    if (q.published !== true && !isProfAuthorized(req)) {
+        return res.status(403).json({ error: "Ce quiz n’est pas proposé aux élèves pour le moment." });
+    }
+    res.json(q);
 });
 
 // 5. API pour supprimer un quiz
@@ -2682,7 +2745,7 @@ app.post('/api/delete-quiz', authentificationProf, (req, res) => {
     const { id } = req.body;
     if (quizzes[id]) {
         delete quizzes[id];
-        fs.writeFileSync('./quizzes.json', JSON.stringify(quizzes, null, 2));
+        writeQuizzesToDisk();
     }
     res.json({ success: true });
 });
@@ -2702,10 +2765,18 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
             .btn-primary { background:#00d1ff; color:#0f172a; }
             .btn-danger { background:#ef4444; color:white; }
             .btn-success { background:#10b981; color:white; }
-            .quiz-item { background:#1e293b; padding:15px; margin-bottom:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; }
+            .btn-warn { background:#eab308; color:#0f172a; }
+            .btn-mute { background:#334155; color:#e2e8f0; }
+            .quiz-item { background:#1e293b; padding:15px; margin-bottom:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; border:1px solid #334155; }
+            .quiz-item.is-on { border-color:#10b981; box-shadow:0 0 0 1px rgba(16,185,129,0.35); }
+            .badge { display:inline-block; font-size:0.75rem; padding:3px 8px; border-radius:999px; font-weight:bold; margin-left:8px; vertical-align:middle; }
+            .badge-on { background:rgba(16,185,129,0.2); color:#34d399; }
+            .badge-off { background:rgba(148,163,184,0.15); color:#94a3b8; }
+            .help { color:#94a3b8; font-size:0.9rem; line-height:1.45; margin:12px 0 20px; background:#1e293b; padding:12px 14px; border-radius:8px; border-left:3px solid #00d1ff; }
             .question-box { background:#334155; padding:15px; margin-bottom:15px; border-radius:8px; border-left:4px solid #00d1ff; }
             input[type="text"] { width:100%; padding:8px; margin:5px 0; background:#1e293b; border:1px solid #475569; color:white; border-radius:4px; }
             input[type="file"] { margin-top:5px; }
+            .actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
         </style>
     </head>
     <body>
@@ -2715,7 +2786,16 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
         </div>
 
         <div id="list-view">
-            <button class="btn btn-success" onclick="createNew()">+ NOUVEAU QUIZ</button>
+            <p class="help">
+                Tous les quiz restent en mémoire sur le site. Cochez ceux à <b>proposer aux élèves</b>
+                (page Évaluations). Pour un demi-groupe, utilisez <b>Proposer seul</b> : un seul quiz
+                est visible, les autres sont masqués. Changez ensuite pour l’autre demi-groupe.
+            </p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                <button class="btn btn-success" onclick="createNew()">+ NOUVEAU QUIZ</button>
+                <a class="btn btn-primary" href="/quiz-global.html" target="_blank" style="text-decoration:none; display:inline-block;">👀 Voir la page élèves</a>
+                <button class="btn btn-mute" onclick="unpublishAll()">🔒 Tout retirer des élèves</button>
+            </div>
             <div id="quiz-list" style="margin-top:20px;"></div>
         </div>
 
@@ -2733,29 +2813,87 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
             let currentQuiz = { id: null, questions: [] };
             const API_URL = '/api';
 
+            function esc(s) {
+                return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+                    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+                }[c]));
+            }
+
             async function loadList() {
-                const res = await fetch(API_URL + '/list-quizzes');
+                const res = await fetch(API_URL + '/list-quizzes?all=1');
                 const list = await res.json();
-                document.getElementById('quiz-list').innerHTML = list.map(q => 
-                    \`<div class="quiz-item">
-                        <div><strong>\${q.title}</strong> (\${q.count} questions)</div>
+                const box = document.getElementById('quiz-list');
+                if (!Array.isArray(list) || list.length === 0) {
+                    box.innerHTML = "<p style='color:#94a3b8;'>Aucun quiz enregistré.</p>";
+                    return;
+                }
+                box.innerHTML = list.map(q => {
+                    const on = q.published === true;
+                    return \`<div class="quiz-item \${on ? 'is-on' : ''}">
                         <div>
-                            <button class="btn btn-primary" onclick="editQuiz('\${q.id}')">Modifier</button>
-                            <button class="btn btn-danger" onclick="deleteQuiz('\${q.id}')">Suppr</button>
+                            <strong>\${esc(q.title)}</strong>
+                            <span class="badge \${on ? 'badge-on' : 'badge-off'}">\${on ? '📢 Proposé aux élèves' : '🔒 Masqué'}</span>
+                            <div style="color:#94a3b8; font-size:0.85rem; margin-top:4px;">\${q.count} questions · id : \${esc(q.id)}</div>
                         </div>
-                    </div>\`
-                ).join('');
+                        <div class="actions">
+                            <button class="btn \${on ? 'btn-mute' : 'btn-success'}" onclick="setPublished('\${esc(q.id)}', \${!on})">
+                                \${on ? 'Retirer' : 'Proposer aux élèves'}
+                            </button>
+                            <button class="btn btn-warn" onclick="publishExclusive('\${esc(q.id)}')">Proposer seul</button>
+                            <a class="btn btn-primary" href="/quiz-global.html?id=\${encodeURIComponent(q.id)}" target="_blank" style="text-decoration:none;">Ouvrir</a>
+                            <button class="btn btn-primary" onclick="editQuiz('\${esc(q.id)}')">Modifier</button>
+                            <button class="btn btn-danger" onclick="deleteQuiz('\${esc(q.id)}')">Suppr</button>
+                        </div>
+                    </div>\`;
+                }).join('');
+            }
+
+            async function setPublished(id, published) {
+                await fetch('/api/publish-quiz', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id, published: !!published })
+                });
+                loadList();
+            }
+
+            async function publishExclusive(id) {
+                if (!confirm('Proposer uniquement ce quiz aux élèves (les autres seront masqués) ?')) return;
+                await fetch('/api/publish-quiz', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id, exclusive: true })
+                });
+                loadList();
+            }
+
+            async function unpublishAll() {
+                const res = await fetch(API_URL + '/list-quizzes?all=1');
+                const list = await res.json();
+                if (!Array.isArray(list) || !list.length) return;
+                if (!confirm('Retirer tous les quiz de la page élèves ?')) return;
+                for (const q of list) {
+                    if (q.published) {
+                        await fetch('/api/publish-quiz', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ id: q.id, published: false })
+                        });
+                    }
+                }
+                loadList();
             }
 
             function createNew() {
                 currentQuiz = { id: null, title: "", questions: [] };
+                document.getElementById('quiz-title').value = '';
                 renderEditor();
                 document.getElementById('list-view').style.display = 'none';
                 document.getElementById('editor-view').style.display = 'block';
             }
 
             async function editQuiz(id) {
-                const res = await fetch(API_URL + '/get-quiz/' + id);
+                const res = await fetch(API_URL + '/get-quiz/' + encodeURIComponent(id));
                 currentQuiz = await res.json();
                 document.getElementById('quiz-title').value = currentQuiz.title;
                 renderEditor();
@@ -2773,7 +2911,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
                             <h3>Question \${idx + 1}</h3>
                             <button class="btn btn-danger" style="padding:2px 8px;" onclick="removeQuestion(\${idx})">X</button>
                         </div>
-                        <input type="text" placeholder="Intitulé de la question" value="\${q.text}" onchange="updateQ(\${idx}, 'text', this.value)">
+                        <input type="text" placeholder="Intitulé de la question" value="\${String(q.text||'').replace(/"/g,'&quot;')}" onchange="updateQ(\${idx}, 'text', this.value)">
                         
                         <div style="margin:10px 0; background:#222; padding:10px; border-radius:4px;">
                             <label>📷 Image (optionnel) : </label>
@@ -2785,7 +2923,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
                             \${[0,1,2].map(i => \`
                                 <div>
                                     <input type="radio" name="correct-\${idx}" \${q.correct == i ? 'checked' : ''} onclick="updateQ(\${idx}, 'correct', \${i})">
-                                    <input type="text" placeholder="Réponse \${i+1}" value="\${q.answers[i] || ''}" onchange="updateAns(\${idx}, \${i}, this.value)" style="width:85%">
+                                    <input type="text" placeholder="Réponse \${i+1}" value="\${String(q.answers[i]||'').replace(/"/g,'&quot;')}" onchange="updateAns(\${idx}, \${i}, this.value)" style="width:85%">
                                 </div>
                             \`).join('')}
                         </div>
@@ -2843,6 +2981,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
             function cancelEdit() {
                 document.getElementById('editor-view').style.display = 'none';
                 document.getElementById('list-view').style.display = 'block';
+                loadList();
             }
 
             loadList();

@@ -171,6 +171,8 @@ function buildMixedQuiz(index, titles) {
         title: titles[index],
         questions: mixed,
         date: new Date().toISOString().slice(0, 10),
+        // Masqué par défaut : le prof choisit lesquels proposer aux élèves
+        published: false,
     };
 }
 
