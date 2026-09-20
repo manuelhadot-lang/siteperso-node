@@ -923,11 +923,17 @@ canvas.addEventListener('dblclick', async (e) => {
                 openEsp32DocModal(target);
             } else {
                 openArduinoEditor(target);
+                draw();
             }
             return;
         }
         if (target.type === 'arduino_uno') {
-            openUnoDocModal(target.label);
+            if (e.shiftKey) {
+                openUnoDocModal(target.label);
+            } else {
+                openArduinoEditor(target);
+                draw();
+            }
             return;
         }
         if (target.type === 'oscilloscope') {

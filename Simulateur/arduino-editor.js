@@ -538,16 +538,22 @@ function defaultSketchForBoard(comp) {
 
 export function openArduinoEditor(comp) {
     if (!isMicroBoard(comp)) return;
+    // Toujours rattacher la carte courante (y compris après fermeture du panneau).
+    if (!circuit.components.includes(comp)) return;
     activeBoard = comp;
     resolveBoardFqbn(activeBoard);
     activeBoard.lastUploadOk = false;
+    if (typeof comp.sketch !== 'string' || !comp.sketch.trim()) {
+        comp.sketch = defaultSketchForBoard(comp);
+    }
     if (titleEl()) titleEl().textContent = boardPanelTitle(comp);
-    if (sketchEl()) sketchEl().value = comp.sketch || defaultSketchForBoard(comp);
+    if (sketchEl()) sketchEl().value = comp.sketch;
     refreshArduinoSyntaxHighlight();
     applyArduinoSketchToComponent(comp);
     populateUploadProfileSelect(comp);
     updateCompileStatusUi(comp);
-    panel()?.classList.remove('hidden');
+    const p = panel();
+    if (p) p.classList.remove('hidden');
     refreshInstalledLibraries();
     refreshUploadPorts();
     resizeCanvas();

@@ -100,21 +100,11 @@ export function esp32UpesyLpTerminalKeys(label) {
     return keys;
 }
 
-export const DEFAULT_ESP32_UPESY_LP_SKETCH = `// uPesy ESP32 Wroom Low Power DevKit
-// Pas de LED_BUILTIN. GPIO35 = tension batterie (pont 1,435).
-// Maj + double-clic sur la carte : régler Vbat simulée (3,0–4,3 V).
-// analogRead : 12 bits (0–4095), comme Arduino-ESP32.
+export const DEFAULT_ESP32_UPESY_LP_SKETCH = `void setup() {
 
-void setup() {
-  Serial.begin(115200);
 }
 
 void loop() {
-  int raw = analogRead(35);
-  float vBat = 1.435 * (raw / 4095.0) * 3.3;
-  Serial.print("Vbat = ");
-  Serial.print(vBat, 2);
-  Serial.println(" V");
-  delay(1000);
+
 }
 `;

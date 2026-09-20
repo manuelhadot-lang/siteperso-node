@@ -399,10 +399,10 @@ const ADMIN_PASS = process.env.ADMIN_PASS;
 // --- 1. CONFIGURATION DES CHEMINS ---
 const dirUploads = path.join(__dirname, 'upload-tp');
 const dirDocs = path.join(__dirname, 'doc'); 
-const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "documents", "3D"];
+const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "Veilleur_intelligent", "documents", "3D"];
 const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
 const dirSimulateur = path.join(__dirname, 'Simulateur');
-const SIM_UI_VERSION = 'icons4';
+const SIM_UI_VERSION = 'empty-sketch1';
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href;
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href;
 let buildNgspiceDeckFn = null;
@@ -534,7 +534,11 @@ let planningProjets = readJsonFileSafe("./planning_projets.json", {
     Station_Meteo: "2026-03-01",
     Digicode: "2026-03-01",
     Robo_Cytron_ESP32: "2026-03-01",
+    Veilleur_intelligent: "2026-03-01",
 });
+if (!planningProjets.Veilleur_intelligent) {
+    planningProjets.Veilleur_intelligent = "2026-03-01";
+}
 let planningDocs = readJsonFileSafe("./planning_docs.json", {});
 let quizzes = readJsonFileSafe("./quizzes.json", {});
 let chatMessages = readJsonFileSafe("./chat_messages.json", []);
@@ -572,14 +576,25 @@ const BACKUP_JSON_FILES = [
     "simulator-visits.json",
 ];
 
+const BACKUP_ZIP_MAX_BYTES = 64 * 1024 * 1024; // 64 Mo — quizzes.json peut grossir
+
 const uploadBackupZip = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 8 * 1024 * 1024 },
+    limits: { fileSize: BACKUP_ZIP_MAX_BYTES },
     fileFilter: (req, file, cb) => {
         const ok = file && /\.zip$/i.test(file.originalname || "");
         cb(ok ? null : new Error("Choisissez le fichier ZIP de sauvegarde."), ok);
     },
 });
+
+function backupZipUploadErrorMessage(err) {
+    if (!err) return "Upload invalide.";
+    if (err.code === "LIMIT_FILE_SIZE") {
+        const mo = Math.round(BACKUP_ZIP_MAX_BYTES / (1024 * 1024));
+        return `Fichier trop volumineux (max. ${mo} Mo). Réessayez avec le ZIP de sauvegarde du site, ou contactez l’admin si le fichier dépasse encore cette limite.`;
+    }
+    return err.message || "Upload invalide.";
+}
 
 function writeJsonAtomic(fileName, value) {
     fs.writeFileSync(path.join(__dirname, fileName), JSON.stringify(value, null, 2));
@@ -674,6 +689,7 @@ app.get('/ultrason.html', withProjectDateGate('UltraSon', (req, res) => res.send
 app.get('/StationMeteoConnectee.html', withProjectDateGate('Station_Meteo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'StationMeteoConnectee.html'))));
 app.get('/Digicode.html', withProjectDateGate('Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html'))));
 app.get('/Robo_Cytron_ESP32.html', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
+app.get('/Veilleur_intelligent.html', withProjectDateGate('Veilleur_intelligent', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Veilleur_intelligent.html'))));
 
 app.get('/favicon.ico', (req, res) => {
     res.type('image/svg+xml');
@@ -1911,10 +1927,16 @@ function escapeHtml(text) {
 // --- 7. ROUTES ÉLÈVES & DOCUMENTS ---
 app.get('/projets.html', (req, res) => {
     const aujourdhui = new Date().toISOString().split('T')[0];
+    const libellesProjets = {
+        Station_Meteo: 'Station Météo',
+        Robo_Cytron_ESP32: 'Robo Cytron ESP32',
+        Veilleur_intelligent: 'Veilleur Intelligent',
+    };
     const cartesHTML = Object.keys(planningProjets).map(p => {
         const ouvert = aujourdhui >= planningProjets[p];
+        const libelle = libellesProjets[p] || p.replace(/_/g, ' ');
         return `<a href="${ouvert ? '/'+p : '#'}" class="card" style="text-decoration:none; ${ouvert ? '' : 'opacity:0.5; cursor:not-allowed;'}">
-                    <h2>${p.replace(/_/g, ' ')}</h2>
+                    <h2>${libelle}</h2>
                     <p>${ouvert ? '✅ Ouvert' : '🔒 Dès le ' + planningProjets[p].split('-').reverse().join('/')}</p>
                 </a>`;
     }).join('');
@@ -1927,6 +1949,7 @@ app.get('/UltraSon', withProjectDateGate('UltraSon', (req, res) => res.sendFile(
 app.get('/Station_Meteo', withProjectDateGate('Station_Meteo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'StationMeteoConnectee.html'))));
 app.get('/Digicode', withProjectDateGate('Digicode', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Digicode.html'))));
 app.get('/Robo_Cytron_ESP32', withProjectDateGate('Robo_Cytron_ESP32', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Robo_Cytron_ESP32.html'))));
+app.get('/Veilleur_intelligent', withProjectDateGate('Veilleur_intelligent', (req, res) => res.sendFile(path.join(__dirname, 'public', 'Veilleur_intelligent.html'))));
 app.get('/apps', (req, res) => res.sendFile(path.join(__dirname, 'public', 'apps.html')));
 app.get('/docs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'docs.html')));
 app.get('/contact.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'contact.html')));
@@ -2132,7 +2155,7 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
             <a href="/gestion-quiz" style="background:#00d1ff; color:#0f172a; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold;">🛠️ Créer / Modifier un Quiz</a>
             <a href="/contact.html?prof=1" target="_blank" style="background:#10b981; color:white; text-decoration:none; padding:10px 20px; border-radius:5px; font-weight:bold; margin-left:10px;">💬 Accéder au Tchat</a>
         </div>
-        <p style="color:#94a3b8; font-size:0.85rem; margin:-8px 0 20px;">Après un redéploiement Render : téléchargez d’abord le ZIP de sauvegarde, puis utilisez <b>Restaurer</b> avec ce même fichier pour récupérer élèves, dates, quiz et tchat. Laissez cochée <b>Conserver les quiz actuels</b> si vous ne voulez récupérer que les élèves (ou d’autres données) sans écraser les quiz déjà sur le site.</p>
+        <p style="color:#94a3b8; font-size:0.85rem; margin:-8px 0 20px;">Après un redéploiement Render : téléchargez d’abord le ZIP de sauvegarde, puis utilisez <b>Restaurer</b> avec ce même fichier pour récupérer élèves, dates, quiz et tchat. Laissez cochée <b>Conserver les quiz actuels</b> si vous ne voulez récupérer que les élèves (ou d’autres données) sans écraser les quiz déjà sur le site. Taille max. du ZIP : 64 Mo.</p>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:20px;">
             <section style="background:#1e1e1e; padding:15px; border-radius:10px;">
@@ -2628,7 +2651,7 @@ app.get('/admin/backup-zip', authentificationProf, (req, res) => {
 
 app.post("/admin/restore-zip", authentificationProf, (req, res) => {
     uploadBackupZip.single("backup")(req, res, (err) => {
-        if (err) return res.send(adminAlertRedirect(err.message || "Upload invalide."));
+        if (err) return res.send(adminAlertRedirect(backupZipUploadErrorMessage(err)));
         try {
             if (!req.file || !req.file.buffer) {
                 return res.send(adminAlertRedirect("Aucun fichier ZIP sélectionné."));

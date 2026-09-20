@@ -78,15 +78,11 @@ export function esp32DevkitTerminalKeys(label) {
     return keys;
 }
 
-export const DEFAULT_ESP32_DEVKIT_SKETCH = `// ESP32 DevKit (WROOM-32) — sketch minimal
-void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+export const DEFAULT_ESP32_DEVKIT_SKETCH = `void setup() {
+
 }
 
 void loop() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(500);
-  digitalWrite(LED_BUILTIN, LOW);
-  delay(500);
+
 }
 `;

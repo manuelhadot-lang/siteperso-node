@@ -93,15 +93,11 @@ export function arduinoUnoTerminalKeys(label) {
     return keys;
 }
 
-export const DEFAULT_ARDUINO_SKETCH = `// Arduino UNO — sketch minimal
-void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+export const DEFAULT_ARDUINO_SKETCH = `void setup() {
+
 }
 
 void loop() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(500);
-  digitalWrite(LED_BUILTIN, LOW);
-  delay(500);
+
 }
 `;
