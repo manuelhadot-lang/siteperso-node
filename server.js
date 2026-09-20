@@ -528,17 +528,35 @@ mesSousDossiersDocs.forEach(sd => {
 const mesClasses = ["Tle_STI2D1", "Tle_STI2D2", "1ere_STI2D1", "1ere_STI2D2"];
 
 // --- 2. CHARGEMENT DES PLANNINGS ---
-let planningProjets = readJsonFileSafe("./planning_projets.json", {
+const DEFAULT_PLANNING_PROJETS = {
     Robotique: "2026-03-01",
     UltraSon: "2026-03-01",
     Station_Meteo: "2026-03-01",
     Digicode: "2026-03-01",
     Robo_Cytron_ESP32: "2026-03-01",
     Veilleur_intelligent: "2026-03-01",
-});
-if (!planningProjets.Veilleur_intelligent) {
-    planningProjets.Veilleur_intelligent = "2026-03-01";
+};
+
+/** Garde les projets connus (ex. Veilleur Intelligent) même si un vieux ZIP de backup les omet. */
+function ensurePlanningProjetsDefaults(persist = true) {
+    if (!planningProjets || typeof planningProjets !== "object" || Array.isArray(planningProjets)) {
+        planningProjets = { ...DEFAULT_PLANNING_PROJETS };
+        if (persist) writeJsonAtomic("planning_projets.json", planningProjets);
+        return true;
+    }
+    let changed = false;
+    for (const [key, date] of Object.entries(DEFAULT_PLANNING_PROJETS)) {
+        if (!planningProjets[key]) {
+            planningProjets[key] = date;
+            changed = true;
+        }
+    }
+    if (changed && persist) writeJsonAtomic("planning_projets.json", planningProjets);
+    return changed;
 }
+
+let planningProjets = readJsonFileSafe("./planning_projets.json", { ...DEFAULT_PLANNING_PROJETS });
+ensurePlanningProjetsDefaults(true);
 let planningDocs = readJsonFileSafe("./planning_docs.json", {});
 let quizzes = readJsonFileSafe("./quizzes.json", {});
 let chatMessages = readJsonFileSafe("./chat_messages.json", []);
@@ -622,6 +640,7 @@ function applyBackupJsonFile(fileName, parsed) {
             throw new Error("planning_projets.json invalide.");
         }
         planningProjets = parsed;
+        ensurePlanningProjetsDefaults(false);
         writeJsonAtomic(fileName, planningProjets);
         return;
     }
@@ -1926,6 +1945,7 @@ function escapeHtml(text) {
 
 // --- 7. ROUTES ÉLÈVES & DOCUMENTS ---
 app.get('/projets.html', (req, res) => {
+    ensurePlanningProjetsDefaults(true);
     const aujourdhui = new Date().toISOString().split('T')[0];
     const libellesProjets = {
         Station_Meteo: 'Station Météo',
@@ -2045,6 +2065,7 @@ app.post('/api/admin-door', (req, res) => {
 // --- 9. ESPACE PROF (VERSION BLINDÉE) ---
 // --- 9. ESPACE PROF (CORRIGÉ & OPTIMISÉ) ---
 app.get('/espace-correction', authentificationProf, (req, res) => {
+    ensurePlanningProjetsDefaults(true);
     // 1. Préparation de la liste des documents
     let htmlDocs = "";
     mesSousDossiersDocs.forEach(sd => {
@@ -2374,8 +2395,10 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
 
 // --- ROUTES DE SAUVEGARDE ---
 app.post('/update-dates', authentificationProf, (req, res) => {
+    ensurePlanningProjetsDefaults(false);
     planningProjets = Object.assign(planningProjets, req.body);
-    fs.writeFileSync('./planning_projets.json', JSON.stringify(planningProjets));
+    ensurePlanningProjetsDefaults(false);
+    writeJsonAtomic("planning_projets.json", planningProjets);
     res.send("<script>alert('Dates Projets sauvegardées !'); window.location='/espace-correction';</script>");
 });
 
