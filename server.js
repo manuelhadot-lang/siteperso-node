@@ -495,21 +495,47 @@ function isWin32Platform() {
 // --- CHARGEMENT DES ELEVES ---
 let baseEleves = readJsonFileSafe("./eleves.json", {});
 
-// Route pour vérifier si un code élève existe
-app.get('/api/check-student/:code', (req, res) => {
-    const codeCherche = req.params.code.toUpperCase();
-    let eleveTrouve = null;
+/** @param {unknown} code */
+function normalizeStudentCode(code) {
+    return String(code || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "");
+}
 
-    for (let classe in baseEleves) {
-        const match = baseEleves[classe].find(e => e.code.toUpperCase() === codeCherche);
+/**
+ * Recherche un élève par son code d’accès (insensible à la casse / espaces).
+ * @param {unknown} code
+ * @returns {{ nom: string, prenom: string, code: string, classe: string } | null}
+ */
+function findEleveByCode(code) {
+    const codeCherche = normalizeStudentCode(code);
+    if (!codeCherche) return null;
+    for (const classe of Object.keys(baseEleves || {})) {
+        const list = baseEleves[classe];
+        if (!Array.isArray(list)) continue;
+        const match = list.find((e) => normalizeStudentCode(e?.code) === codeCherche);
         if (match) {
-            eleveTrouve = { nom: match.nom, prenom: match.prenom };
-            break;
+            return {
+                nom: String(match.nom || ""),
+                prenom: String(match.prenom || ""),
+                code: String(match.code || ""),
+                classe,
+            };
         }
     }
+    return null;
+}
+
+/** Ancien code classe unique (toujours accepté en secours). */
+const LEGACY_DEPOT_ACCESS_CODE = "STI2D2026";
+
+// Route pour vérifier si un code élève existe
+app.get('/api/check-student/:code', (req, res) => {
+    const eleveTrouve = findEleveByCode(req.params.code);
 
     if (eleveTrouve) {
-        res.json({ exists: true, ...eleveTrouve });
+        res.json({ exists: true, nom: eleveTrouve.nom, prenom: eleveTrouve.prenom, classe: eleveTrouve.classe });
     } else {
         res.json({ exists: false });
     }
@@ -2003,11 +2029,54 @@ app.get('/api/check-access/:nomFichier', (req, res) => {
 
 // --- 8. RÉCEPTION DES TP ---
 app.post('/upload-tp', upload.single('tp_file'), (req, res) => {
-    if (req.body.access_code !== "STI2D2026") {
-        if (req.file) fs.unlinkSync(req.file.path);
-        return res.send("<script>alert('Code incorrect !'); window.history.back();</script>");
+    const code = normalizeStudentCode(req.body?.access_code);
+    const eleve = findEleveByCode(code);
+    const legacyOk = code === LEGACY_DEPOT_ACCESS_CODE;
+
+    if (!eleve && !legacyOk) {
+        if (req.file?.path) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (_) {
+                /* ignore */
+            }
+        }
+        return res.send(
+            "<script>alert('Code incorrect ! Utilisez le code élève reçu en classe (étiquette / espace prof).'); window.history.back();</script>"
+        );
     }
-    res.send("<body style='background:#0f172a; color:white; text-align:center;'><h1>✅ Bien reçu !</h1><a href='/' style='color:#00d1ff;'>Retour</a></body>");
+
+    // Si un code élève est fourni, on force nom/prénom du fichier sur la fiche (évite les usurpations).
+    if (eleve && req.file?.path) {
+        try {
+            const dir = path.dirname(req.file.path);
+            const ext = path.extname(req.file.filename || req.file.path);
+            const nom = (eleve.nom || "SANSNOM").toUpperCase().replace(/\s/g, "_");
+            const prenom = (eleve.prenom || "SANSPRENOM").replace(/\s/g, "_");
+            const dest = path.join(
+                dir,
+                `${nom}_${prenom}_${new Date().toISOString().slice(0, 10)}${ext}`
+            );
+            if (dest !== req.file.path) {
+                fs.renameSync(req.file.path, dest);
+                req.file.path = dest;
+                req.file.filename = path.basename(dest);
+            }
+        } catch (err) {
+            console.warn("[upload-tp] renommage fichier :", err?.message || err);
+        }
+    }
+
+    const qui = eleve
+        ? `${escapeHtml(eleve.prenom)} ${escapeHtml(eleve.nom)}`
+        : "dépôt classe";
+    res.send(
+        `<body style='background:#0f172a; color:white; text-align:center; font-family:sans-serif; padding:40px;'>
+          <h1>✅ Bien reçu !</h1>
+          <p style="color:#94a3b8;">Merci ${qui}.</p>
+          <a href='/' style='color:#00d1ff;'>Retour</a>
+        </body>`
+    );
 });
 
 // --- 8b. API TCHAT ---

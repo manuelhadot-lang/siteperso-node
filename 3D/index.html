@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="/style.css">
 
-    <link rel="stylesheet" href="/3D/lab.css?v=20260903giro">
+    <link rel="stylesheet" href="/3D/lab.css?v=20260924snowdim">
 
 </head>
 
@@ -445,18 +445,13 @@
                             >
                                 <span class="lab-side-panel__tool-label">Relief IGN (France)</span>
                             </button>
-                            <p class="lab-terrain__hint">
-                                Charge un heightmap IGN réel (altitude, orthophoto, routes, bâtiments)
-                                pour sculpter et y poser des objets. <strong>Conception</strong> pour éditer,
-                                <strong>FPS</strong> pour marcher.
-                            </p>
                             <button
                                 type="button"
-                                id="btn-open-giro-geo"
+                                id="btn-terrain-mountain-island"
                                 class="lab-side-panel__tool"
-                                title="Ouvre Giro3D : MNT tuilé IGN + ortho + bâtiments BD TOPO (moteur geo dédié)"
+                                title="Île montagneuse 500×500 m, contour irrégulier, descente progressive sous le niveau de la mer"
                             >
-                                <span class="lab-side-panel__tool-label">Vue geo Giro3D (IGN)</span>
+                                <span class="lab-side-panel__tool-label">Île montagneuse 500 m</span>
                             </button>
                             <label class="lab-terrain__range" title="Taille du terrain (mètres)">
                                 <span>Taille <output id="lab-terrain-size-value">50 m</output></span>
@@ -498,35 +493,6 @@
                                 >
                                     Sol réel (photo IGN + routes)
                                 </button>
-                                <p class="lab-terrain__hint">
-                                    Un clic après le heightmap IGN : photo aérienne vraie, routes en asphalte. Remplacez ensuite chaque calque.
-                                </p>
-                                <div id="lab-terrain-layers" class="lab-terrain__layers">
-                                    <div class="lab-terrain__layer">
-                                        <span>Orthophoto</span>
-                                        <button type="button" data-ground-replace="ortho">Remplacer</button>
-                                    </div>
-                                    <div class="lab-terrain__layer">
-                                        <span>Routes</span>
-                                        <button type="button" data-ground-replace="road">Remplacer</button>
-                                    </div>
-                                    <div class="lab-terrain__layer">
-                                        <span>Herbe</span>
-                                        <button type="button" data-ground-replace="grass">Remplacer</button>
-                                    </div>
-                                    <div class="lab-terrain__layer">
-                                        <span>Sable</span>
-                                        <button type="button" data-ground-replace="sand">Remplacer</button>
-                                    </div>
-                                    <div class="lab-terrain__layer">
-                                        <span>Sentier</span>
-                                        <button type="button" data-ground-replace="path">Remplacer</button>
-                                    </div>
-                                    <div class="lab-terrain__layer">
-                                        <span>Roche</span>
-                                        <button type="button" data-ground-replace="rock">Remplacer</button>
-                                    </div>
-                                </div>
                                 <input id="lab-terrain-layer-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <label class="lab-terrain__range" title="0 = textures sol (herbe / sable / roche), 100 = photo aérienne IGN">
                                     <span>Photo aérienne <output id="lab-terrain-ortho-mix-value">100 %</output></span>
@@ -536,14 +502,6 @@
                                     <input id="lab-terrain-show-roads" type="checkbox" checked>
                                     <span>Afficher les routes</span>
                                 </label>
-                                <button
-                                    type="button"
-                                    id="btn-terrain-osm-buildings"
-                                    class="lab-terrain__action"
-                                    title="Extrude les bâtiments IGN BD TOPO® (hauteur officielle) ; repli OSM si besoin"
-                                >
-                                    Placer les bâtiments (BD TOPO)
-                                </button>
                                 <input id="lab-terrain-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <div class="lab-terrain__brush-texture">
                                     <button type="button" id="btn-terrain-normal" class="lab-terrain__action">Normal map du sol</button>
@@ -553,27 +511,21 @@
                                     <span>Tile sol <output id="lab-terrain-texture-tile-value">8,00</output></span>
                                     <input id="lab-terrain-texture-tile" type="range" min="0.25" max="1000" step="0.25" value="8" title="Répétitions de la texture sur le sol (jusqu’à 1000)">
                                 </label>
-                                <input id="lab-terrain-brush-texture-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
                                 <div class="lab-terrain__brush-texture">
-                                    <button type="button" id="btn-terrain-brush-texture" class="lab-terrain__action">Texture du pinceau</button>
-                                    <button type="button" id="btn-terrain-brush-texture-clear" title="Revenir au pinceau couleur" hidden>×</button>
-                                </div>
-                                <input id="lab-terrain-brush-normal-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
-                                <div class="lab-terrain__brush-texture">
-                                    <button type="button" id="btn-terrain-brush-normal" class="lab-terrain__action">Normal map pinceau</button>
-                                    <button type="button" id="btn-terrain-brush-normal-clear" title="Retirer la normal map du pinceau" hidden>×</button>
+                                    <button type="button" id="btn-terrain-brush-texture" class="lab-terrain__action" title="Composer un matériau pinceau (albedo, normal, roughness, ambiance)">Matériau du pinceau</button>
+                                    <button type="button" id="btn-terrain-brush-texture-clear" title="Retirer le matériau du pinceau" hidden>×</button>
                                 </div>
                                 <label class="lab-terrain__range" title="Opacité / intensité du trait de pinceau">
-                                    <span>Intensité pinceau <output id="lab-terrain-paint-intensity-value">1,00</output></span>
-                                    <input id="lab-terrain-paint-intensity" type="range" min="0.05" max="1" step="0.01" value="1">
+                                    <span>Intensité pinceau <output id="lab-terrain-paint-intensity-value">0,55</output></span>
+                                    <input id="lab-terrain-paint-intensity" type="range" min="0.05" max="1" step="0.01" value="0.55" title="Plus bas = mélange plus progressif">
                                 </label>
                                 <label class="lab-terrain__range" title="Intensité des normal maps du terrain">
-                                    <span>Intensité normale <output id="lab-terrain-normal-scale-value">1,00</output></span>
-                                    <input id="lab-terrain-normal-scale" type="range" min="0" max="3" step="0.05" value="1">
+                                    <span>Intensité normale <output id="lab-terrain-normal-scale-value">1,50</output></span>
+                                    <input id="lab-terrain-normal-scale" type="range" min="0" max="3" step="0.05" value="1.5">
                                 </label>
                                 <label class="lab-terrain__range" title="Répétition de la texture peinte — plus bas = tuile plus grande">
-                                    <span>Tile pinceau <output id="lab-terrain-paint-tile-value">1,00</output></span>
-                                    <input id="lab-terrain-paint-tile" type="range" min="0.05" max="1000" step="0.05" value="1" title="Répétitions de la texture du pinceau (jusqu’à 1000)">
+                                    <span>Tile pinceau <output id="lab-terrain-paint-tile-value">10,00</output></span>
+                                    <input id="lab-terrain-paint-tile" type="range" min="0.05" max="1000" step="0.05" value="10" title="Répétitions de la texture du pinceau — plus haut = motifs plus petits (≈5 m/tuile recommandé sur grands terrains)">
                                 </label>
                                 <div class="lab-terrain__history">
                                     <button type="button" id="btn-terrain-undo" title="Annuler">↶</button>
@@ -799,6 +751,11 @@
 
                     <p class="lab-scene-panel__title">Scène</p>
 
+                    <label class="lab-scene-panel__check" title="Soleil directionnel d’ambiance (~17 h, OSO), centré sur la scène">
+                        <input id="lab-ambience-sun" type="checkbox" checked>
+                        Soleil 17h
+                    </label>
+
                     <ul id="lab-scene-list" class="lab-scene-list" aria-label="Éléments de la scène"></ul>
 
                 </div>
@@ -807,6 +764,68 @@
 
             </aside>
 
+        </div>
+
+        <div id="lab-brush-material-overlay" class="lab-dialog-overlay" hidden>
+            <div class="lab-dialog lab-dialog--wide lab-dialog--brush-mat" role="dialog" aria-modal="true" aria-labelledby="lab-brush-mat-title">
+                <h2 class="lab-dialog__title" id="lab-brush-mat-title">Matériau du pinceau</h2>
+                <p class="lab-dialog__message">
+                    Composez le matériau appliqué au terrain : texture de base (obligatoire), normal (optionnel),
+                    roughness et ambiance (AO).
+                </p>
+                <div class="lab-brush-mat__slots">
+                    <div class="lab-brush-mat__slot" data-brush-slot="albedo">
+                        <div class="lab-brush-mat__preview" data-brush-preview="albedo"></div>
+                        <div class="lab-brush-mat__meta">
+                            <strong>Texture de base</strong>
+                            <span>Albedo / couleur</span>
+                            <div class="lab-brush-mat__slot-actions">
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="albedo">Choisir…</button>
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="albedo" hidden>Retirer</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lab-brush-mat__slot" data-brush-slot="normal">
+                        <div class="lab-brush-mat__preview" data-brush-preview="normal"></div>
+                        <div class="lab-brush-mat__meta">
+                            <strong>Normal map</strong>
+                            <span>Optionnel</span>
+                            <div class="lab-brush-mat__slot-actions">
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="normal">Choisir…</button>
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="normal" hidden>Retirer</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lab-brush-mat__slot" data-brush-slot="roughness">
+                        <div class="lab-brush-mat__preview" data-brush-preview="roughness"></div>
+                        <div class="lab-brush-mat__meta">
+                            <strong>Roughness</strong>
+                            <span>Rugosité</span>
+                            <div class="lab-brush-mat__slot-actions">
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="roughness">Choisir…</button>
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="roughness" hidden>Retirer</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lab-brush-mat__slot" data-brush-slot="ao">
+                        <div class="lab-brush-mat__preview" data-brush-preview="ao"></div>
+                        <div class="lab-brush-mat__meta">
+                            <strong>Ambiance (AO)</strong>
+                            <span>Occlusion ambiante</span>
+                            <div class="lab-brush-mat__slot-actions">
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="ao">Choisir…</button>
+                                <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="ao" hidden>Retirer</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <input id="lab-brush-mat-file" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                <p class="lab-brush-mat__hint" data-brush-mat-hint>Ajoutez au moins une texture de base pour activer le pinceau matériau.</p>
+                <div class="lab-dialog__actions">
+                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost" data-brush-mat-cancel>Annuler</button>
+                    <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-brush-mat-apply disabled>Appliquer</button>
+                </div>
+            </div>
         </div>
 
         </div>
@@ -851,8 +870,6 @@
 
     </main>
 
-
-
     <script type="importmap">
 
     {
@@ -890,8 +907,8 @@
     }, true);
     </script>
 
-    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260903giro"></script>
-    <script type="module" src="/3D/app.js?v=20260903giro"></script>
+    <script type="module" src="/3D/fullscreen-bootstrap.js?v=20260924snowdim"></script>
+    <script type="module" src="/3D/app.js?v=20260924snowdim"></script>
 
     <script src="/site-access-unload.js" defer></script>
 

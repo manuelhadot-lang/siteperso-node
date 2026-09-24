@@ -1161,8 +1161,18 @@ a.lab-menu__item:hover {
 
 .lab-terrain__brush-texture {
     display: grid;
-    grid-template-columns: 1fr 27px;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
     gap: 4px;
+}
+
+.lab-terrain__brush-texture:has(> button:last-child:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr) 27px;
+}
+
+.lab-terrain__brush-texture > .lab-terrain__action {
+    width: 100%;
+    min-width: 0;
 }
 
 .lab-terrain__brush-texture > button:last-child {
@@ -2999,6 +3009,34 @@ label.lab-objlib__action {
     color: #94a3b8;
 }
 
+.lab-scene-panel__check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 7px 8px;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.55);
+    font-size: 12px;
+    color: #e2e8f0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.lab-scene-panel__check:hover {
+    border-color: #475569;
+    background: rgba(30, 41, 59, 0.75);
+}
+
+.lab-scene-panel__check input {
+    accent-color: #f59e0b;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+}
+
 .lab-scene-panel__tab {
     flex-shrink: 0;
     width: 36px;
@@ -3766,16 +3804,102 @@ label.lab-objlib__action {
 }
 
 /* Dialogues intégrés (plein écran, sans alertes navigateur) */
+.lab-dialog--brush-mat {
+    width: min(640px, 100%);
+}
+
+.lab-brush-mat__slots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 14px 0 10px;
+}
+
+.lab-brush-mat__slot {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.65);
+}
+
+.lab-brush-mat__preview {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: 1px solid #475569;
+    background:
+        linear-gradient(45deg, #334155 25%, transparent 25%),
+        linear-gradient(-45deg, #334155 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #334155 75%),
+        linear-gradient(-45deg, transparent 75%, #334155 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+    background-color: #1e293b;
+    background-repeat: repeat;
+}
+
+.lab-brush-mat__preview.has-image {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.lab-brush-mat__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.lab-brush-mat__meta strong {
+    color: #e2e8f0;
+    font-size: 13px;
+}
+
+.lab-brush-mat__meta > span {
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+.lab-brush-mat__slot-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.lab-brush-mat__hint {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+@media (max-width: 560px) {
+    .lab-brush-mat__slots {
+        grid-template-columns: 1fr;
+    }
+}
+
 .lab-dialog-overlay {
     position: fixed;
     inset: 0;
-    z-index: 12000;
+    z-index: 100100;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
     background: rgba(2, 6, 23, 0.72);
     backdrop-filter: blur(4px);
+}
+
+/* En mode lab plein écran : ancré au workspace (sinon la fenêtre est hors du fullscreen). */
+.lab-workspace:fullscreen > .lab-dialog-overlay,
+.lab-workspace:-webkit-full-screen > .lab-dialog-overlay,
+.lab-workspace--fullscreen > .lab-dialog-overlay {
+    position: absolute;
 }
 
 .lab-dialog-overlay--ign {
@@ -3991,8 +4115,13 @@ label.lab-objlib__action {
     border-color: #22d3ee;
 }
 
-.lab-dialog__btn--primary:hover {
+.lab-dialog__btn--primary:hover:not(:disabled) {
     background: linear-gradient(180deg, #a5f3fc 0%, #67e8f9 100%);
+}
+
+.lab-dialog__btn--primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .lab-dialog__scene-list {

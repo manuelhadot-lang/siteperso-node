@@ -124,8 +124,9 @@
     <h1>📤 Dépôt de Compte-Rendu</h1>
     <form action="/upload-tp" method="POST" enctype="multipart/form-data">
         <div class="form-group">
-            <label>CODE D'ACCÈS (Donné en classe)</label>
-            <input type="password" name="access_code" placeholder="Saisir le code ici" required autocomplete="off">
+            <label>CODE ÉLÈVE (étiquette / donné en classe)</label>
+            <input type="password" name="access_code" placeholder="Votre code personnel" required autocomplete="off">
+            <p id="code-hint" style="margin:8px 0 0; font-size:0.75rem; color:#94a3b8;"></p>
         </div>
         <div class="form-group">
             <label>NOM</label>
@@ -168,6 +169,47 @@
     </form>
 </div>
 
+    <script>
+        (function () {
+            const codeInput = document.querySelector('input[name="access_code"]');
+            const nomInput = document.querySelector('input[name="nom"]');
+            const prenomInput = document.querySelector('input[name="prenom"]');
+            const hint = document.getElementById("code-hint");
+            if (!codeInput) return;
+
+            let timer = null;
+            const verify = () => {
+                const code = String(codeInput.value || "").trim();
+                if (code.length < 2) {
+                    if (hint) hint.textContent = "";
+                    return;
+                }
+                fetch("/api/check-student/" + encodeURIComponent(code))
+                    .then((r) => r.json())
+                    .then((data) => {
+                        if (!hint) return;
+                        if (data && data.exists) {
+                            hint.style.color = "#10b981";
+                            hint.textContent = "✓ Code reconnu : " + (data.prenom || "") + " " + (data.nom || "");
+                            if (nomInput && data.nom) nomInput.value = data.nom;
+                            if (prenomInput && data.prenom) prenomInput.value = data.prenom;
+                        } else {
+                            hint.style.color = "#f59e0b";
+                            hint.textContent = "Code inconnu — vérifiez l’étiquette élève.";
+                        }
+                    })
+                    .catch(() => {
+                        if (hint) hint.textContent = "";
+                    });
+            };
+
+            codeInput.addEventListener("input", () => {
+                clearTimeout(timer);
+                timer = setTimeout(verify, 350);
+            });
+            codeInput.addEventListener("change", verify);
+        })();
+    </script>
     <script src="/site-access-unload.js" defer></script>
 </body>
 </html>

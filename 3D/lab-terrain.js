@@ -45,8 +45,40 @@ import {
     GROUND_LAYER_IDS,
     composeTerrainGround,
 } from "./lab-terrain-splat.js";
+import {
+    generateMountainIslandHeights,
+    MOUNTAIN_ISLAND_SIZE_M,
+} from "./lab-terrain-island.js";
 
 export const LAB_TERRAIN_KEY = "labTerrain";
+
+/** API matériau pinceau (branchée à l’init) — clic fiable hors du flux d’init. */
+/** @type {{ open: () => void, clear: () => void } | null} */
+let brushMaterialUiApi = null;
+
+document.addEventListener(
+    "click",
+    (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest("#btn-terrain-brush-texture")) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (brushMaterialUiApi) {
+                brushMaterialUiApi.open();
+            } else {
+                console.warn("[lab-terrain] Matériau du pinceau : éditeur terrain pas encore prêt");
+            }
+            return;
+        }
+        if (target.closest("#btn-terrain-brush-texture-clear")) {
+            event.preventDefault();
+            event.stopPropagation();
+            brushMaterialUiApi?.clear();
+        }
+    },
+    true
+);
 export const TERRAIN_SCENE_ITEM_ID = "env-terrain";
 /** Espacement cible des sommets (m) — sous le mètre pour lit / berges. */
 const TERRAIN_CELL_TARGET_M = 0.75;
@@ -68,9 +100,17 @@ function segmentsForTerrainSize(sizeMeters) {
 const PAINT_SIZE = 4096;
 /** Tuile GPU (sol + pinceau) : haute rés. pour rester nette de près. */
 const BASE_TEXTURE_GPU_SIZE = 2048;
+/**
+ * Répétitions pinceau selon la taille du monde (~5 m / tuile).
+ * Sans ça, tile=1 sur une île 500 m étire la neige en aplats lisses.
+ */
+function suggestedPaintTileForSize(sizeMeters) {
+    const size = Math.max(10, Number(sizeMeters) || GRID_SIZE);
+    return THREE.MathUtils.clamp(Math.round(size / 5), 10, 250);
+}
 const MAX_HISTORY = 30;
-const SCULPT_HEIGHT_MIN = -8;
-const SCULPT_HEIGHT_MAX = 18;
+const SCULPT_HEIGHT_MIN_BASE = -8;
+const SCULPT_HEIGHT_MAX_BASE = 18;
 /** Normal map plate (0.5, 0.5, 1) en tangent space. */
 const FLAT_NORMAL_COLOR = "#8080ff";
 
@@ -116,6 +156,29 @@ export function initTerrainEditor(options) {
         clearOcean = null,
     } = options;
 
+    // Branche l’UI le plus tôt possible (fonctions hoïstées plus bas).
+    brushMaterialUiApi = {
+        open: () => {
+            try {
+                openBrushMaterialDialog();
+            } catch (error) {
+                console.error("[lab-terrain] ouverture matériau pinceau :", error);
+                showStatus?.(
+                    error instanceof Error
+                        ? error.message
+                        : "Impossible d’ouvrir le matériau du pinceau"
+                );
+            }
+        },
+        clear: () => {
+            try {
+                clearBrushMaterial({ bake: true });
+            } catch (error) {
+                console.error("[lab-terrain] clear matériau pinceau :", error);
+            }
+        },
+    };
+
     function coverFloor(covered) {
         if (setFloorCoveredByTerrain) {
             setFloorCoveredByTerrain(covered);
@@ -136,6 +199,15 @@ export function initTerrainEditor(options) {
     const HEIGHT_MAP_RES = () => meshSegments + 1;
     let meshSegments = TERRAIN_SEGMENTS;
     let sizeMeters = GRID_SIZE;
+
+    /** Limites Y de sculpture adaptées à la taille du terrain (îles / IGN). */
+    function getSculptHeightMin() {
+        return Math.min(SCULPT_HEIGHT_MIN_BASE, -sizeMeters * 0.12);
+    }
+
+    function getSculptHeightMax() {
+        return Math.max(SCULPT_HEIGHT_MAX_BASE, sizeMeters * 0.28);
+    }
     const createBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-create-terrain")
     );
@@ -147,6 +219,9 @@ export function initTerrainEditor(options) {
     );
     const giroGeoBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-open-giro-geo")
+    );
+    const mountainIslandBtn = /** @type {HTMLButtonElement | null} */ (
+        document.getElementById("btn-terrain-mountain-island")
     );
     const tools = document.getElementById("lab-terrain-tools");
     const sizeInput = /** @type {HTMLInputElement | null} */ (
@@ -198,9 +273,17 @@ export function initTerrainEditor(options) {
     const brushTextureClearBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-terrain-brush-texture-clear")
     );
-    const brushTextureInput = /** @type {HTMLInputElement | null} */ (
-        document.getElementById("lab-terrain-brush-texture-input")
-    );
+    /** @type {HTMLElement | null} */
+    let brushMatOverlay = null;
+    /** @type {HTMLInputElement | null} */
+    let brushMatFileInput = null;
+    /** @type {HTMLButtonElement | null} */
+    let brushMatApplyBtn = null;
+    /** @type {HTMLButtonElement | null} */
+    let brushMatCancelBtn = null;
+    /** @type {HTMLElement | null} */
+    let brushMatHint = null;
+    let brushMatUiWired = false;
     const undoBtn = /** @type {HTMLButtonElement | null} */ (
         document.getElementById("btn-terrain-undo")
     );
@@ -230,15 +313,6 @@ export function initTerrainEditor(options) {
     );
     const normalInput = /** @type {HTMLInputElement | null} */ (
         document.getElementById("lab-terrain-normal-input")
-    );
-    const brushNormalBtn = /** @type {HTMLButtonElement | null} */ (
-        document.getElementById("btn-terrain-brush-normal")
-    );
-    const brushNormalClearBtn = /** @type {HTMLButtonElement | null} */ (
-        document.getElementById("btn-terrain-brush-normal-clear")
-    );
-    const brushNormalInput = /** @type {HTMLInputElement | null} */ (
-        document.getElementById("lab-terrain-brush-normal-input")
     );
     const normalScaleInput = /** @type {HTMLInputElement | null} */ (
         document.getElementById("lab-terrain-normal-scale")
@@ -273,6 +347,13 @@ export function initTerrainEditor(options) {
     let brushGpuTexture = null;
     /** @type {THREE.Texture | null} */
     let brushNormalGpuTexture = null;
+    /** @type {THREE.Texture | null} */
+    let brushRoughnessGpuTexture = null;
+    /** @type {THREE.Texture | null} */
+    let brushAoGpuTexture = null;
+    /** Overlay PBR figé : R=roughness, G=AO, A=masque. */
+    /** @type {THREE.CanvasTexture | null} */
+    let paintPbrTexture = null;
     /** @type {CanvasImageSource | null} */
     let baseImage = null;
     let baseTextureDataUrl = null;
@@ -303,9 +384,20 @@ export function initTerrainEditor(options) {
     let brushTextureTile = null;
     /** @type {HTMLCanvasElement | null} */
     let brushNormalTile = null;
+    /** @type {HTMLCanvasElement | null} */
+    let brushRoughnessTile = null;
+    /** @type {HTMLCanvasElement | null} */
+    let brushAoTile = null;
     let brushTextureDataUrl = null;
     let brushNormalTextureDataUrl = null;
-    let normalScale = DEFAULT_NORMAL_SCALE;
+    let brushRoughnessDataUrl = null;
+    let brushAoDataUrl = null;
+    /** @type {'albedo' | 'normal' | 'roughness' | 'ao' | null} */
+    let brushMatPickSlot = null;
+    /** Brouillon du dialogue matériau (data URLs). */
+    /** @type {{ albedo: string | null, normal: string | null, roughness: string | null, ao: string | null }} */
+    let brushMatDraft = { albedo: null, normal: null, roughness: null, ao: null };
+    let normalScale = Number(normalScaleInput?.value) || 1.5;
     let editing = false;
     let dragging = false;
     let mode = "mound";
@@ -318,9 +410,11 @@ export function initTerrainEditor(options) {
     );
     let paintTextureTile = Math.max(
         TEXTURE_TILE_MIN,
-        Number(paintTileInput?.value) || DEFAULT_TEXTURE_TILE
+        Number(paintTileInput?.value) || suggestedPaintTileForSize(GRID_SIZE)
     );
     let paintIntensity = Number(paintIntensityInput?.value) || 1;
+    /** Normales RGB déjà figées dans paintNormalCanvas (pas un simple masque blanc). */
+    let paintNormalBaked = false;
 
     const displayCanvas = document.createElement("canvas");
     displayCanvas.width = PAINT_SIZE;
@@ -343,6 +437,11 @@ export function initTerrainEditor(options) {
     paintNormalCanvas.width = PAINT_SIZE;
     paintNormalCanvas.height = PAINT_SIZE;
     const paintNormalCtx = paintNormalCanvas.getContext("2d", { alpha: true });
+    /** Calque PBR figé (R=roughness, G=AO, A=masque). */
+    const paintPbrCanvas = document.createElement("canvas");
+    paintPbrCanvas.width = PAINT_SIZE;
+    paintPbrCanvas.height = PAINT_SIZE;
+    const paintPbrCtx = paintPbrCanvas.getContext("2d", { alpha: true });
     if (displayCtx) displayCtx.imageSmoothingEnabled = true;
     if (displayNormalCtx) displayNormalCtx.imageSmoothingEnabled = false;
     if (paintCtx) {
@@ -356,6 +455,10 @@ export function initTerrainEditor(options) {
     if (paintNormalCtx) {
         paintNormalCtx.imageSmoothingEnabled = false;
         paintNormalCtx.globalCompositeOperation = "source-over";
+    }
+    if (paintPbrCtx) {
+        paintPbrCtx.imageSmoothingEnabled = false;
+        paintPbrCtx.globalCompositeOperation = "source-over";
     }
 
     /** Texture 1×1 transparente pour samplers GPU inutilisés. */
@@ -441,9 +544,9 @@ export function initTerrainEditor(options) {
     /**
      * Texture GPU tilable (mipmaps + anisotropie) — nette de près même à fort tile.
      * @param {CanvasImageSource} source
-     * @param {{ normal?: boolean, geoAligned?: boolean }} [opts]
+     * @param {{ normal?: boolean, linear?: boolean, geoAligned?: boolean }} [opts]
      */
-    function createGpuTileTexture(source, { normal = false, geoAligned = false } = {}) {
+    function createGpuTileTexture(source, { normal = false, linear = false, geoAligned = false } = {}) {
         const maxTex = Math.min(
             BASE_TEXTURE_GPU_SIZE,
             renderer.capabilities.maxTextureSize || BASE_TEXTURE_GPU_SIZE
@@ -464,7 +567,7 @@ export function initTerrainEditor(options) {
         tex.minFilter = THREE.LinearMipmapLinearFilter;
         tex.magFilter = THREE.LinearFilter;
         tex.anisotropy = getMaxAnisotropy();
-        if (normal) {
+        if (normal || linear) {
             if ("colorSpace" in tex) tex.colorSpace = THREE.NoColorSpace;
             else tex.encoding = THREE.LinearEncoding;
         } else if ("colorSpace" in tex) {
@@ -488,6 +591,10 @@ export function initTerrainEditor(options) {
         brushGpuTexture = null;
         brushNormalGpuTexture?.dispose();
         brushNormalGpuTexture = null;
+        brushRoughnessGpuTexture?.dispose();
+        brushRoughnessGpuTexture = null;
+        brushAoGpuTexture?.dispose();
+        brushAoGpuTexture = null;
     }
 
     function syncPaintOverlayUniform() {
@@ -497,18 +604,29 @@ export function initTerrainEditor(options) {
         shader.uniforms.uTerrainPaintMap.value = paintOverlayTexture || emptyMaskTexture;
         shader.uniforms.uTerrainBrushMask.value = brushMaskTexture || emptyMaskTexture;
         shader.uniforms.uTerrainBrushMap.value = brushGpuTexture || whitePixelTexture;
-        shader.uniforms.uTerrainHasBrushMap.value = brushGpuTexture ? 1 : 0;
+        // Live GPU albedo désactivé : on pose directement dans paintCanvas.
+        shader.uniforms.uTerrainHasBrushMap.value = 0;
         shader.uniforms.uTerrainPaintRepeat.value = paintRepeat;
         shader.uniforms.uTerrainBrushNormalMask.value = paintNormalMaskTexture || emptyMaskTexture;
         shader.uniforms.uTerrainBrushNormalMap.value = brushNormalGpuTexture || flatNormalPixelTexture;
-        shader.uniforms.uTerrainHasBrushNormal.value = brushNormalGpuTexture && paintNormalUsed ? 1 : 0;
-        shader.uniforms.uTerrainBrushNormalScale.value = normalScale;
+        // Live GPU : seulement si un masque temporaire existe encore (ancien flux).
+        // Le flux actuel pose albedo/normal/PBR directement dans les calques figés.
+        shader.uniforms.uTerrainHasBrushNormal.value =
+            brushNormalGpuTexture && brushMaskUsed ? 1 : 0;
+        shader.uniforms.uTerrainHasBakedNormal.value = paintNormalBaked ? 1 : 0;
+        shader.uniforms.uTerrainBrushNormalScale.value = normalScale * 3.6;
+        shader.uniforms.uTerrainBreakTiling.value = geoAlignedBase ? 0 : 1;
+        shader.uniforms.uTerrainPaintPbr.value = paintPbrTexture || emptyMaskTexture;
+        shader.uniforms.uTerrainBrushRoughnessMap.value = brushRoughnessGpuTexture || whitePixelTexture;
+        shader.uniforms.uTerrainHasBrushRoughness.value = 0;
+        shader.uniforms.uTerrainBrushAoMap.value = brushAoGpuTexture || whitePixelTexture;
+        shader.uniforms.uTerrainHasBrushAo.value = 0;
     }
 
     /**
      * Sol = map Three.js native (tuilage + mipmaps).
      * Peinture couleur = overlay alpha.
-     * Pinceau texturé = masque alpha + texture GPU tilée (nette de près).
+     * Pinceau matériau = masque alpha + textures GPU tilées (albedo / normal / roughness / AO).
      */
     function patchTerrainMaterial(mat) {
         mat.onBeforeCompile = (shader) => {
@@ -516,16 +634,25 @@ export function initTerrainEditor(options) {
             shader.uniforms.uTerrainPaintMap = { value: paintOverlayTexture || emptyMaskTexture };
             shader.uniforms.uTerrainBrushMask = { value: brushMaskTexture || emptyMaskTexture };
             shader.uniforms.uTerrainBrushMap = { value: brushGpuTexture || whitePixelTexture };
-            shader.uniforms.uTerrainHasBrushMap = { value: brushGpuTexture ? 1 : 0 };
+            shader.uniforms.uTerrainHasBrushMap = { value: 0 };
             shader.uniforms.uTerrainPaintRepeat = { value: paintRepeat };
             shader.uniforms.uTerrainBrushNormalMask = { value: paintNormalMaskTexture || emptyMaskTexture };
             shader.uniforms.uTerrainBrushNormalMap = {
                 value: brushNormalGpuTexture || flatNormalPixelTexture,
             };
             shader.uniforms.uTerrainHasBrushNormal = {
-                value: brushNormalGpuTexture && paintNormalUsed ? 1 : 0,
+                value: brushNormalGpuTexture && brushMaskUsed ? 1 : 0,
             };
-            shader.uniforms.uTerrainBrushNormalScale = { value: normalScale };
+            shader.uniforms.uTerrainHasBakedNormal = { value: paintNormalBaked ? 1 : 0 };
+            shader.uniforms.uTerrainBrushNormalScale = { value: normalScale * 3.6 };
+            shader.uniforms.uTerrainBreakTiling = { value: geoAlignedBase ? 0 : 1 };
+            shader.uniforms.uTerrainPaintPbr = { value: paintPbrTexture || emptyMaskTexture };
+            shader.uniforms.uTerrainBrushRoughnessMap = {
+                value: brushRoughnessGpuTexture || whitePixelTexture,
+            };
+            shader.uniforms.uTerrainHasBrushRoughness = { value: 0 };
+            shader.uniforms.uTerrainBrushAoMap = { value: brushAoGpuTexture || whitePixelTexture };
+            shader.uniforms.uTerrainHasBrushAo = { value: 0 };
 
             shader.vertexShader = shader.vertexShader.replace(
                 "#include <uv_vertex>",
@@ -550,25 +677,122 @@ export function initTerrainEditor(options) {
                 uniform sampler2D uTerrainBrushNormalMask;
                 uniform sampler2D uTerrainBrushNormalMap;
                 uniform float uTerrainHasBrushNormal;
+                uniform float uTerrainHasBakedNormal;
                 uniform float uTerrainBrushNormalScale;
+                uniform float uTerrainBreakTiling;
+                uniform sampler2D uTerrainPaintPbr;
+                uniform sampler2D uTerrainBrushRoughnessMap;
+                uniform float uTerrainHasBrushRoughness;
+                uniform sampler2D uTerrainBrushAoMap;
+                uniform float uTerrainHasBrushAo;
                 varying vec2 vTerrainPaintUv;
+                vec4 sampleTerrainTileVaried( sampler2D tex, vec2 uv ) {
+                  vec2 warp = 0.085 * vec2(
+                    sin( uv.y * 2.15 + uv.x * 0.37 ),
+                    cos( uv.x * 2.05 - uv.y * 0.41 )
+                  );
+                  warp += 0.04 * vec2(
+                    sin( uv.x * 5.3 + uv.y * 3.1 ),
+                    cos( uv.y * 4.7 - uv.x * 2.9 )
+                  );
+                  vec2 uvA = uv + warp;
+                  vec2 uvB = uv * 1.73 + vec2( 0.37, 0.19 ) - warp * 0.6;
+                  vec4 a = texture2D( tex, uvA );
+                  vec4 b = texture2D( tex, uvB );
+                  float w = 0.5 + 0.5 * sin( uv.x * 1.67 + uv.y * 2.21 );
+                  return mix( a, b, w * 0.48 );
+                }
+                float terrainBrushMaskAt( vec2 paintUv ) {
+                  float brushMask = texture2D( uTerrainBrushMask, paintUv ).a;
+                  brushMask = smoothstep( 0.0, 1.0, brushMask );
+                  return brushMask * brushMask;
+                }
+                // Masque plus « plein » pour normal / roughness (évite l’effet lavé).
+                float terrainBrushMaskHard( vec2 paintUv ) {
+                  float brushMask = texture2D( uTerrainBrushMask, paintUv ).a;
+                  return smoothstep( 0.04, 0.72, brushMask );
+                }
+                float terrainContrast01( float v, float amount ) {
+                  return clamp( ( v - 0.5 ) * amount + 0.5, 0.0, 1.0 );
+                }
+                // Normal map en espace tangent → vue (cadre cotangentiel).
+                vec3 terrainPerturbNormal( vec3 surfNorm, vec3 viewPos, vec2 uv, vec3 mapN ) {
+                  vec3 q0 = dFdx( viewPos );
+                  vec3 q1 = dFdy( viewPos );
+                  vec2 st0 = dFdx( uv );
+                  vec2 st1 = dFdy( uv );
+                  vec3 N = normalize( surfNorm );
+                  vec3 q1perp = cross( q1, N );
+                  vec3 q0perp = cross( N, q0 );
+                  vec3 T = q1perp * st0.x + q0perp * st1.x;
+                  vec3 B = q1perp * st0.y + q0perp * st1.y;
+                  float det = max( dot( T, T ), dot( B, B ) );
+                  float scale = ( det == 0.0 ) ? 0.0 : inversesqrt( det );
+                  return normalize( T * ( mapN.x * scale ) + B * ( mapN.y * scale ) + N * mapN.z );
+                }
                 `
             );
             if (shader.fragmentShader.includes("#include <map_fragment>")) {
                 shader.fragmentShader = shader.fragmentShader.replace(
                     "#include <map_fragment>",
                     /* glsl */ `
-                    #include <map_fragment>
+                    #ifdef USE_MAP
                     {
-                      if ( uTerrainHasBrushMap > 0.5 ) {
-                        float brushMask = texture2D( uTerrainBrushMask, vTerrainPaintUv ).a;
-                        vec4 brushSample = texture2D( uTerrainBrushMap, vTerrainPaintUv * uTerrainPaintRepeat );
-                        brushSample = mapTexelToLinear( brushSample );
-                        diffuseColor.rgb = mix( diffuseColor.rgb, brushSample.rgb, brushMask );
-                      }
+                      vec4 sampledDiffuseColor = ( uTerrainBreakTiling > 0.5 )
+                        ? sampleTerrainTileVaried( map, vUv )
+                        : texture2D( map, vUv );
+                      sampledDiffuseColor = mapTexelToLinear( sampledDiffuseColor );
+                      diffuseColor *= sampledDiffuseColor;
+                    }
+                    #endif
+                    {
+                      // 1) Peinture déjà figée — compresser les blancs (neige) pour laisser voir le relief
                       vec4 terrainPaint = texture2D( uTerrainPaintMap, vTerrainPaintUv );
                       terrainPaint = mapTexelToLinear( terrainPaint );
-                      diffuseColor.rgb = mix( diffuseColor.rgb, terrainPaint.rgb, terrainPaint.a );
+                      float paintA = smoothstep( 0.0, 1.0, terrainPaint.a );
+                      paintA *= paintA;
+                      float snowLum = dot( terrainPaint.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+                      terrainPaint.rgb *= mix( 1.0, 0.58, smoothstep( 0.5, 0.98, snowLum ) );
+                      diffuseColor.rgb = mix( diffuseColor.rgb, terrainPaint.rgb, paintA );
+                      // 2) Coups en cours (matériau pinceau actif) par-dessus
+                      float brushMask = 0.0;
+                      if ( uTerrainHasBrushMap > 0.5 ) {
+                        brushMask = terrainBrushMaskAt( vTerrainPaintUv );
+                        vec4 brushSample = sampleTerrainTileVaried( uTerrainBrushMap, vTerrainPaintUv * uTerrainPaintRepeat );
+                        brushSample = mapTexelToLinear( brushSample );
+                        float brushLum = dot( brushSample.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+                        brushSample.rgb *= mix( 1.0, 0.58, smoothstep( 0.5, 0.98, brushLum ) );
+                        diffuseColor.rgb = mix( diffuseColor.rgb, brushSample.rgb, brushMask );
+                        if ( uTerrainHasBrushAo > 0.5 ) {
+                          float aoLive = sampleTerrainTileVaried( uTerrainBrushAoMap, vTerrainPaintUv * uTerrainPaintRepeat ).r;
+                          diffuseColor.rgb *= mix( 1.0, aoLive, brushMask );
+                        }
+                      }
+                      // 3) AO figée (canal G du calque PBR)
+                      vec4 terrainPbr = texture2D( uTerrainPaintPbr, vTerrainPaintUv );
+                      float pbrA = smoothstep( 0.0, 1.0, terrainPbr.a );
+                      pbrA *= pbrA;
+                      diffuseColor.rgb *= mix( 1.0, terrainPbr.g, pbrA );
+                    }
+                    `
+                );
+            }
+            if (shader.fragmentShader.includes("#include <roughnessmap_fragment>")) {
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    "#include <roughnessmap_fragment>",
+                    /* glsl */ `
+                    #include <roughnessmap_fragment>
+                    {
+                      vec4 terrainPbr = texture2D( uTerrainPaintPbr, vTerrainPaintUv );
+                      float pbrA = smoothstep( 0.02, 0.7, terrainPbr.a );
+                      float bakedR = terrainContrast01( terrainPbr.r, 1.45 );
+                      roughnessFactor = mix( roughnessFactor, bakedR, pbrA );
+                      if ( uTerrainHasBrushRoughness > 0.5 ) {
+                        float brushMask = terrainBrushMaskHard( vTerrainPaintUv );
+                        float rLive = sampleTerrainTileVaried( uTerrainBrushRoughnessMap, vTerrainPaintUv * uTerrainPaintRepeat ).r;
+                        rLive = terrainContrast01( rLive, 1.45 );
+                        roughnessFactor = mix( roughnessFactor, rLive, brushMask );
+                      }
                     }
                     `
                 );
@@ -578,11 +802,43 @@ export function initTerrainEditor(options) {
                     "#include <normal_fragment_maps>",
                     /* glsl */ `
                     #include <normal_fragment_maps>
-                    if ( uTerrainHasBrushNormal > 0.5 ) {
-                      float nMask = texture2D( uTerrainBrushNormalMask, vTerrainPaintUv ).a;
-                      vec3 mapN = texture2D( uTerrainBrushNormalMap, vTerrainPaintUv * uTerrainPaintRepeat ).xyz * 2.0 - 1.0;
-                      mapN.xy *= uTerrainBrushNormalScale;
-                      normal = normalize( mix( normal, normalize( normal + mapN ), nMask ) );
+                    {
+                      vec2 nUv = vTerrainPaintUv * uTerrainPaintRepeat;
+                      float reliefMask = 0.0;
+                      float reliefAmt = 0.0;
+                      // 1) Normales figées RGB dans le calque peinture (permanent).
+                      if ( uTerrainHasBakedNormal > 0.5 ) {
+                        vec4 bakedN = texture2D( uTerrainBrushNormalMask, vTerrainPaintUv );
+                        float nBaked = smoothstep( 0.04, 0.75, bakedN.a );
+                        if ( nBaked > 0.001 ) {
+                          vec3 mapN = bakedN.xyz * 2.0 - 1.0;
+                          // Rejeter d’anciens masques blancs purs (pas de vraie normal map).
+                          float isWhiteMask = step( 0.88, min( min( bakedN.r, bakedN.g ), bakedN.b ) );
+                          if ( isWhiteMask < 0.5 ) {
+                            mapN.xy *= uTerrainBrushNormalScale;
+                            reliefAmt = length( mapN.xy );
+                            reliefMask = nBaked;
+                            vec3 brushNormal = terrainPerturbNormal( normal, -vViewPosition, vTerrainPaintUv, mapN );
+                            normal = normalize( mix( normal, brushNormal, nBaked ) );
+                          }
+                        }
+                      }
+                      // 2) Preview live (masque pinceau + map GPU) si encore actif.
+                      if ( uTerrainHasBrushNormal > 0.5 ) {
+                        float nMask = terrainBrushMaskHard( vTerrainPaintUv );
+                        if ( nMask > 0.001 ) {
+                          vec3 mapN = texture2D( uTerrainBrushNormalMap, nUv ).xyz * 2.0 - 1.0;
+                          mapN.xy *= uTerrainBrushNormalScale;
+                          reliefAmt = max( reliefAmt, length( mapN.xy ) );
+                          reliefMask = max( reliefMask, nMask );
+                          vec3 brushNormal = terrainPerturbNormal( normal, -vViewPosition, nUv, mapN );
+                          normal = normalize( mix( normal, brushNormal, nMask ) );
+                        }
+                      }
+                      if ( reliefMask > 0.001 ) {
+                        float cleft = clamp( reliefAmt * 0.55, 0.0, 0.65 );
+                        diffuseColor.rgb *= mix( 1.0, 1.0 - cleft, reliefMask );
+                      }
                     }
                     `
                 );
@@ -590,7 +846,7 @@ export function initTerrainEditor(options) {
             mat.userData.terrainShader = shader;
         };
         const prevKey = mat.customProgramCacheKey?.bind(mat);
-        mat.customProgramCacheKey = () => `${prevKey?.() || ""}_labTerrainPaintV4`;
+        mat.customProgramCacheKey = () => `${prevKey?.() || ""}_labTerrainPaintV13`;
         mat.needsUpdate = true;
     }
 
@@ -633,6 +889,7 @@ export function initTerrainEditor(options) {
         }
         if (paintOverlayTexture) paintOverlayTexture.needsUpdate = true;
         if (brushMaskTexture) brushMaskTexture.needsUpdate = true;
+        if (paintPbrTexture) paintPbrTexture.needsUpdate = true;
         applyBaseMapToMaterial();
         syncPaintOverlayUniform();
         renderTerrainNormalMap();
@@ -706,8 +963,8 @@ export function initTerrainEditor(options) {
             texture: heightTexture,
             size: sizeMeters,
             yOffset: terrain.position.y,
-            hMin: SCULPT_HEIGHT_MIN,
-            hMax: SCULPT_HEIGHT_MAX,
+            hMin: getSculptHeightMin(),
+            hMax: getSculptHeightMax(),
         };
     }
 
@@ -732,7 +989,9 @@ export function initTerrainEditor(options) {
         }
         heightTextureData.fill(0);
         const positions = terrain.geometry.attributes.position;
-        const span = SCULPT_HEIGHT_MAX - SCULPT_HEIGHT_MIN || 1;
+        const hMin = getSculptHeightMin();
+        const hMax = getSculptHeightMax();
+        const span = hMax - hMin || 1;
         const half = sizeMeters * 0.5;
         const maxIndex = res - 1;
         for (let i = 0; i < positions.count; i += 1) {
@@ -742,7 +1001,7 @@ export function initTerrainEditor(options) {
             const ix = THREE.MathUtils.clamp(Math.round(((x + half) / sizeMeters) * maxIndex), 0, maxIndex);
             const iz = THREE.MathUtils.clamp(Math.round(((z + half) / sizeMeters) * maxIndex), 0, maxIndex);
             const enc = Math.round(
-                THREE.MathUtils.clamp((h - SCULPT_HEIGHT_MIN) / span, 0, 1) * 255
+                THREE.MathUtils.clamp((h - hMin) / span, 0, 1) * 255
             );
             const o = (iz * res + ix) * 3;
             heightTextureData[o] = enc;
@@ -884,6 +1143,7 @@ export function initTerrainEditor(options) {
             material.normalScale.set(1, 1);
         }
         material.needsUpdate = true;
+        syncPaintOverlayUniform();
     }
 
     function createTerrainGeometry() {
@@ -964,19 +1224,29 @@ export function initTerrainEditor(options) {
         paintNormalMaskTexture = new THREE.CanvasTexture(paintNormalCanvas);
         paintNormalMaskTexture.wrapS = THREE.ClampToEdgeWrapping;
         paintNormalMaskTexture.wrapT = THREE.ClampToEdgeWrapping;
-        paintNormalMaskTexture.generateMipmaps = true;
-        paintNormalMaskTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        // Pas de mipmaps : elles aplatissent les normales après le coup de pinceau.
+        paintNormalMaskTexture.generateMipmaps = false;
+        paintNormalMaskTexture.minFilter = THREE.LinearFilter;
         paintNormalMaskTexture.magFilter = THREE.LinearFilter;
         if ("colorSpace" in paintNormalMaskTexture) {
             paintNormalMaskTexture.colorSpace = THREE.NoColorSpace;
         } else {
             paintNormalMaskTexture.encoding = THREE.LinearEncoding;
         }
+        paintPbrTexture = new THREE.CanvasTexture(paintPbrCanvas);
+        paintPbrTexture.wrapS = THREE.ClampToEdgeWrapping;
+        paintPbrTexture.wrapT = THREE.ClampToEdgeWrapping;
+        paintPbrTexture.generateMipmaps = true;
+        paintPbrTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        paintPbrTexture.magFilter = THREE.LinearFilter;
+        if ("colorSpace" in paintPbrTexture) paintPbrTexture.colorSpace = THREE.NoColorSpace;
+        else paintPbrTexture.encoding = THREE.LinearEncoding;
         material = new THREE.MeshStandardMaterial({
             map: canvasTexture,
             color: 0xffffff,
-            roughness: 0.95,
+            roughness: 0.72,
             metalness: 0,
+            envMapIntensity: 1.1,
             side: THREE.DoubleSide,
         });
         patchTerrainMaterial(material);
@@ -1061,6 +1331,7 @@ export function initTerrainEditor(options) {
             heights,
             paint: paintCanvas.toDataURL("image/png"),
             paintNormal: paintNormalCanvas.toDataURL("image/png"),
+            paintPbr: paintPbrCanvas.toDataURL("image/png"),
             brushMask: brushMaskCanvas.toDataURL("image/png"),
         };
     }
@@ -1094,6 +1365,7 @@ export function initTerrainEditor(options) {
         if (!paintNormalCtx) return Promise.resolve();
         paintNormalCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
         paintNormalUsed = false;
+        paintNormalBaked = false;
         if (!dataUrl || dataUrl === "data:,") {
             renderTerrainTexture();
             return Promise.resolve();
@@ -1105,6 +1377,31 @@ export function initTerrainEditor(options) {
                 paintNormalCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
                 paintNormalCtx.drawImage(image, 0, 0, PAINT_SIZE, PAINT_SIZE);
                 paintNormalUsed = true;
+                paintNormalBaked = true;
+                if (paintNormalMaskTexture) paintNormalMaskTexture.needsUpdate = true;
+                renderTerrainTexture();
+                resolve();
+            };
+            image.onerror = () => resolve();
+            image.src = dataUrl;
+        });
+    }
+
+    function restorePaintPbr(dataUrl) {
+        if (!paintPbrCtx) return Promise.resolve();
+        paintPbrCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+        if (!dataUrl || dataUrl === "data:,") {
+            if (paintPbrTexture) paintPbrTexture.needsUpdate = true;
+            renderTerrainTexture();
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            const image = new Image();
+            image.onload = () => {
+                paintPbrCtx.imageSmoothingEnabled = false;
+                paintPbrCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+                paintPbrCtx.drawImage(image, 0, 0, PAINT_SIZE, PAINT_SIZE);
+                if (paintPbrTexture) paintPbrTexture.needsUpdate = true;
                 renderTerrainTexture();
                 resolve();
             };
@@ -1156,6 +1453,7 @@ export function initTerrainEditor(options) {
         terrain.geometry.computeBoundingBox();
         await restorePaint(state.paint);
         await restorePaintNormal(state.paintNormal || null);
+        await restorePaintPbr(state.paintPbr || null);
         await restoreBrushMask(state.brushMask || null);
         updateTerrainGridLevel();
         markHeightMapDirty();
@@ -1260,8 +1558,8 @@ export function initTerrainEditor(options) {
                 }
                 const next = THREE.MathUtils.clamp(
                     positions.getY(index) + direction * strength * falloff,
-                    SCULPT_HEIGHT_MIN,
-                    SCULPT_HEIGHT_MAX
+                    getSculptHeightMin(),
+                    getSculptHeightMax()
                 );
                 positions.setY(index, next);
             }
@@ -1374,7 +1672,7 @@ export function initTerrainEditor(options) {
             }
             positions.setY(
                 i,
-                THREE.MathUtils.clamp(y0 + delta, SCULPT_HEIGHT_MIN, SCULPT_HEIGHT_MAX)
+                THREE.MathUtils.clamp(y0 + delta, getSculptHeightMin(), getSculptHeightMax())
             );
             touched.push(i);
         }
@@ -1428,21 +1726,24 @@ export function initTerrainEditor(options) {
         return true;
     }
 
-    /** Tampon alpha doux (masque) — la texture est échantillonnée en GPU. */
+    /** Tampon alpha très progressif (pas de noyau plat ni coupe nette au bord). */
     function stampSoftMaskAt(targetCtx, x, y, pixelRadius) {
         if (!targetCtx) return;
         const cx = Math.round(x);
         const cy = Math.round(y);
-        const pr = Math.max(1, Math.round(pixelRadius));
+        const pr = Math.max(2, Math.round(pixelRadius));
         const intensity = THREE.MathUtils.clamp(paintIntensity, 0.05, 1);
 
         targetCtx.save();
         targetCtx.globalCompositeOperation = "source-over";
         targetCtx.globalAlpha = intensity;
-        const softStart = pixelRadius < 8 ? 0.35 : 0.72;
-        const gradient = targetCtx.createRadialGradient(cx, cy, pr * softStart, cx, cy, pr);
+        // Départ du dégradé dès le centre : fondu long vers le bord.
+        const gradient = targetCtx.createRadialGradient(cx, cy, 0, cx, cy, pr);
         gradient.addColorStop(0, "rgba(255,255,255,1)");
-        gradient.addColorStop(0.55, "rgba(255,255,255,1)");
+        gradient.addColorStop(0.18, "rgba(255,255,255,0.92)");
+        gradient.addColorStop(0.4, "rgba(255,255,255,0.62)");
+        gradient.addColorStop(0.68, "rgba(255,255,255,0.28)");
+        gradient.addColorStop(0.88, "rgba(255,255,255,0.08)");
         gradient.addColorStop(1, "rgba(255,255,255,0)");
         targetCtx.fillStyle = gradient;
         targetCtx.beginPath();
@@ -1457,69 +1758,299 @@ export function initTerrainEditor(options) {
     }
 
     /**
-     * Fige le masque GPU actuel dans le calque peinture (couleur),
-     * pour qu’un changement de texture/tile n’écrase pas les coups précédents.
+     * Pose une pastille de texture tilée DÉFINITIVE dans un calque (pas un masque live).
+     * C’est ce qui reste après le relâchement de la souris.
+     * @param {CanvasRenderingContext2D} targetCtx
+     * @param {CanvasImageSource} tileSource
+     * @param {number} x
+     * @param {number} y
+     * @param {number} pixelRadius
+     * @param {{ flatFill?: string | null }} [opts]
      */
-    function bakeBrushMaskIntoPaint() {
-        if (!brushMaskUsed || !brushTextureTile || !brushGpuTexture || !brushMaskCtx || !paintCtx) {
+    function stampTiledDiskAt(targetCtx, tileSource, x, y, pixelRadius, opts = {}) {
+        if (!targetCtx) return;
+        const cx = Math.round(x);
+        const cy = Math.round(y);
+        const pr = Math.max(2, Math.round(pixelRadius));
+        const intensity = THREE.MathUtils.clamp(paintIntensity, 0.05, 1);
+        const size = Math.max(4, pr * 2 + 2);
+        const ox = cx - pr;
+        const oy = cy - pr;
+        const tilePx = paintTilePixelSize();
+
+        const stamp = document.createElement("canvas");
+        stamp.width = size;
+        stamp.height = size;
+        const sctx = stamp.getContext("2d", { alpha: true });
+        if (!sctx) return;
+
+        sctx.clearRect(0, 0, size, size);
+        sctx.imageSmoothingEnabled = true;
+        if (tileSource) {
+            fillRepeatingTexture(sctx, tileSource, 0, 0, size, size, tilePx, ox, oy);
+            // Assombrir seulement l’albedo (jamais une normal map).
+            if (opts.dimAlbedo) {
+                sctx.globalCompositeOperation = "multiply";
+                sctx.fillStyle = "rgb(168,175,182)";
+                sctx.fillRect(0, 0, size, size);
+                sctx.globalCompositeOperation = "source-over";
+            }
+        } else if (opts.flatFill) {
+            sctx.fillStyle = opts.flatFill;
+            sctx.fillRect(0, 0, size, size);
+        } else {
             return;
         }
 
-        const bakeCanvas = document.createElement("canvas");
-        bakeCanvas.width = PAINT_SIZE;
-        bakeCanvas.height = PAINT_SIZE;
-        const bakeCtx = bakeCanvas.getContext("2d", { alpha: true });
-        if (!bakeCtx) return;
+        sctx.globalCompositeOperation = "destination-in";
+        const gradient = sctx.createRadialGradient(pr, pr, 0, pr, pr, pr);
+        gradient.addColorStop(0, `rgba(255,255,255,${intensity})`);
+        gradient.addColorStop(0.2, `rgba(255,255,255,${0.9 * intensity})`);
+        gradient.addColorStop(0.45, `rgba(255,255,255,${0.55 * intensity})`);
+        gradient.addColorStop(0.72, `rgba(255,255,255,${0.22 * intensity})`);
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        sctx.fillStyle = gradient;
+        sctx.beginPath();
+        sctx.arc(pr, pr, pr, 0, Math.PI * 2);
+        sctx.fill();
+        sctx.globalCompositeOperation = "source-over";
+
+        targetCtx.save();
+        targetCtx.globalCompositeOperation = "source-over";
+        targetCtx.drawImage(stamp, ox, oy);
+        targetCtx.restore();
+    }
+
+    /**
+     * Pastille PBR (R=roughness, G=AO, A=masque) figée dans paintPbrCanvas.
+     */
+    function stampPbrDiskAt(x, y, pixelRadius) {
+        if (!paintPbrCtx || (!brushRoughnessTile && !brushAoTile)) return;
+        const cx = Math.round(x);
+        const cy = Math.round(y);
+        const pr = Math.max(2, Math.round(pixelRadius));
+        const intensity = THREE.MathUtils.clamp(paintIntensity, 0.05, 1);
+        const size = Math.max(4, pr * 2 + 2);
+        const ox = cx - pr;
+        const oy = cy - pr;
+        const tilePx = paintTilePixelSize();
+
+        const rough = document.createElement("canvas");
+        rough.width = size;
+        rough.height = size;
+        const rctx = rough.getContext("2d", { alpha: false });
+        const ao = document.createElement("canvas");
+        ao.width = size;
+        ao.height = size;
+        const actx = ao.getContext("2d", { alpha: false });
+        if (!rctx || !actx) return;
+
+        if (brushRoughnessTile) {
+            fillRepeatingTexture(rctx, brushRoughnessTile, 0, 0, size, size, tilePx, ox, oy);
+        } else {
+            rctx.fillStyle = "rgb(242,242,242)";
+            rctx.fillRect(0, 0, size, size);
+        }
+        if (brushAoTile) {
+            fillRepeatingTexture(actx, brushAoTile, 0, 0, size, size, tilePx, ox, oy);
+        } else {
+            actx.fillStyle = "#ffffff";
+            actx.fillRect(0, 0, size, size);
+        }
+
+        const stamp = document.createElement("canvas");
+        stamp.width = size;
+        stamp.height = size;
+        const sctx = stamp.getContext("2d", { alpha: true });
+        if (!sctx) return;
+        const rData = rctx.getImageData(0, 0, size, size);
+        const aData = actx.getImageData(0, 0, size, size);
+        const out = sctx.createImageData(size, size);
+        for (let i = 0; i < out.data.length; i += 4) {
+            out.data[i] = rData.data[i];
+            out.data[i + 1] = aData.data[i];
+            out.data[i + 2] = 0;
+            out.data[i + 3] = 255;
+        }
+        sctx.putImageData(out, 0, 0);
+        sctx.globalCompositeOperation = "destination-in";
+        const gradient = sctx.createRadialGradient(pr, pr, 0, pr, pr, pr);
+        gradient.addColorStop(0, `rgba(255,255,255,${intensity})`);
+        gradient.addColorStop(0.2, `rgba(255,255,255,${0.9 * intensity})`);
+        gradient.addColorStop(0.45, `rgba(255,255,255,${0.55 * intensity})`);
+        gradient.addColorStop(0.72, `rgba(255,255,255,${0.22 * intensity})`);
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        sctx.fillStyle = gradient;
+        sctx.beginPath();
+        sctx.arc(pr, pr, pr, 0, Math.PI * 2);
+        sctx.fill();
+
+        paintPbrCtx.save();
+        paintPbrCtx.globalCompositeOperation = "source-over";
+        paintPbrCtx.drawImage(stamp, ox, oy);
+        paintPbrCtx.restore();
+        if (paintPbrTexture) paintPbrTexture.needsUpdate = true;
+    }
+
+    /**
+     * Fige le masque GPU actuel dans le calque peinture (couleur + PBR),
+     * pour qu’un changement de matériau/tile n’écrase pas les coups précédents.
+     */
+    function bakeBrushMaskIntoPaint() {
+        if (!brushMaskUsed || !brushMaskCtx) {
+            return;
+        }
 
         const tilePx = paintTilePixelSize();
-        bakeCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
-        bakeCtx.imageSmoothingEnabled = true;
-        fillRepeatingTexture(
-            bakeCtx,
-            brushTextureTile,
-            0,
-            0,
-            PAINT_SIZE,
-            PAINT_SIZE,
-            tilePx,
-            0,
-            0
-        );
-        bakeCtx.globalCompositeOperation = "destination-in";
-        bakeCtx.drawImage(brushMaskCanvas, 0, 0);
-        bakeCtx.globalCompositeOperation = "source-over";
 
-        paintCtx.save();
-        paintCtx.globalCompositeOperation = "source-over";
-        paintCtx.globalAlpha = 1;
-        paintCtx.drawImage(bakeCanvas, 0, 0);
-        paintCtx.restore();
+        if (brushTextureTile && brushGpuTexture && paintCtx) {
+            const bakeCanvas = document.createElement("canvas");
+            bakeCanvas.width = PAINT_SIZE;
+            bakeCanvas.height = PAINT_SIZE;
+            const bakeCtx = bakeCanvas.getContext("2d", { alpha: true });
+            if (bakeCtx) {
+                bakeCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+                bakeCtx.imageSmoothingEnabled = true;
+                fillRepeatingTexture(
+                    bakeCtx,
+                    brushTextureTile,
+                    0,
+                    0,
+                    PAINT_SIZE,
+                    PAINT_SIZE,
+                    tilePx,
+                    0,
+                    0
+                );
+                bakeCtx.globalAlpha = 0.42;
+                fillRepeatingTexture(
+                    bakeCtx,
+                    brushTextureTile,
+                    0,
+                    0,
+                    PAINT_SIZE,
+                    PAINT_SIZE,
+                    tilePx / 1.73,
+                    tilePx * 0.37,
+                    tilePx * 0.19
+                );
+                bakeCtx.globalAlpha = 1;
+                bakeCtx.globalCompositeOperation = "destination-in";
+                bakeCtx.drawImage(brushMaskCanvas, 0, 0);
+                bakeCtx.globalCompositeOperation = "source-over";
+
+                paintCtx.save();
+                paintCtx.globalCompositeOperation = "source-over";
+                paintCtx.globalAlpha = 1;
+                paintCtx.drawImage(bakeCanvas, 0, 0);
+                paintCtx.restore();
+            }
+        }
+
+        if ((brushRoughnessTile || brushAoTile) && paintPbrCtx) {
+            const bakeCanvas = document.createElement("canvas");
+            bakeCanvas.width = PAINT_SIZE;
+            bakeCanvas.height = PAINT_SIZE;
+            const bakeCtx = bakeCanvas.getContext("2d", { alpha: true });
+            if (bakeCtx) {
+                const roughFill = document.createElement("canvas");
+                roughFill.width = PAINT_SIZE;
+                roughFill.height = PAINT_SIZE;
+                const roughCtx = roughFill.getContext("2d", { alpha: false });
+                const aoFill = document.createElement("canvas");
+                aoFill.width = PAINT_SIZE;
+                aoFill.height = PAINT_SIZE;
+                const aoCtx = aoFill.getContext("2d", { alpha: false });
+                if (roughCtx && aoCtx) {
+                    if (brushRoughnessTile) {
+                        fillRepeatingTexture(
+                            roughCtx,
+                            brushRoughnessTile,
+                            0,
+                            0,
+                            PAINT_SIZE,
+                            PAINT_SIZE,
+                            tilePx,
+                            0,
+                            0
+                        );
+                    } else {
+                        roughCtx.fillStyle = "rgb(242,242,242)"; // ~0.95
+                        roughCtx.fillRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+                    }
+                    if (brushAoTile) {
+                        fillRepeatingTexture(
+                            aoCtx,
+                            brushAoTile,
+                            0,
+                            0,
+                            PAINT_SIZE,
+                            PAINT_SIZE,
+                            tilePx,
+                            0,
+                            0
+                        );
+                    } else {
+                        aoCtx.fillStyle = "#ffffff";
+                        aoCtx.fillRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+                    }
+                    const roughData = roughCtx.getImageData(0, 0, PAINT_SIZE, PAINT_SIZE);
+                    const aoData = aoCtx.getImageData(0, 0, PAINT_SIZE, PAINT_SIZE);
+                    const out = bakeCtx.createImageData(PAINT_SIZE, PAINT_SIZE);
+                    for (let i = 0; i < out.data.length; i += 4) {
+                        out.data[i] = roughData.data[i];
+                        out.data[i + 1] = aoData.data[i];
+                        out.data[i + 2] = 0;
+                        out.data[i + 3] = 255;
+                    }
+                    bakeCtx.putImageData(out, 0, 0);
+                    bakeCtx.globalCompositeOperation = "destination-in";
+                    bakeCtx.drawImage(brushMaskCanvas, 0, 0);
+                    bakeCtx.globalCompositeOperation = "source-over";
+
+                    paintPbrCtx.save();
+                    paintPbrCtx.globalCompositeOperation = "source-over";
+                    paintPbrCtx.drawImage(bakeCanvas, 0, 0);
+                    paintPbrCtx.restore();
+                    if (paintPbrTexture) paintPbrTexture.needsUpdate = true;
+                }
+            }
+        }
+
+        // Masque de normales persistant (le détail reste en tilage GPU).
+        if (brushNormalGpuTexture && paintNormalCtx) {
+            paintNormalCtx.save();
+            paintNormalCtx.globalCompositeOperation = "lighter";
+            paintNormalCtx.drawImage(brushMaskCanvas, 0, 0);
+            paintNormalCtx.restore();
+            paintNormalBaked = true;
+            paintNormalUsed = true;
+            if (paintNormalMaskTexture) paintNormalMaskTexture.needsUpdate = true;
+        }
 
         brushMaskCtx.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
         brushMaskUsed = false;
         if (brushMaskTexture) brushMaskTexture.needsUpdate = true;
         if (paintOverlayTexture) paintOverlayTexture.needsUpdate = true;
+        syncPaintOverlayUniform();
     }
 
     function paintColorAt(x, y, pixelRadius) {
         if (!paintCtx) return;
         const cx = Math.round(x);
         const cy = Math.round(y);
-        const pr = Math.max(1, Math.round(pixelRadius));
+        const pr = Math.max(2, Math.round(pixelRadius));
         const color = paintColorInput?.value || "#6b4423";
         const intensity = THREE.MathUtils.clamp(paintIntensity, 0.05, 1);
 
         paintCtx.save();
         paintCtx.globalCompositeOperation = "source-over";
         paintCtx.globalAlpha = intensity;
-        paintCtx.fillStyle = color;
-        paintCtx.beginPath();
-        paintCtx.arc(cx, cy, pr * 0.88, 0, Math.PI * 2);
-        paintCtx.fill();
-
-        const gradient = paintCtx.createRadialGradient(cx, cy, pr * 0.72, cx, cy, pr);
+        const gradient = paintCtx.createRadialGradient(cx, cy, 0, cx, cy, pr);
         gradient.addColorStop(0, color);
-        gradient.addColorStop(0.55, color);
+        gradient.addColorStop(0.25, color);
+        gradient.addColorStop(0.55, `${color}99`);
+        gradient.addColorStop(0.8, `${color}33`);
         gradient.addColorStop(1, `${color}00`);
         paintCtx.fillStyle = gradient;
         paintCtx.beginPath();
@@ -1529,24 +2060,26 @@ export function initTerrainEditor(options) {
     }
 
     function paintTextureStampAt(x, y, pixelRadius) {
-        if (!brushGpuTexture || !brushMaskCtx) return;
-        stampSoftMaskAt(brushMaskCtx, x, y, pixelRadius);
-        brushMaskUsed = true;
-    }
-
-    function paintNormalStampAt(x, y, pixelRadius) {
-        if (!brushNormalGpuTexture || !paintNormalCtx) return;
-        stampSoftMaskAt(paintNormalCtx, x, y, pixelRadius);
-        paintNormalUsed = true;
+        // Calques définitifs (survivent au relâchement) — plus de preview GPU seule.
+        if (brushTextureTile && paintCtx) {
+            stampTiledDiskAt(paintCtx, brushTextureTile, x, y, pixelRadius, { dimAlbedo: true });
+            if (paintOverlayTexture) paintOverlayTexture.needsUpdate = true;
+        }
+        if (brushNormalTile && paintNormalCtx) {
+            stampTiledDiskAt(paintNormalCtx, brushNormalTile, x, y, pixelRadius);
+            paintNormalBaked = true;
+            paintNormalUsed = true;
+            if (paintNormalMaskTexture) paintNormalMaskTexture.needsUpdate = true;
+        }
+        if (brushRoughnessTile || brushAoTile) {
+            stampPbrDiskAt(x, y, pixelRadius);
+        }
     }
 
     function paintAt(x, y) {
         const pixelRadius = (radius / sizeMeters) * PAINT_SIZE;
-        if (brushTextureTile) {
+        if (brushTextureTile || brushNormalTile) {
             paintTextureStampAt(x, y, pixelRadius);
-            if (brushNormalTile) paintNormalStampAt(x, y, pixelRadius);
-        } else if (brushNormalTile) {
-            paintNormalStampAt(x, y, pixelRadius);
         } else {
             paintColorAt(x, y, pixelRadius);
         }
@@ -1646,6 +2179,9 @@ export function initTerrainEditor(options) {
         dragging = false;
         resetPaintStroke();
         commitStroke();
+        // Ne pas baker ici : le bake coupe le tilage GPU (normals / détail)
+        // et rendait la neige lisse au relâchement. Bake seulement au changement
+        // de matériau / tile.
     });
 
     renderer.domElement.addEventListener(
@@ -1673,6 +2209,63 @@ export function initTerrainEditor(options) {
         if (!terrain) makeTerrain({ recordHistory: true });
         if (wasNew) frameTerrainView();
         setEditing(!editing);
+    });
+
+    /**
+     * Île montagneuse 500×500 m : contour irrégulier, rivage ≈ 0 m,
+     * descente progressive sous le niveau de la mer vers les bords.
+     */
+    function createMountainIsland({ recordHistory = true } = {}) {
+        const before = terrain ? serialize() : null;
+        const targetSize = MOUNTAIN_ISLAND_SIZE_M;
+
+        if (Math.abs(targetSize - sizeMeters) > 0.001) {
+            applyTerrainSize(targetSize, { recordHistory: false });
+        } else {
+            sizeMeters = targetSize;
+            meshSegments = segmentsForTerrainSize(sizeMeters);
+            syncSizeUi();
+            setWorldSize?.(sizeMeters);
+        }
+
+        meshSegments = segmentsForTerrainSize(sizeMeters);
+        if (!terrain) makeTerrain({ recordHistory: false });
+
+        const meshHeights = generateMountainIslandHeights(meshSegments, sizeMeters);
+        const prevGeometry = terrain.geometry;
+        terrain.geometry = buildIgnTerrainGeometry(meshHeights, meshSegments, sizeMeters);
+        prevGeometry.dispose();
+        terrain.userData.terrainSegments = meshSegments;
+        terrain.userData.terrainSize = sizeMeters;
+        delete terrain.userData.riverBedBackup;
+        delete terrain.userData.ignCenter;
+        delete terrain.userData.ignElevRange;
+        delete terrain.userData.ignHeightmap;
+        terrain.userData.mountainIsland = true;
+        terrain.updateMatrixWorld(true);
+
+        coverFloor(true);
+        updateTerrainGridLevel();
+        applySuggestedPaintTile({ force: true });
+        renderTerrainTexture();
+        markHeightMapDirty();
+        syncTerrainSceneItem();
+        tools?.removeAttribute("hidden");
+        setEditing(false);
+        setMovementMode?.("design");
+        frameTerrainView(true);
+        showStatus?.(
+            "Île montagneuse 500×500 m — tile pinceau adapté (~5 m). Contour irrégulier, fond sous le niveau 0."
+        );
+
+        if (recordHistory) {
+            pushSceneHistory?.({ type: "terrain", before, after: serialize() });
+        }
+        return terrain;
+    }
+
+    mountainIslandBtn?.addEventListener("click", () => {
+        createMountainIsland({ recordHistory: true });
     });
 
     /**
@@ -2010,6 +2603,22 @@ export function initTerrainEditor(options) {
      * @param {number} nextSize
      * @param {{ recordHistory?: boolean }} [opts]
      */
+    /**
+     * Ajuste le tile pinceau à la taille du monde (~5 m / motif).
+     * @param {{ force?: boolean }} [opts]
+     */
+    function applySuggestedPaintTile({ force = false } = {}) {
+        const suggested = suggestedPaintTileForSize(sizeMeters);
+        if (!force && Math.abs(paintTextureTile - suggested) < 0.5) return;
+        if (Math.abs(paintTextureTile - suggested) > 1e-6) {
+            bakeBrushMaskIntoPaint();
+        }
+        paintTextureTile = suggested;
+        if (paintTileInput) paintTileInput.value = String(paintTextureTile);
+        if (paintTileValue) paintTileValue.textContent = paintTextureTile.toFixed(2);
+        syncPaintOverlayUniform();
+    }
+
     function applyTerrainSize(nextSize, { recordHistory = true } = {}) {
         const size = Math.max(10, Math.min(2000, Number(nextSize) || GRID_SIZE));
         if (Math.abs(size - sizeMeters) < 0.001) {
@@ -2070,6 +2679,7 @@ export function initTerrainEditor(options) {
         updateTerrainGridLevel();
         markHeightMapDirty();
         syncTerrainSceneItem();
+        applySuggestedPaintTile({ force: false });
         if (recordHistory && before) {
             pushSceneHistory?.({ type: "terrain", before, after: serialize() });
         }
@@ -2122,17 +2732,27 @@ export function initTerrainEditor(options) {
     }, { step: TEXTURE_TILE_STEP });
 
     paintTileInput?.addEventListener("input", () => {
-        paintTextureTile = THREE.MathUtils.clamp(
+        const nextTile = THREE.MathUtils.clamp(
             Number(paintTileInput.value) || DEFAULT_TEXTURE_TILE,
             TERRAIN_PAINT_TEXTURE_TILE_MIN,
             TERRAIN_PAINT_TEXTURE_TILE_MAX
         );
+        if (Math.abs(nextTile - paintTextureTile) > 1e-6) {
+            // Fige le masque à l’échelle de tuile actuelle avant de changer le repeat GPU.
+            bakeBrushMaskIntoPaint();
+            paintTextureTile = nextTile;
+            renderTerrainTexture();
+        }
         if (paintTileValue) paintTileValue.textContent = paintTextureTile.toFixed(2);
         syncPaintOverlayUniform();
     });
     bindRangeSliderWheel(paintTileInput, (value) => {
-        paintTextureTile = value;
-        if (paintTileValue) paintTileValue.textContent = value.toFixed(2);
+        if (Math.abs(value - paintTextureTile) > 1e-6) {
+            bakeBrushMaskIntoPaint();
+            paintTextureTile = value;
+            renderTerrainTexture();
+        }
+        if (paintTileValue) paintTileValue.textContent = paintTextureTile.toFixed(2);
         syncPaintOverlayUniform();
     }, { step: 0.05 });
 
@@ -2634,51 +3254,337 @@ export function initTerrainEditor(options) {
         reader.readAsDataURL(file);
     });
 
-    brushTextureBtn?.addEventListener("click", () => {
-        if (brushTextureInput) void pickFilePreservingFullscreen(brushTextureInput);
-    });
-    brushTextureClearBtn?.addEventListener("click", () => {
-        bakeBrushMaskIntoPaint();
-        brushTextureTile = null;
-        brushGpuTexture?.dispose();
-        brushGpuTexture = null;
-        brushTextureDataUrl = null;
-        brushTextureBtn?.classList.remove("is-active");
-        if (brushTextureBtn) brushTextureBtn.textContent = "Texture du pinceau";
-        brushTextureClearBtn.hidden = true;
-        renderTerrainTexture();
-    });
-    brushTextureInput?.addEventListener("change", () => {
-        const file = brushTextureInput.files?.[0];
-        brushTextureInput.value = "";
-        void restoreFullscreenNow();
-        if (!file || !/^image\/(jpeg|png)$/i.test(file.type)) {
-            void ensureLabFullscreenAfterFile();
-            return;
+    function syncBrushMaterialButtonUi() {
+        const active = !!brushTextureTile;
+        const btn = /** @type {HTMLButtonElement | null} */ (
+            document.getElementById("btn-terrain-brush-texture")
+        );
+        const clearBtn = /** @type {HTMLButtonElement | null} */ (
+            document.getElementById("btn-terrain-brush-texture-clear")
+        );
+        btn?.classList.toggle("is-active", active);
+        if (btn) {
+            btn.textContent = active ? "Matériau pinceau actif" : "Matériau du pinceau";
         }
-        const reader = new FileReader();
-        reader.onload = () => {
+        if (clearBtn) clearBtn.hidden = !active;
+    }
+
+    /**
+     * @param {string | null} dataUrl
+     * @returns {Promise<HTMLImageElement | null>}
+     */
+    function loadImageFromDataUrl(dataUrl) {
+        if (!dataUrl) return Promise.resolve(null);
+        return new Promise((resolve) => {
             const image = new Image();
-            image.onload = () => {
-                // Fige les coups de l’ancienne texture avant d’en charger une nouvelle.
-                bakeBrushMaskIntoPaint();
-                brushTextureTile = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
-                brushGpuTexture?.dispose();
-                brushGpuTexture = createGpuTileTexture(image);
-                brushTextureDataUrl = String(reader.result);
-                brushTextureBtn?.classList.add("is-active");
-                if (brushTextureBtn) brushTextureBtn.textContent = "Pinceau texturé actif";
-                if (brushTextureClearBtn) brushTextureClearBtn.hidden = false;
-                setMode("paint");
-                renderTerrainTexture();
-                void ensureLabFullscreenAfterFile();
-            };
-            image.onerror = () => void ensureLabFullscreenAfterFile();
-            image.src = String(reader.result);
+            image.onload = () => resolve(image);
+            image.onerror = () => resolve(null);
+            image.src = dataUrl;
+        });
+    }
+
+    function getBrushMatMount() {
+        return document.getElementById("lab-workspace") || document.body;
+    }
+
+    function ensureBrushMaterialOverlay() {
+        const existing = document.getElementById("lab-brush-material-overlay");
+        if (existing instanceof HTMLElement) {
+            brushMatOverlay = existing;
+        }
+        if (!brushMatOverlay) {
+            brushMatOverlay = document.createElement("div");
+            brushMatOverlay.id = "lab-brush-material-overlay";
+            brushMatOverlay.className = "lab-dialog-overlay";
+            brushMatOverlay.hidden = true;
+            brushMatOverlay.innerHTML = `
+                <div class="lab-dialog lab-dialog--wide lab-dialog--brush-mat" role="dialog" aria-modal="true" aria-labelledby="lab-brush-mat-title">
+                    <h2 class="lab-dialog__title" id="lab-brush-mat-title">Matériau du pinceau</h2>
+                    <p class="lab-dialog__message">
+                        Composez le matériau appliqué au terrain : texture de base (obligatoire), normal (optionnel),
+                        roughness et ambiance (AO).
+                    </p>
+                    <div class="lab-brush-mat__slots">
+                        <div class="lab-brush-mat__slot" data-brush-slot="albedo">
+                            <div class="lab-brush-mat__preview" data-brush-preview="albedo"></div>
+                            <div class="lab-brush-mat__meta">
+                                <strong>Texture de base</strong>
+                                <span>Albedo / couleur</span>
+                                <div class="lab-brush-mat__slot-actions">
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="albedo">Choisir…</button>
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="albedo" hidden>Retirer</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lab-brush-mat__slot" data-brush-slot="normal">
+                            <div class="lab-brush-mat__preview" data-brush-preview="normal"></div>
+                            <div class="lab-brush-mat__meta">
+                                <strong>Normal map</strong>
+                                <span>Optionnel</span>
+                                <div class="lab-brush-mat__slot-actions">
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="normal">Choisir…</button>
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="normal" hidden>Retirer</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lab-brush-mat__slot" data-brush-slot="roughness">
+                            <div class="lab-brush-mat__preview" data-brush-preview="roughness"></div>
+                            <div class="lab-brush-mat__meta">
+                                <strong>Roughness</strong>
+                                <span>Rugosité</span>
+                                <div class="lab-brush-mat__slot-actions">
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="roughness">Choisir…</button>
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="roughness" hidden>Retirer</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lab-brush-mat__slot" data-brush-slot="ao">
+                            <div class="lab-brush-mat__preview" data-brush-preview="ao"></div>
+                            <div class="lab-brush-mat__meta">
+                                <strong>Ambiance (AO)</strong>
+                                <span>Occlusion ambiante</span>
+                                <div class="lab-brush-mat__slot-actions">
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-pick="ao">Choisir…</button>
+                                    <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost lab-dialog__btn--compact" data-brush-clear-slot="ao" hidden>Retirer</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <input id="lab-brush-mat-file" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                    <p class="lab-brush-mat__hint" data-brush-mat-hint>Ajoutez au moins une texture de base pour activer le pinceau matériau.</p>
+                    <div class="lab-dialog__actions">
+                        <button type="button" class="lab-dialog__btn lab-dialog__btn--ghost" data-brush-mat-cancel>Annuler</button>
+                        <button type="button" class="lab-dialog__btn lab-dialog__btn--primary" data-brush-mat-apply disabled>Appliquer</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        const mount = getBrushMatMount();
+        if (brushMatOverlay.parentElement !== mount) {
+            mount.appendChild(brushMatOverlay);
+        }
+
+        brushMatFileInput = /** @type {HTMLInputElement | null} */ (
+            brushMatOverlay.querySelector("#lab-brush-mat-file")
+        );
+        brushMatApplyBtn = /** @type {HTMLButtonElement | null} */ (
+            brushMatOverlay.querySelector("[data-brush-mat-apply]")
+        );
+        brushMatCancelBtn = /** @type {HTMLButtonElement | null} */ (
+            brushMatOverlay.querySelector("[data-brush-mat-cancel]")
+        );
+        brushMatHint = /** @type {HTMLElement | null} */ (
+            brushMatOverlay.querySelector("[data-brush-mat-hint]")
+        );
+
+        if (!brushMatUiWired) {
+            brushMatUiWired = true;
+            brushMatOverlay.addEventListener("click", (event) => {
+                if (event.target === brushMatOverlay) closeBrushMaterialDialog();
+            });
+            brushMatOverlay.querySelectorAll("[data-brush-pick]").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    const slot = /** @type {'albedo' | 'normal' | 'roughness' | 'ao'} */ (
+                        btn.getAttribute("data-brush-pick")
+                    );
+                    if (!slot || !brushMatFileInput) return;
+                    brushMatPickSlot = slot;
+                    void pickFilePreservingFullscreen(brushMatFileInput);
+                });
+            });
+            brushMatOverlay.querySelectorAll("[data-brush-clear-slot]").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    const slot = /** @type {'albedo' | 'normal' | 'roughness' | 'ao'} */ (
+                        btn.getAttribute("data-brush-clear-slot")
+                    );
+                    if (!slot) return;
+                    brushMatDraft[slot] = null;
+                    syncBrushMatDialogUi();
+                });
+            });
+            brushMatFileInput?.addEventListener("change", () => {
+                const file = brushMatFileInput?.files?.[0];
+                const slot = brushMatPickSlot;
+                if (brushMatFileInput) brushMatFileInput.value = "";
+                brushMatPickSlot = null;
+                void restoreFullscreenNow();
+                if (!file || !slot || !/^image\/(jpeg|png|webp)$/i.test(file.type)) {
+                    void ensureLabFullscreenAfterFile();
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    brushMatDraft[slot] = String(reader.result);
+                    syncBrushMatDialogUi();
+                    void ensureLabFullscreenAfterFile();
+                };
+                reader.onerror = () => void ensureLabFullscreenAfterFile();
+                reader.readAsDataURL(file);
+            });
+            brushMatCancelBtn?.addEventListener("click", () => {
+                closeBrushMaterialDialog();
+            });
+            brushMatApplyBtn?.addEventListener("click", () => {
+                if (!brushMatDraft.albedo) return;
+                void applyBrushMaterialUrls(
+                    { ...brushMatDraft },
+                    { activatePaint: true, bake: true }
+                ).then(() => {
+                    closeBrushMaterialDialog();
+                });
+            });
+            document.addEventListener(
+                "keydown",
+                (event) => {
+                    if (event.key !== "Escape") return;
+                    if (!brushMatOverlay || brushMatOverlay.hidden) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeBrushMaterialDialog();
+                },
+                true
+            );
+        }
+
+        return brushMatOverlay;
+    }
+
+    function syncBrushMatDialogUi() {
+        const root = brushMatOverlay || document.getElementById("lab-brush-material-overlay");
+        if (!(root instanceof HTMLElement)) return;
+        for (const slot of ["albedo", "normal", "roughness", "ao"]) {
+            const preview = /** @type {HTMLElement | null} */ (
+                root.querySelector(`[data-brush-preview="${slot}"]`)
+            );
+            const clearBtn = /** @type {HTMLButtonElement | null} */ (
+                root.querySelector(`[data-brush-clear-slot="${slot}"]`)
+            );
+            const url = brushMatDraft[/** @type {'albedo'|'normal'|'roughness'|'ao'} */ (slot)];
+            if (preview) {
+                if (url) {
+                    preview.classList.add("has-image");
+                    preview.style.backgroundImage = `url("${url}")`;
+                } else {
+                    preview.classList.remove("has-image");
+                    preview.style.backgroundImage = "";
+                }
+            }
+            if (clearBtn) clearBtn.hidden = !url;
+        }
+        const canApply = !!brushMatDraft.albedo;
+        const applyBtn = /** @type {HTMLButtonElement | null} */ (
+            root.querySelector("[data-brush-mat-apply]")
+        );
+        const hint = /** @type {HTMLElement | null} */ (
+            root.querySelector("[data-brush-mat-hint]")
+        );
+        if (applyBtn) applyBtn.disabled = !canApply;
+        if (hint) {
+            hint.textContent = canApply
+                ? "Appliquer pour peindre ce matériau sur le terrain."
+                : "Ajoutez au moins une texture de base pour activer le pinceau matériau.";
+        }
+    }
+
+    function openBrushMaterialDialog() {
+        const root = ensureBrushMaterialOverlay();
+        brushMatDraft = {
+            albedo: brushTextureDataUrl,
+            normal: brushNormalTextureDataUrl,
+            roughness: brushRoughnessDataUrl,
+            ao: brushAoDataUrl,
         };
-        reader.onerror = () => void ensureLabFullscreenAfterFile();
-        reader.readAsDataURL(file);
-    });
+        syncBrushMatDialogUi();
+        root.hidden = false;
+        root.removeAttribute("hidden");
+        root.style.display = "flex";
+        /** @type {HTMLButtonElement | null} */ (root.querySelector("[data-brush-mat-cancel]"))?.focus();
+    }
+
+    function closeBrushMaterialDialog() {
+        const root = brushMatOverlay || document.getElementById("lab-brush-material-overlay");
+        if (root instanceof HTMLElement) {
+            root.hidden = true;
+            root.setAttribute("hidden", "");
+            root.style.display = "";
+        }
+        brushMatPickSlot = null;
+        if (brushMatFileInput) brushMatFileInput.value = "";
+    }
+
+    /**
+     * Applique un matériau pinceau (albedo obligatoire côté UI).
+     * @param {{ albedo: string | null, normal: string | null, roughness: string | null, ao: string | null }} urls
+     * @param {{ activatePaint?: boolean, bake?: boolean }} [opts]
+     */
+    async function applyBrushMaterialUrls(urls, { activatePaint = true, bake = true } = {}) {
+        if (bake) bakeBrushMaskIntoPaint();
+
+        // Grand terrain + tile trop bas → aplat lisse (ex. neige sur 500 m).
+        if (sizeMeters >= 80 && paintTextureTile < suggestedPaintTileForSize(sizeMeters) * 0.45) {
+            applySuggestedPaintTile({ force: true });
+        }
+
+        const albedoImg = await loadImageFromDataUrl(urls.albedo);
+        const normalImg = await loadImageFromDataUrl(urls.normal);
+        const roughnessImg = await loadImageFromDataUrl(urls.roughness);
+        const aoImg = await loadImageFromDataUrl(urls.ao);
+
+        disposeBrushGpuTextures();
+        brushTextureTile = null;
+        brushNormalTile = null;
+        brushRoughnessTile = null;
+        brushAoTile = null;
+        brushTextureDataUrl = urls.albedo;
+        brushNormalTextureDataUrl = urls.normal;
+        brushRoughnessDataUrl = urls.roughness;
+        brushAoDataUrl = urls.ao;
+
+        if (albedoImg) {
+            brushTextureTile = prepareTileSource(albedoImg, BASE_TEXTURE_GPU_SIZE);
+            brushGpuTexture = createGpuTileTexture(albedoImg);
+        }
+        if (normalImg) {
+            brushNormalTile = prepareTileSource(normalImg, BASE_TEXTURE_GPU_SIZE);
+            brushNormalGpuTexture = createGpuTileTexture(normalImg, { normal: true });
+        }
+        if (roughnessImg) {
+            brushRoughnessTile = prepareTileSource(roughnessImg, BASE_TEXTURE_GPU_SIZE);
+            brushRoughnessGpuTexture = createGpuTileTexture(roughnessImg, { linear: true });
+        }
+        if (aoImg) {
+            brushAoTile = prepareTileSource(aoImg, BASE_TEXTURE_GPU_SIZE);
+            brushAoGpuTexture = createGpuTileTexture(aoImg, { linear: true });
+        }
+
+        syncBrushMaterialButtonUi();
+        if (activatePaint && brushTextureTile) {
+            setMode("paint");
+            setEditing(true);
+        }
+        syncPaintOverlayUniform();
+        renderTerrainTexture();
+        return !!brushTextureTile;
+    }
+
+    function clearBrushMaterial({ bake = true } = {}) {
+        if (bake) bakeBrushMaskIntoPaint();
+        disposeBrushGpuTextures();
+        brushTextureTile = null;
+        brushNormalTile = null;
+        brushRoughnessTile = null;
+        brushAoTile = null;
+        brushTextureDataUrl = null;
+        brushNormalTextureDataUrl = null;
+        brushRoughnessDataUrl = null;
+        brushAoDataUrl = null;
+        syncBrushMaterialButtonUi();
+        syncPaintOverlayUniform();
+        renderTerrainTexture();
+    }
+
+    // brushMaterialUiApi déjà branché en tête d’init.
 
     normalBtn?.addEventListener("click", () => {
         if (normalInput) void pickFilePreservingFullscreen(normalInput);
@@ -2711,44 +3617,6 @@ export function initTerrainEditor(options) {
                 normalBtn?.classList.add("is-active");
                 if (normalClearBtn) normalClearBtn.hidden = false;
                 renderTerrainTexture();
-                void ensureLabFullscreenAfterFile();
-            };
-            image.onerror = () => void ensureLabFullscreenAfterFile();
-            image.src = String(reader.result);
-        };
-        reader.onerror = () => void ensureLabFullscreenAfterFile();
-        reader.readAsDataURL(file);
-    });
-
-    brushNormalBtn?.addEventListener("click", () => {
-        if (brushNormalInput) void pickFilePreservingFullscreen(brushNormalInput);
-    });
-    brushNormalClearBtn?.addEventListener("click", () => {
-        brushNormalTile = null;
-        brushNormalBtn?.classList.remove("is-active");
-        if (brushNormalClearBtn) brushNormalClearBtn.hidden = true;
-        syncPaintOverlayUniform();
-    });
-    brushNormalInput?.addEventListener("change", () => {
-        const file = brushNormalInput.files?.[0];
-        brushNormalInput.value = "";
-        void restoreFullscreenNow();
-        if (!file || !/^image\/(jpeg|png)$/i.test(file.type)) {
-            void ensureLabFullscreenAfterFile();
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            const image = new Image();
-            image.onload = () => {
-                brushNormalTile = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
-                brushNormalGpuTexture?.dispose();
-                brushNormalGpuTexture = createGpuTileTexture(image, { normal: true });
-                brushNormalTextureDataUrl = String(reader.result);
-                brushNormalBtn?.classList.add("is-active");
-                if (brushNormalClearBtn) brushNormalClearBtn.hidden = false;
-                if (brushGpuTexture || brushTextureTile || brushNormalTile) setMode("paint");
-                syncPaintOverlayUniform();
                 void ensureLabFullscreenAfterFile();
             };
             image.onerror = () => void ensureLabFullscreenAfterFile();
@@ -2865,6 +3733,7 @@ export function initTerrainEditor(options) {
         paintOverlayTexture = null;
         brushMaskTexture = null;
         paintNormalMaskTexture = null;
+        paintPbrTexture = null;
         normalCanvasTexture = null;
         disposeHeightTexture();
         disposeBaseGpuTextures();
@@ -2883,25 +3752,27 @@ export function initTerrainEditor(options) {
         baseNormalTextureDataUrl = null;
         brushTextureTile = null;
         brushNormalTile = null;
+        brushRoughnessTile = null;
+        brushAoTile = null;
         brushTextureDataUrl = null;
         brushNormalTextureDataUrl = null;
+        brushRoughnessDataUrl = null;
+        brushAoDataUrl = null;
         paintNormalUsed = false;
+        paintNormalBaked = false;
         brushMaskUsed = false;
-        normalScale = DEFAULT_NORMAL_SCALE;
-        brushTextureBtn?.classList.remove("is-active");
-        if (brushTextureBtn) brushTextureBtn.textContent = "Texture du pinceau";
-        if (brushTextureClearBtn) brushTextureClearBtn.hidden = true;
+        normalScale = Number(normalScaleInput?.value) || 1.5;
+        syncBrushMaterialButtonUi();
         normalBtn?.classList.remove("is-active");
         if (normalClearBtn) normalClearBtn.hidden = true;
-        brushNormalBtn?.classList.remove("is-active");
-        if (brushNormalClearBtn) brushNormalClearBtn.hidden = true;
-        if (normalScaleInput) normalScaleInput.value = String(DEFAULT_NORMAL_SCALE);
-        if (normalScaleValue) normalScaleValue.textContent = DEFAULT_NORMAL_SCALE.toFixed(2);
+        if (normalScaleInput) normalScaleInput.value = "1.5";
+        if (normalScaleValue) normalScaleValue.textContent = "1.50";
         coverFloor(false);
         sceneRegistry?.unregister(TERRAIN_SCENE_ITEM_ID);
         paintCtx?.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
         brushMaskCtx?.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
         paintNormalCtx?.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
+        paintPbrCtx?.clearRect(0, 0, PAINT_SIZE, PAINT_SIZE);
         if (gridHelper) gridHelper.position.y = 0.02;
         sizeMeters = GRID_SIZE;
         meshSegments = segmentsForTerrainSize(GRID_SIZE);
@@ -2925,7 +3796,7 @@ export function initTerrainEditor(options) {
             heights.push(Number(positions.getY(i).toFixed(4)));
         }
         return {
-            version: 5,
+            version: 6,
             segments: meshSegments,
             sizeMeters,
             heights,
@@ -2934,11 +3805,14 @@ export function initTerrainEditor(options) {
             normalTextureDataUrl: baseNormalTextureDataUrl,
             brushTextureDataUrl,
             brushNormalTextureDataUrl,
+            brushRoughnessDataUrl,
+            brushAoDataUrl,
             normalScale,
             textureTile,
             paintTextureTile,
             paintDataUrl: paintCanvas.toDataURL("image/png"),
             paintNormalDataUrl: paintNormalCanvas.toDataURL("image/png"),
+            paintPbrDataUrl: paintPbrCanvas.toDataURL("image/png"),
             brushMaskDataUrl: brushMaskCanvas.toDataURL("image/png"),
             ignCenter: terrain.userData?.ignCenter ?? null,
             geoAligned: geoAlignedBase,
@@ -3055,38 +3929,21 @@ export function initTerrainEditor(options) {
         }
         brushTextureDataUrl =
             typeof raw.brushTextureDataUrl === "string" ? raw.brushTextureDataUrl : null;
-        if (brushTextureDataUrl) {
-            await new Promise((resolve) => {
-                const image = new Image();
-                image.onload = () => {
-                    brushTextureTile = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
-                    brushGpuTexture?.dispose();
-                    brushGpuTexture = createGpuTileTexture(image);
-                    brushTextureBtn?.classList.add("is-active");
-                    if (brushTextureBtn) brushTextureBtn.textContent = "Pinceau texturé actif";
-                    if (brushTextureClearBtn) brushTextureClearBtn.hidden = false;
-                    resolve(null);
-                };
-                image.onerror = () => resolve(null);
-                image.src = brushTextureDataUrl;
-            });
-        }
         brushNormalTextureDataUrl =
             typeof raw.brushNormalTextureDataUrl === "string" ? raw.brushNormalTextureDataUrl : null;
-        if (brushNormalTextureDataUrl) {
-            await new Promise((resolve) => {
-                const image = new Image();
-                image.onload = () => {
-                    brushNormalTile = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
-                    brushNormalGpuTexture?.dispose();
-                    brushNormalGpuTexture = createGpuTileTexture(image, { normal: true });
-                    brushNormalBtn?.classList.add("is-active");
-                    if (brushNormalClearBtn) brushNormalClearBtn.hidden = false;
-                    resolve(null);
-                };
-                image.onerror = () => resolve(null);
-                image.src = brushNormalTextureDataUrl;
-            });
+        brushRoughnessDataUrl =
+            typeof raw.brushRoughnessDataUrl === "string" ? raw.brushRoughnessDataUrl : null;
+        brushAoDataUrl = typeof raw.brushAoDataUrl === "string" ? raw.brushAoDataUrl : null;
+        if (brushTextureDataUrl || brushNormalTextureDataUrl || brushRoughnessDataUrl || brushAoDataUrl) {
+            await applyBrushMaterialUrls(
+                {
+                    albedo: brushTextureDataUrl,
+                    normal: brushNormalTextureDataUrl,
+                    roughness: brushRoughnessDataUrl,
+                    ao: brushAoDataUrl,
+                },
+                { activatePaint: false, bake: false }
+            );
         }
         normalScale =
             typeof raw.normalScale === "number"
@@ -3098,6 +3955,7 @@ export function initTerrainEditor(options) {
         await restorePaintNormal(
             typeof raw.paintNormalDataUrl === "string" ? raw.paintNormalDataUrl : null
         );
+        await restorePaintPbr(typeof raw.paintPbrDataUrl === "string" ? raw.paintPbrDataUrl : null);
         await restoreBrushMask(
             typeof raw.brushMaskDataUrl === "string" ? raw.brushMaskDataUrl : null
         );
@@ -3153,30 +4011,15 @@ export function initTerrainEditor(options) {
                 }
                 return Promise.resolve(true);
             }
-            return new Promise((resolve) => {
-                const image = new Image();
-                image.onload = () => {
-                    if (brushTextureDataUrl && brushTextureDataUrl !== dataUrl) {
-                        bakeBrushMaskIntoPaint();
-                    }
-                    brushTextureTile = prepareTileSource(image, BASE_TEXTURE_GPU_SIZE);
-                    brushGpuTexture?.dispose();
-                    brushGpuTexture = createGpuTileTexture(image);
-                    brushTextureDataUrl = dataUrl;
-                    brushTextureBtn?.classList.add("is-active");
-                    if (brushTextureBtn) brushTextureBtn.textContent = "Pinceau texturé actif";
-                    if (brushTextureClearBtn) brushTextureClearBtn.hidden = false;
-                    if (activatePaint) {
-                        setMode("paint");
-                        setEditing(true);
-                    }
-                    syncPaintOverlayUniform();
-                    renderTerrainTexture();
-                    resolve(true);
-                };
-                image.onerror = () => resolve(false);
-                image.src = dataUrl;
-            });
+            return applyBrushMaterialUrls(
+                {
+                    albedo: dataUrl,
+                    normal: brushNormalTextureDataUrl,
+                    roughness: brushRoughnessDataUrl,
+                    ao: brushAoDataUrl,
+                },
+                { activatePaint, bake: true }
+            );
         },
         /**
          * Tampon pinceau (texture ou couleur) à une position monde.
@@ -3210,6 +4053,7 @@ export function initTerrainEditor(options) {
         ensureTerrain() {
             return makeTerrain({ recordHistory: true });
         },
+        createMountainIsland,
         importIgnRelief,
         carveRiverBed,
         restoreRiverBed,

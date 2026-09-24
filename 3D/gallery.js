@@ -4,7 +4,7 @@ import { movePlayer, moveSpeed, setMoveSpeed, jump, updatePlayerVertical, getGro
 import { GRID_SIZE, formatGridSizeMeters } from "./grid-constants.js";
 import { initQuadView } from "./lab-quad-view.js";
 import { createEnvironmentItem } from "./lab-scene-registry.js";
-import { configureRendererShadows, getObjectShadowEnabled, getObjectShadowOpacity, setObjectShadowEnabled, setObjectShadowOpacity } from "./lab-shadows.js";
+import { configureRendererShadows, configureLightShadowMap, invalidateLabShadows, getObjectShadowEnabled, getObjectShadowOpacity, setObjectShadowEnabled, setObjectShadowOpacity } from "./lab-shadows.js";
 import { applyStudioEnvironment } from "./lab-studio-env.js";
 import { normalizeWheelDelta } from "./wheel-utils.js";
 
@@ -110,14 +110,94 @@ export function initGallery(container, ui) {
     scene.background = new THREE.Color(0x1a1a1a);
     scene.fog = new THREE.Fog(0x1a1a1a, SCENE_FOG_NEAR, SCENE_FOG_FAR);
 
-    const defaultAmbient = new THREE.AmbientLight(0xffffff, 0.42);
+    const defaultAmbient = new THREE.AmbientLight(0xffffff, 0.18);
     defaultAmbient.userData.labDefaultLight = true;
-    const defaultHemisphere = new THREE.HemisphereLight(0xdceeff, 0x2a3824, 0.38);
+    const defaultHemisphere = new THREE.HemisphereLight(0xdceeff, 0x2a3824, 0.22);
     defaultHemisphere.position.set(0, 40, 0);
     defaultHemisphere.userData.labDefaultLight = true;
-    // Pas de soleil directionnel « fantôme » : les ombres / faisceaux
-    // n’apparaissent qu’avec les lumières placées par l’utilisateur.
-    scene.add(defaultAmbient, defaultHemisphere);
+    // Soleil d’ambiance ~17 h (OSO) — intensité modérée pour ne pas cramer la neige.
+    const AMBIENCE_SUN_ALTITUDE_DEG = 34;
+    const AMBIENCE_SUN_AZIMUTH_DEG = 250; // boussole : 0=N, 90=E, 180=S, 270=O
+    const AMBIENCE_SUN_INTENSITY = 1.05;
+    const AMBIENT_WITH_SUN = 0.2;
+    const AMBIENT_WITHOUT_SUN = 0.48;
+    const HEMI_WITH_SUN = 0.26;
+    const HEMI_WITHOUT_SUN = 0.42;
+    const ambienceSunTarget = new THREE.Object3D();
+    ambienceSunTarget.position.set(0, 0, 0);
+    ambienceSunTarget.userData.labDefaultLight = true;
+    const ambienceSun = new THREE.DirectionalLight(0xffe2b8, AMBIENCE_SUN_INTENSITY);
+    ambienceSun.userData.labDefaultLight = true;
+    ambienceSun.userData.labAmbienceSun = true;
+    ambienceSun.castShadow = true;
+    ambienceSun.target = ambienceSunTarget;
+    configureLightShadowMap(ambienceSun);
+    scene.add(defaultAmbient, defaultHemisphere, ambienceSunTarget, ambienceSun);
+    let ambienceSunEnabled = true;
+
+    /**
+     * Place le soleil d’ambiance pour qu’il éclaire le centre (0,0,0)
+     * et adapte le frustum d’ombre à la taille du monde.
+     * @param {number} sizeMeters
+     */
+    function updateAmbienceSunLayout(sizeMeters) {
+        const size = Math.max(10, Number(sizeMeters) || GRID_SIZE);
+        const distance = Math.max(48, size * 1.35);
+        const alt = THREE.MathUtils.degToRad(AMBIENCE_SUN_ALTITUDE_DEG);
+        const az = THREE.MathUtils.degToRad(AMBIENCE_SUN_AZIMUTH_DEG);
+        const cosAlt = Math.cos(alt);
+        // X = est, Y = haut, Z = −nord (spawn joueur en +Z, regard vers le centre).
+        ambienceSun.position.set(
+            Math.sin(az) * cosAlt * distance,
+            Math.sin(alt) * distance,
+            -Math.cos(az) * cosAlt * distance
+        );
+        ambienceSunTarget.position.set(0, 0, 0);
+        ambienceSunTarget.updateMatrixWorld(true);
+        ambienceSun.updateMatrixWorld(true);
+        const cam = ambienceSun.shadow?.camera;
+        if (cam) {
+            const extent = Math.max(28, size * 0.62);
+            cam.near = Math.max(0.5, distance * 0.08);
+            cam.far = distance + size * 1.2;
+            cam.left = -extent;
+            cam.right = extent;
+            cam.top = extent;
+            cam.bottom = -extent;
+            cam.updateProjectionMatrix();
+        }
+        invalidateLabShadows();
+    }
+
+    function setAmbienceSunEnabled(enabled) {
+        ambienceSunEnabled = !!enabled;
+        ambienceSun.visible = ambienceSunEnabled;
+        ambienceSunTarget.visible = ambienceSunEnabled;
+        if (ambienceSunEnabled) {
+            if (ambienceSun.intensity < 0.05) ambienceSun.intensity = AMBIENCE_SUN_INTENSITY;
+            defaultAmbient.intensity = AMBIENT_WITH_SUN;
+            defaultHemisphere.intensity = HEMI_WITH_SUN;
+            updateAmbienceSunLayout(worldSizeMeters);
+        } else {
+            // Sans soleil directionnel : remonter l’ambiance pour éviter le noir.
+            defaultAmbient.intensity = AMBIENT_WITHOUT_SUN;
+            defaultHemisphere.intensity = HEMI_WITHOUT_SUN;
+        }
+        if (ambienceSunInput) ambienceSunInput.checked = ambienceSunEnabled;
+        environmentRegistry?.refresh?.();
+        invalidateLabShadows();
+    }
+
+    const ambienceSunInput = /** @type {HTMLInputElement | null} */ (
+        document.getElementById("lab-ambience-sun")
+    );
+    updateAmbienceSunLayout(GRID_SIZE);
+    if (ambienceSunInput) {
+        ambienceSunInput.checked = true;
+        ambienceSunInput.addEventListener("change", () => {
+            setAmbienceSunEnabled(ambienceSunInput.checked);
+        });
+    }
 
     camera = new THREE.PerspectiveCamera(CAMERA_FOV_DESIGN, 1, CAMERA_NEAR_DESIGN, 1000);
     pitch.add(camera);
@@ -213,6 +293,26 @@ export function initGallery(container, ui) {
                 },
             })
         );
+        registry.register({
+            id: "env-ambience-sun",
+            label: "Soleil 17h",
+            category: "environment",
+            icon: "light-sun",
+            detail: "Ambiance OSO · vise le centre",
+            getVisible: () => ambienceSunEnabled,
+            setVisible: (visible) => setAmbienceSunEnabled(visible),
+            select: () => {
+                // Ne pas viser la position du soleil (loin dans le ciel) :
+                // recentrer la vue sur le plateau éclairé.
+                frameStudioPlateau();
+            },
+            getShadow: () => ambienceSun.castShadow,
+            setShadow: (enabled) => {
+                ambienceSun.castShadow = !!enabled;
+                invalidateLabShadows();
+            },
+            canDelete: () => false,
+        });
     }
 
     const { blocker, moveSpeedInput, onMovementModeChange } = ui;
@@ -336,7 +436,7 @@ export function initGallery(container, ui) {
      */
     function frameStudioPlateau() {
         orbitTarget.set(0, 0.5, 0);
-        orbitDistance = THREE.MathUtils.clamp(worldSizeMeters * 0.55, 16, 42);
+        orbitDistance = THREE.MathUtils.clamp(worldSizeMeters * 0.55, 16, Math.max(42, worldSizeMeters * 0.9));
         orbitTheta = 0.7;
         orbitPhi = 0.38;
         resetPlayerVerticalMotion();
@@ -801,6 +901,7 @@ export function initGallery(container, ui) {
         gridHelper.scale.set(scale, 1, scale);
         floor.scale.set(scale, scale, 1);
         syncWorldFog(size);
+        updateAmbienceSunLayout(size);
         const fogFar = scene.fog instanceof THREE.Fog ? scene.fog.far : SCENE_FOG_FAR;
         camera.far = Math.max(400, size * 4, fogFar * 1.2);
         camera.updateProjectionMatrix();
@@ -1641,6 +1742,8 @@ export function initGallery(container, ui) {
         canInteractAt,
         getPointerRect: () => renderer.domElement.getBoundingClientRect(),
         registerEnvironmentItems,
+        setAmbienceSunEnabled,
+        getAmbienceSunEnabled: () => ambienceSunEnabled,
         focusOnObject,
         focusOnPoint,
         focusOnTerrainRelief,
