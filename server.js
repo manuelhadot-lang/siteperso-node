@@ -527,6 +527,73 @@ function findEleveByCode(code) {
     return null;
 }
 
+/** @param {unknown} value */
+function normalizePersonName(value) {
+    return String(value || "")
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .replace(/\s+/g, " ");
+}
+
+/**
+ * Recherche un élève par nom + prénom (accents / casse ignorés).
+ * @param {unknown} nom
+ * @param {unknown} prenom
+ * @returns {{ nom: string, prenom: string, code: string, classe: string } | null}
+ */
+function findEleveByNomPrenom(nom, prenom) {
+    const n = normalizePersonName(nom);
+    const p = normalizePersonName(prenom);
+    if (!n || !p) return null;
+    for (const classe of Object.keys(baseEleves || {})) {
+        const list = baseEleves[classe];
+        if (!Array.isArray(list)) continue;
+        const match = list.find(
+            (e) =>
+                normalizePersonName(e?.nom) === n && normalizePersonName(e?.prenom) === p
+        );
+        if (match) {
+            return {
+                nom: String(match.nom || ""),
+                prenom: String(match.prenom || ""),
+                code: String(match.code || ""),
+                classe,
+            };
+        }
+    }
+    return null;
+}
+
+/** @param {string} nom @param {string} prenom @param {string} ext */
+function buildTpUploadFilename(nom, prenom, ext) {
+    const safeNom = String(nom || "SANSNOM")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_") || "SANSNOM";
+    const safePrenom = String(prenom || "SANSPRENOM")
+        .trim()
+        .replace(/\s+/g, "_") || "SANSPRENOM";
+    const date = new Date().toISOString().slice(0, 10);
+    return `${safeNom}_${safePrenom}_${date}${ext}`;
+}
+
+/**
+ * Place une copie du fichier TP sous le nom d’un élève (compte dépôt).
+ * @param {string} sourcePath
+ * @param {string} dir
+ * @param {{ nom: string, prenom: string }} eleve
+ * @param {string} ext
+ * @returns {string} chemin final
+ */
+function placeTpCopyForEleve(sourcePath, dir, eleve, ext) {
+    const dest = path.join(dir, buildTpUploadFilename(eleve.nom, eleve.prenom, ext));
+    if (path.resolve(dest) === path.resolve(sourcePath)) return dest;
+    fs.copyFileSync(sourcePath, dest);
+    return dest;
+}
+
 /** Ancien code classe unique (toujours accepté en secours). */
 const LEGACY_DEPOT_ACCESS_CODE = "STI2D2026";
 
@@ -534,6 +601,16 @@ const LEGACY_DEPOT_ACCESS_CODE = "STI2D2026";
 app.get('/api/check-student/:code', (req, res) => {
     const eleveTrouve = findEleveByCode(req.params.code);
 
+    if (eleveTrouve) {
+        res.json({ exists: true, nom: eleveTrouve.nom, prenom: eleveTrouve.prenom, classe: eleveTrouve.classe });
+    } else {
+        res.json({ exists: false });
+    }
+});
+
+// Vérification binôme par nom + prénom
+app.get('/api/check-student-name', (req, res) => {
+    const eleveTrouve = findEleveByNomPrenom(req.query.nom, req.query.prenom);
     if (eleveTrouve) {
         res.json({ exists: true, nom: eleveTrouve.nom, prenom: eleveTrouve.prenom, classe: eleveTrouve.classe });
     } else {
@@ -2033,7 +2110,7 @@ app.post('/upload-tp', upload.single('tp_file'), (req, res) => {
     const eleve = findEleveByCode(code);
     const legacyOk = code === LEGACY_DEPOT_ACCESS_CODE;
 
-    if (!eleve && !legacyOk) {
+    const unlinkUpload = () => {
         if (req.file?.path) {
             try {
                 fs.unlinkSync(req.file.path);
@@ -2041,39 +2118,89 @@ app.post('/upload-tp', upload.single('tp_file'), (req, res) => {
                 /* ignore */
             }
         }
+    };
+
+    if (!eleve && !legacyOk) {
+        unlinkUpload();
         return res.send(
             "<script>alert('Code incorrect ! Utilisez le code élève reçu en classe (étiquette / espace prof).'); window.history.back();</script>"
         );
     }
 
-    // Si un code élève est fourni, on force nom/prénom du fichier sur la fiche (évite les usurpations).
-    if (eleve && req.file?.path) {
-        try {
-            const dir = path.dirname(req.file.path);
-            const ext = path.extname(req.file.filename || req.file.path);
-            const nom = (eleve.nom || "SANSNOM").toUpperCase().replace(/\s/g, "_");
-            const prenom = (eleve.prenom || "SANSPRENOM").replace(/\s/g, "_");
-            const dest = path.join(
-                dir,
-                `${nom}_${prenom}_${new Date().toISOString().slice(0, 10)}${ext}`
+    if (!req.file?.path) {
+        return res.send(
+            "<script>alert('Aucun fichier reçu.'); window.history.back();</script>"
+        );
+    }
+
+    const nomBinome = String(req.body?.nom_binome || "").trim();
+    const prenomBinome = String(req.body?.prenom_binome || "").trim();
+    const hasBinome = !!(nomBinome || prenomBinome);
+
+    /** @type {{ nom: string, prenom: string, code?: string, classe?: string } | null} */
+    let binome = null;
+    if (hasBinome) {
+        if (!nomBinome || !prenomBinome) {
+            unlinkUpload();
+            return res.send(
+                "<script>alert('Binôme : indiquez le nom ET le prénom, ou laissez les deux champs vides.'); window.history.back();</script>"
             );
-            if (dest !== req.file.path) {
-                fs.renameSync(req.file.path, dest);
-                req.file.path = dest;
-                req.file.filename = path.basename(dest);
-            }
-        } catch (err) {
-            console.warn("[upload-tp] renommage fichier :", err?.message || err);
+        }
+        binome = findEleveByNomPrenom(nomBinome, prenomBinome);
+        if (!binome) {
+            unlinkUpload();
+            return res.send(
+                "<script>alert('Binôme introuvable : vérifiez le nom et le prénom (doit être un élève inscrit).'); window.history.back();</script>"
+            );
+        }
+        if (eleve && normalizeStudentCode(eleve.code) === normalizeStudentCode(binome.code)) {
+            unlinkUpload();
+            return res.send(
+                "<script>alert('Le binôme doit être un autre élève que vous.'); window.history.back();</script>"
+            );
         }
     }
 
-    const qui = eleve
-        ? `${escapeHtml(eleve.prenom)} ${escapeHtml(eleve.nom)}`
-        : "dépôt classe";
+    const dir = path.dirname(req.file.path);
+    const ext = path.extname(req.file.filename || req.file.path) || path.extname(req.file.originalname || "") || "";
+    const primary = eleve || {
+        nom: String(req.body?.nom || "SANSNOM").trim(),
+        prenom: String(req.body?.prenom || "SANSPRENOM").trim(),
+    };
+
+    try {
+        // Compte élève 1
+        const dest1 = path.join(dir, buildTpUploadFilename(primary.nom, primary.prenom, ext));
+        if (path.resolve(dest1) !== path.resolve(req.file.path)) {
+            fs.renameSync(req.file.path, dest1);
+            req.file.path = dest1;
+            req.file.filename = path.basename(dest1);
+        }
+
+        // Compte élève 2 (binôme) : copie du même fichier
+        if (binome) {
+            placeTpCopyForEleve(req.file.path, dir, binome, ext);
+        }
+    } catch (err) {
+        console.warn("[upload-tp] dépôt fichier(s) :", err?.message || err);
+        unlinkUpload();
+        return res.send(
+            "<script>alert('Erreur lors de l’enregistrement du fichier.'); window.history.back();</script>"
+        );
+    }
+
+    const qui = binome
+        ? `${escapeHtml(primary.prenom)} ${escapeHtml(primary.nom)} &amp; ${escapeHtml(binome.prenom)} ${escapeHtml(binome.nom)}`
+        : `${escapeHtml(primary.prenom)} ${escapeHtml(primary.nom)}`;
+    const detail = binome
+        ? "<p style=\"color:#94a3b8;\">Le fichier a été déposé dans les <b>deux</b> comptes.</p>"
+        : "<p style=\"color:#94a3b8;\">Le fichier a été déposé dans votre compte.</p>";
+
     res.send(
         `<body style='background:#0f172a; color:white; text-align:center; font-family:sans-serif; padding:40px;'>
           <h1>✅ Bien reçu !</h1>
           <p style="color:#94a3b8;">Merci ${qui}.</p>
+          ${detail}
           <a href='/' style='color:#00d1ff;'>Retour</a>
         </body>`
     );

@@ -5,8 +5,8 @@
     <title>Dépôt de TP | STI2D</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body 
-        { 
+        body
+        {
             font-family: 'Roboto', sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
@@ -15,106 +15,137 @@
             background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)),url("photo_classe.jpg");
             background-repeat: no-repeat;
             background-size: cover;
-            background-attachment: fixed; /* L'image reste fixe quand on scrolle, effet très moderne */
+            background-attachment: fixed;
             background-position: center;
-            display: flex; justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; margin: 0; 
-        }
-        
-        .upload-container 
-        { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 12px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
-            width: 100%; max-width: 500px; 
+            display: flex; justify-content: center;
+            align-items: center;
+            min-height: 100vh; margin: 0;
         }
 
-        h1 
-        { 
-            font-size: 1.5rem; 
-            margin-bottom: 25px; color: #00d1ff; 
-            border-bottom: 2px solid #f0f2f5; 
-            padding-bottom: 10px; 
-        }
-        
-        .form-group 
+        .upload-container
         {
-             margin-bottom: 20px; 
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 100%; max-width: 500px;
         }
 
-        label 
-        { 
-            display: block; 
-            font-size: 0.85rem; 
-            margin-bottom: 8px; 
-            font-weight: 600; 
-            color: #6c757d; 
+        h1
+        {
+            font-size: 1.5rem;
+            margin-bottom: 25px; color: #00d1ff;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 10px;
         }
 
-        input, select 
-        { 
-            width: 100%; 
-            padding: 12px; 
-            border: 1px solid #eaeaea; 
-            border-radius: 6px; 
-            font-family: inherit; 
-            font-size: 0.9rem; 
-            box-sizing: border-box; 
+        .form-group
+        {
+             margin-bottom: 20px;
         }
 
-        input:focus 
-        { 
-            outline: none; 
-            border-color: #00d1ff; 
-            background: #f0faff; 
+        .binome-box
+        {
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            background: #f8fafc;
         }
-        
+
+        .binome-box > .binome-title
+        {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 0 0 6px;
+        }
+
+        .binome-box > .binome-help
+        {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin: 0 0 14px;
+        }
+
+        label
+        {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #6c757d;
+        }
+
+        input, select
+        {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #eaeaea;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+
+        input:focus
+        {
+            outline: none;
+            border-color: #00d1ff;
+            background: #f0faff;
+        }
+
         .file-input-wrapper
-        { 
-            border: 2px dashed #eaeaea; 
-            padding: 20px; 
-            text-align: center; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            transition: 0.3s; 
+        {
+            border: 2px dashed #eaeaea;
+            padding: 20px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
         }
 
-        .file-input-wrapper:hover 
-        { 
-            border-color: #00d1ff; 
-            background: #f0faff; 
-        }
-        
-        button 
-        { 
-            width: 100%; 
-            padding: 15px; 
-            background: #00d1ff; 
-            border: none; 
-            border-radius: 6px; 
-            color: white; 
-            font-weight: 600; 
-            cursor: pointer; 
-            margin-top: 10px; 
-            transition: 0.3s; 
+        .file-input-wrapper:hover
+        {
+            border-color: #00d1ff;
+            background: #f0faff;
         }
 
-        button:hover 
-        { 
-            background: #00b8e6; 
-            transform: translateY(-2px); 
+        button
+        {
+            width: 100%;
+            padding: 15px;
+            background: #00d1ff;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: 0.3s;
         }
 
-        .back-link 
-        { 
-            display: block; 
-            text-align: center; 
-            margin-top: 20px; 
-            font-size: 0.8rem; 
-            color: #6c757d; 
-            text-decoration: none; 
+        button:hover
+        {
+            background: #00b8e6;
+            transform: translateY(-2px);
+        }
+
+        .back-link
+        {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-decoration: none;
+        }
+
+        .hint
+        {
+            margin: 8px 0 0;
+            font-size: 0.75rem;
+            color: #94a3b8;
         }
     </style>
 </head>
@@ -126,7 +157,7 @@
         <div class="form-group">
             <label>CODE ÉLÈVE (étiquette / donné en classe)</label>
             <input type="password" name="access_code" placeholder="Votre code personnel" required autocomplete="off">
-            <p id="code-hint" style="margin:8px 0 0; font-size:0.75rem; color:#94a3b8;"></p>
+            <p id="code-hint" class="hint"></p>
         </div>
         <div class="form-group">
             <label>NOM</label>
@@ -136,6 +167,21 @@
             <label>PRÉNOM</label>
             <input type="text" name="prenom" placeholder="Ex: Jean" required>
         </div>
+
+        <div class="binome-box">
+            <p class="binome-title">Binôme (optionnel)</p>
+            <p class="binome-help">Laissez vide si vous déposez seul. Avec un binôme, le fichier est copié dans les deux comptes.</p>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label>NOM DU BINÔME</label>
+                <input type="text" name="nom_binome" placeholder="Ex: MARTIN" autocomplete="off">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label>PRÉNOM DU BINÔME</label>
+                <input type="text" name="prenom_binome" placeholder="Ex: Paul" autocomplete="off">
+                <p id="binome-hint" class="hint"></p>
+            </div>
+        </div>
+
         <div class="form-group">
                 <label>PROJET CONCERNÉ</label>
                 <select name="projet" required>
@@ -174,10 +220,15 @@
             const codeInput = document.querySelector('input[name="access_code"]');
             const nomInput = document.querySelector('input[name="nom"]');
             const prenomInput = document.querySelector('input[name="prenom"]');
+            const nomBinomeInput = document.querySelector('input[name="nom_binome"]');
+            const prenomBinomeInput = document.querySelector('input[name="prenom_binome"]');
             const hint = document.getElementById("code-hint");
+            const binomeHint = document.getElementById("binome-hint");
             if (!codeInput) return;
 
             let timer = null;
+            let binomeTimer = null;
+
             const verify = () => {
                 const code = String(codeInput.value || "").trim();
                 if (code.length < 2) {
@@ -203,11 +254,52 @@
                     });
             };
 
+            const verifyBinome = () => {
+                if (!binomeHint || !nomBinomeInput || !prenomBinomeInput) return;
+                const nom = String(nomBinomeInput.value || "").trim();
+                const prenom = String(prenomBinomeInput.value || "").trim();
+                if (!nom && !prenom) {
+                    binomeHint.textContent = "";
+                    return;
+                }
+                if (!nom || !prenom) {
+                    binomeHint.style.color = "#f59e0b";
+                    binomeHint.textContent = "Indiquez le nom et le prénom du binôme.";
+                    return;
+                }
+                const q = new URLSearchParams({ nom, prenom });
+                fetch("/api/check-student-name?" + q.toString())
+                    .then((r) => r.json())
+                    .then((data) => {
+                        if (data && data.exists) {
+                            binomeHint.style.color = "#10b981";
+                            binomeHint.textContent = "✓ Binôme reconnu : " + (data.prenom || "") + " " + (data.nom || "");
+                            nomBinomeInput.value = data.nom || nom;
+                            prenomBinomeInput.value = data.prenom || prenom;
+                        } else {
+                            binomeHint.style.color = "#f59e0b";
+                            binomeHint.textContent = "Binôme introuvable — doit être un élève inscrit.";
+                        }
+                    })
+                    .catch(() => {
+                        binomeHint.textContent = "";
+                    });
+            };
+
             codeInput.addEventListener("input", () => {
                 clearTimeout(timer);
                 timer = setTimeout(verify, 350);
             });
             codeInput.addEventListener("change", verify);
+
+            const onBinomeChange = () => {
+                clearTimeout(binomeTimer);
+                binomeTimer = setTimeout(verifyBinome, 350);
+            };
+            nomBinomeInput?.addEventListener("input", onBinomeChange);
+            prenomBinomeInput?.addEventListener("input", onBinomeChange);
+            nomBinomeInput?.addEventListener("change", verifyBinome);
+            prenomBinomeInput?.addEventListener("change", verifyBinome);
         })();
     </script>
     <script src="/site-access-unload.js" defer></script>
