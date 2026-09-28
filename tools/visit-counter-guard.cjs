@@ -74,8 +74,13 @@ function createGuardedVisitCounter(opts) {
 
     function setCount(n) {
         count = Math.max(0, Math.floor(Number(n) || 0));
+        hitsByIp.clear();
         persist();
         return count;
+    }
+
+    function resetToZero() {
+        return setCount(0);
     }
 
     function prune(now) {
@@ -136,6 +141,7 @@ function createGuardedVisitCounter(opts) {
     return {
         getCount: () => count,
         setCount,
+        resetToZero,
         reloadFromDisk,
         tryHit,
     };

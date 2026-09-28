@@ -776,6 +776,10 @@ const siteVisitCounter = createGuardedVisitCounter({
 });
 // Force relecture après éventuelle remise à zéro du fichier sur disque.
 siteVisitCounter.reloadFromDisk();
+// Si le fichier dit 0, forcer aussi la mémoire (évite un vieux process / cache).
+if (siteVisitCounter.getCount() === 0) {
+    siteVisitCounter.resetToZero();
+}
 
 const BACKUP_ZIP_MAX_BYTES = 64 * 1024 * 1024; // 64 Mo — quizzes.json peut grossir
 
@@ -2120,6 +2124,19 @@ const authentificationProf = (req, res, next) => {
     return res.status(401).send("Identifiants incorrects.");
 };
 
+/** Remise à zéro des compteurs de visites (site + simulateur) — mémoire + disque. */
+app.post("/admin/reset-visits", authentificationProf, (req, res) => {
+    const site = siteVisitCounter.resetToZero();
+    let sim = null;
+    if (typeof mountSimulatorVisitRoutes.resetToZero === "function") {
+        sim = mountSimulatorVisitRoutes.resetToZero();
+    }
+    const msg = `Compteurs remis à zéro (site=${site}${sim != null ? `, simulateur=${sim}` : ""}).`;
+    res.send(
+        `<script>alert(${JSON.stringify(msg)}); window.location='/espace-correction';</script>`
+    );
+});
+
 // --- FONCTIONS DE SÉCURITÉ ---
 // 1. Empêcher l'injection de scripts (XSS)
 function escapeHtml(text) {
@@ -2437,11 +2454,26 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
     }
 
     // 3. Envoi du HTML final
+    const visitAffiche = siteVisitCounter.getCount();
+    const simVisitAffiche =
+        typeof mountSimulatorVisitRoutes.getCount === "function"
+            ? mountSimulatorVisitRoutes.getCount()
+            : null;
     res.send(`
     <html lang="fr">
     <head><meta charset="UTF-8"><title>Admin STI2D</title></head>
     <body style="background:#121212; color:white; font-family:sans-serif; padding:20px;">
         <h1 style="margin-bottom:20px; border-bottom:2px solid #00d1ff; padding-bottom:10px;">👩‍🏫 Gestion Professeur</h1>
+
+        <div style="background:#1e293b; padding:14px 16px; border-radius:10px; border:1px solid #334155; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+            <div style="color:#e2e8f0; font-size:0.95rem;">
+                👥 Visites site : <b style="color:#00d1ff;">${visitAffiche}</b>
+                ${simVisitAffiche != null ? `· Simulateur : <b style="color:#38bdf8;">${simVisitAffiche}</b>` : ""}
+            </div>
+            <form action="/admin/reset-visits" method="POST" style="margin:0;" onsubmit="return confirm('Remettre les compteurs de visites (site + simulateur) à 0 ?');">
+                <button type="submit" style="background:#ef4444; color:white; border:none; padding:10px 16px; border-radius:5px; font-weight:bold; cursor:pointer;">🔄 Remettre les visites à 0</button>
+            </form>
+        </div>
         
         <div style="background:#1e293b; padding:15px; border-radius:10px; border:1px solid #00d1ff; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
             <h2 style="margin:0; color:#00d1ff; font-size:1.2rem;">🧩 Générateur de QCM</h2>
@@ -3094,6 +3126,11 @@ app.post("/admin/restore-zip", authentificationProf, (req, res) => {
                 if (!raw) continue;
                 if (keepQuizzes && fileName === "quizzes.json") {
                     skipped.push("quizzes.json (conservé)");
+                    continue;
+                }
+                // Ne jamais réinjecter d’anciens compteurs via une sauvegarde.
+                if (fileName === "visits.json" || fileName === "simulator-visits.json") {
+                    skipped.push(`${fileName} (compteur conservé)`);
                     continue;
                 }
                 applyBackupJsonFile(fileName, parseJsonText(raw.toString("utf8")));

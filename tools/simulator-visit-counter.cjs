@@ -3,6 +3,9 @@
 const path = require("path");
 const { createGuardedVisitCounter } = require("./visit-counter-guard.cjs");
 
+/** @type {ReturnType<typeof createGuardedVisitCounter> | null} */
+let simulatorVisitCounter = null;
+
 /**
  * Compteur de visites du simulateur — anti-abus (cookie + IP).
  * GET  /api/simulator/counter      → lecture seule
@@ -18,9 +21,18 @@ function mountSimulatorVisitRoutes(app, repoRoot) {
         cooldownMs: 12 * 60 * 60 * 1000,
         cookieMaxAgeSec: 60 * 60 * 24,
     });
+    simulatorVisitCounter = counter;
 
     mountSimulatorVisitRoutes.reloadFromDisk = function reloadFromDisk() {
         return counter.reloadFromDisk();
+    };
+
+    mountSimulatorVisitRoutes.resetToZero = function resetToZero() {
+        return counter.resetToZero();
+    };
+
+    mountSimulatorVisitRoutes.getCount = function getCount() {
+        return counter.getCount();
     };
 
     app.get("/api/simulator/counter", (req, res) => {
