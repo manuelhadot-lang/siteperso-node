@@ -579,6 +579,76 @@ function buildTpUploadFilename(nom, prenom, ext) {
     return `${safeNom}_${safePrenom}_${date}${ext}`;
 }
 
+/** Préfixe des fichiers déposés pour un élève (NOM_Prenom_). */
+function studentUploadPrefix(nom, prenom) {
+    const safeNom = String(nom || "SANSNOM")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_") || "SANSNOM";
+    const safePrenom = String(prenom || "SANSPRENOM")
+        .trim()
+        .replace(/\s+/g, "_") || "SANSPRENOM";
+    return `${safeNom}_${safePrenom}_`;
+}
+
+/**
+ * Liste les fichiers TP associés à un élève (tous projets).
+ * @param {string} nom
+ * @param {string} prenom
+ * @returns {{ projet: string, file: string, size: number, mtime: Date }[]}
+ */
+function listFilesForEleve(nom, prenom) {
+    const prefix = studentUploadPrefix(nom, prenom).toUpperCase();
+    /** @type {{ projet: string, file: string, size: number, mtime: Date }[]} */
+    const out = [];
+    if (!fs.existsSync(dirUploads)) return out;
+    let projets = [];
+    try {
+        projets = fs.readdirSync(dirUploads);
+    } catch {
+        return out;
+    }
+    for (const projet of projets) {
+        if (projet.includes("..")) continue;
+        const dir = path.join(dirUploads, projet);
+        let stDir;
+        try {
+            stDir = fs.statSync(dir);
+        } catch {
+            continue;
+        }
+        if (!stDir.isDirectory()) continue;
+        let files = [];
+        try {
+            files = fs.readdirSync(dir);
+        } catch {
+            continue;
+        }
+        for (const file of files) {
+            if (!file || file.startsWith(".")) continue;
+            if (!String(file).toUpperCase().startsWith(prefix)) continue;
+            const full = path.join(dir, file);
+            try {
+                const st = fs.statSync(full);
+                if (!st.isFile()) continue;
+                out.push({ projet, file, size: st.size, mtime: st.mtime });
+            } catch {
+                /* ignore */
+            }
+        }
+    }
+    out.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    return out;
+}
+
+/** @param {number} bytes */
+function formatFileSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} o`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko`;
+    return `${(n / (1024 * 1024)).toFixed(2)} Mo`;
+}
+
 /**
  * Place une copie du fichier TP sous le nom d’un élève (compte dépôt).
  * @param {string} sourcePath
@@ -697,6 +767,16 @@ const BACKUP_JSON_FILES = [
     "simulator-visits.json",
 ];
 
+const { createGuardedVisitCounter } = require("./tools/visit-counter-guard.cjs");
+const siteVisitCounter = createGuardedVisitCounter({
+    filePath: path.join(__dirname, "visits.json"),
+    cookieName: "sti2d_visit",
+    cooldownMs: 12 * 60 * 60 * 1000,
+    cookieMaxAgeSec: 60 * 60 * 24,
+});
+// Force relecture après éventuelle remise à zéro du fichier sur disque.
+siteVisitCounter.reloadFromDisk();
+
 const BACKUP_ZIP_MAX_BYTES = 64 * 1024 * 1024; // 64 Mo — quizzes.json peut grossir
 
 const uploadBackupZip = multer({
@@ -765,8 +845,9 @@ function applyBackupJsonFile(fileName, parsed) {
     }
     if (fileName === "visits.json") {
         const n = parsed && typeof parsed === "object" ? Number(parsed.count) : NaN;
-        visitCount = Number.isFinite(n) ? n : 0;
-        writeJsonAtomic(fileName, { count: visitCount });
+        const next = Number.isFinite(n) ? n : 0;
+        writeJsonAtomic(fileName, { count: next });
+        siteVisitCounter.setCount(next);
         return;
     }
     if (fileName === "simulator-visits.json") {
@@ -2011,12 +2092,14 @@ app.get("/Simulateur/fiche-presentation.pdf", (req, res) => {
     res.download(fichePresentationPdf, "Simulateur-fiche-presentation.pdf");
 });
 
-// --- 5. COMPTEUR ---
-let visitCount = readJsonFileSafe("./visits.json", { count: 0 }).count || 0;
-app.get('/api/counter', (req, res) => {
-    visitCount++;
-    fs.writeFileSync('./visits.json', JSON.stringify({ count: visitCount }));
-    res.json({ count: visitCount });
+// --- 5. COMPTEUR (anti-abus : cookie + IP ; GET = lecture seule) ---
+app.get("/api/counter", (req, res) => {
+    res.json({ count: siteVisitCounter.getCount() });
+});
+
+app.post("/api/counter/hit", (req, res) => {
+    const result = siteVisitCounter.tryHit(req, res);
+    res.json(result);
 });
 
 // --- 6. AUTHENTIFICATION PROF ---
@@ -2326,6 +2409,9 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                         </form>
                     </span>`).join(' ')
                 : `<span style="color:#666;">Aucune note</span>`;
+
+            const nFichiers = listFilesForEleve(e.nom, e.prenom).length;
+            const depotHref = `/admin/eleve-depot?classe=${encodeURIComponent(classe)}&code=${encodeURIComponent(e.code)}`;
             
             htmlEleves += `
                 <tr
@@ -2337,8 +2423,9 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
                     <td style="padding:8px;">${escapeHtml(e.prenom)}</td>
                     <td style="padding:8px; text-align:center; font-family:monospace; color:#00d1ff;">${escapeHtml(e.code)}</td>
                     <td style="padding:8px;">${notesStr}</td>
-                    <td style="padding:8px; text-align:center;">
-                        <form action="/admin/supprimer-eleve" method="POST" onsubmit="return confirm('Supprimer définitivement cet élève ?');">
+                    <td style="padding:8px; text-align:center; white-space:nowrap;" onclick="event.stopPropagation();">
+                        <a href="${depotHref}" style="display:inline-block; background:#0ea5e9; color:white; text-decoration:none; padding:5px 10px; border-radius:3px; margin-right:6px;" title="Espace dépôt de l’élève (${nFichiers} fichier${nFichiers === 1 ? "" : "s"})">📁${nFichiers ? ` ${nFichiers}` : ""}</a>
+                        <form action="/admin/supprimer-eleve" method="POST" style="display:inline;" onsubmit="return confirm('Supprimer définitivement cet élève ?');">
                             <input type="hidden" name="classe" value="${classe}">
                             <input type="hidden" name="code" value="${e.code}">
                             <button type="submit" style="background:#ef4444; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;" title="Supprimer l'élève">🗑️</button>
@@ -2611,6 +2698,125 @@ app.get('/download-copie/:projet/:file', authentificationProf, (req, res) => {
         return res.status(403).send("Accès interdit.");
     }
     res.download(path.join(dirUploads, projet, file));
+});
+
+/** Espace dépôt d’un élève : liste des fichiers par projet. */
+app.get('/admin/eleve-depot', authentificationProf, (req, res) => {
+    const classe = String(req.query.classe || "").trim();
+    const code = String(req.query.code || "").trim();
+    const list = Array.isArray(baseEleves[classe]) ? baseEleves[classe] : [];
+    const eleve = list.find((e) => String(e?.code || "") === code);
+    if (!eleve) {
+        return res.status(404).send(
+            `<body style="background:#121212;color:#fff;font-family:sans-serif;padding:24px;">
+              <p>Élève introuvable.</p>
+              <a href="/espace-correction" style="color:#00d1ff;">← Retour</a>
+            </body>`
+        );
+    }
+
+    const files = listFilesForEleve(eleve.nom, eleve.prenom);
+    const byProjet = {};
+    for (const f of files) {
+        if (!byProjet[f.projet]) byProjet[f.projet] = [];
+        byProjet[f.projet].push(f);
+    }
+    const projetKeys = Object.keys(byProjet).sort((a, b) => a.localeCompare(b, "fr"));
+
+    const rowsHtml = projetKeys.length
+        ? projetKeys
+              .map((projet) => {
+                  const items = byProjet[projet]
+                      .map((f) => {
+                          const when = f.mtime.toLocaleString("fr-FR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                          });
+                          const dl = `/download-copie/${encodeURIComponent(projet)}/${encodeURIComponent(f.file)}`;
+                          return `<tr>
+                            <td style="padding:8px; font-family:monospace; word-break:break-all;">${escapeHtml(f.file)}</td>
+                            <td style="padding:8px; color:#94a3b8; white-space:nowrap;">${escapeHtml(formatFileSize(f.size))}</td>
+                            <td style="padding:8px; color:#94a3b8; white-space:nowrap;">${escapeHtml(when)}</td>
+                            <td style="padding:8px; text-align:right; white-space:nowrap;">
+                              <a href="${dl}" style="color:#00d1ff; text-decoration:none; margin-right:10px;">⬇ Télécharger</a>
+                              <form action="/admin/supprimer-copie" method="POST" style="display:inline;" onsubmit="return confirm('Supprimer ce fichier ?');">
+                                <input type="hidden" name="projet" value="${escapeHtmlAttr(projet)}">
+                                <input type="hidden" name="file" value="${escapeHtmlAttr(f.file)}">
+                                <input type="hidden" name="classe" value="${escapeHtmlAttr(classe)}">
+                                <input type="hidden" name="code" value="${escapeHtmlAttr(code)}">
+                                <button type="submit" style="background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;">🗑️</button>
+                              </form>
+                            </td>
+                          </tr>`;
+                      })
+                      .join("");
+                  return `<section style="margin-bottom:22px; background:#1e1e1e; border-radius:10px; padding:14px; border:1px solid #333;">
+                    <h2 style="margin:0 0 10px; color:#10b981; font-size:1.05rem;">📂 ${escapeHtml(projet)} <span style="color:#64748b; font-weight:normal; font-size:0.85rem;">(${byProjet[projet].length})</span></h2>
+                    <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+                      <thead>
+                        <tr style="background:#0f172a; color:#94a3b8; text-align:left;">
+                          <th style="padding:8px;">Fichier</th>
+                          <th style="padding:8px;">Taille</th>
+                          <th style="padding:8px;">Déposé le</th>
+                          <th style="padding:8px; text-align:right;">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>${items}</tbody>
+                    </table>
+                  </section>`;
+              })
+              .join("")
+        : `<p style="color:#94a3b8;">Aucun fichier déposé pour cet élève.</p>`;
+
+    res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Dépôt — ${escapeHtml(eleve.prenom)} ${escapeHtml(eleve.nom)}</title>
+</head>
+<body style="background:#121212; color:white; font-family:sans-serif; padding:24px; max-width:960px; margin:0 auto;">
+  <p style="margin:0 0 16px;"><a href="/espace-correction" style="color:#00d1ff; text-decoration:none;">← Retour Gestion Professeur</a></p>
+  <h1 style="margin:0 0 6px; border-bottom:2px solid #00d1ff; padding-bottom:10px;">📁 Espace dépôt élève</h1>
+  <p style="color:#94a3b8; margin:0 0 20px;">
+    <b style="color:#e2e8f0;">${escapeHtml(eleve.prenom)} ${escapeHtml(eleve.nom)}</b>
+    · classe <span style="color:#10b981;">${escapeHtml(classe)}</span>
+    · code <span style="font-family:monospace; color:#00d1ff;">${escapeHtml(eleve.code)}</span>
+    · <b>${files.length}</b> fichier${files.length === 1 ? "" : "s"}
+  </p>
+  ${rowsHtml}
+</body>
+</html>`);
+});
+
+app.post('/admin/supprimer-copie', authentificationProf, (req, res) => {
+    const projet = String(req.body?.projet || "");
+    const file = String(req.body?.file || "");
+    const classe = String(req.body?.classe || "").trim();
+    const code = String(req.body?.code || "").trim();
+    if (
+        !projet ||
+        !file ||
+        file.includes("..") ||
+        file.includes("/") ||
+        file.includes("\\") ||
+        projet.includes("..") ||
+        projet.includes("/") ||
+        projet.includes("\\")
+    ) {
+        return res.status(403).send("Accès interdit.");
+    }
+    const full = path.join(dirUploads, projet, file);
+    try {
+        if (fs.existsSync(full)) fs.unlinkSync(full);
+    } catch (err) {
+        console.warn("[admin] supprimer-copie:", err?.message || err);
+    }
+    if (classe && code) {
+        return res.redirect(
+            `/admin/eleve-depot?classe=${encodeURIComponent(classe)}&code=${encodeURIComponent(code)}`
+        );
+    }
+    res.redirect("/espace-correction");
 });
 
 // Étiquettes A4 à découper : codes d’accès élèves

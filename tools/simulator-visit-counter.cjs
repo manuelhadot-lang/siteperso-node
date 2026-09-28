@@ -1,31 +1,35 @@
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
-const { readJsonFileSafe } = require("./read-json-safe.cjs");
+const { createGuardedVisitCounter } = require("./visit-counter-guard.cjs");
 
 /**
- * Compteur de visites du simulateur — GET /api/simulator/counter
+ * Compteur de visites du simulateur — anti-abus (cookie + IP).
+ * GET  /api/simulator/counter      → lecture seule
+ * POST /api/simulator/counter/hit  → +1 si autorisé
  * @param {import("express").Express} app
  * @param {string} repoRoot
  */
 function mountSimulatorVisitRoutes(app, repoRoot) {
     const statsPath = path.join(repoRoot, "simulator-visits.json");
-    let count = readJsonFileSafe(statsPath, { count: 0 }).count || 0;
+    const counter = createGuardedVisitCounter({
+        filePath: statsPath,
+        cookieName: "sti2d_sim_visit",
+        cooldownMs: 12 * 60 * 60 * 1000,
+        cookieMaxAgeSec: 60 * 60 * 24,
+    });
 
     mountSimulatorVisitRoutes.reloadFromDisk = function reloadFromDisk() {
-        count = readJsonFileSafe(statsPath, { count: 0 }).count || 0;
-        return count;
+        return counter.reloadFromDisk();
     };
 
     app.get("/api/simulator/counter", (req, res) => {
-        count++;
-        try {
-            fs.writeFileSync(statsPath, JSON.stringify({ count }));
-        } catch (err) {
-            console.warn("[simulateur] écriture compteur visites:", err?.message || err);
-        }
-        res.json({ count });
+        res.json({ count: counter.getCount() });
+    });
+
+    app.post("/api/simulator/counter/hit", (req, res) => {
+        const result = counter.tryHit(req, res);
+        res.json(result);
     });
 }
 

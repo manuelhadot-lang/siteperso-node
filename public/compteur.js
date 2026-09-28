@@ -1,15 +1,27 @@
+/** Compteur de visites du site — 1 hit max / 12 h (serveur), affichage unique. */
 async function chargerCompteur() {
     try {
-        const response = await fetch('/api/counter');
-        const data = await response.json();
-        const element = document.getElementById('visit-count');
-        if (element) {
-            element.innerText = data.count;
-        }
+        const hit = await fetch("/api/counter/hit", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        });
+        const data = hit.ok ? await hit.json() : null;
+        const count = data && typeof data.count === "number"
+            ? data.count
+            : (await (await fetch("/api/counter")).json()).count;
+
+        const top = document.getElementById("visit-number");
+        const bottom = document.getElementById("visit-count");
+        if (top) top.innerText = String(count);
+        if (bottom) bottom.innerText = String(count);
     } catch (err) {
         console.error("Erreur compteur:", err);
     }
 }
 
-// On lance le chargement dès que la page s'ouvre
-window.onload = chargerCompteur;
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", chargerCompteur);
+} else {
+    chargerCompteur();
+}

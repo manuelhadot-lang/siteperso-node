@@ -91,23 +91,7 @@
     </div>
 </div>
 
-<script>
-async function updateCounter() {
-    try {
-        const response = await fetch('/api/counter');
-        const data = await response.json();
-        // Met à jour le compteur du haut
-        if(document.getElementById('visit-number')) 
-            document.getElementById('visit-number').innerText = data.count;
-        // Met à jour le compteur du bas
-        if(document.getElementById('visit-count')) 
-            document.getElementById('visit-count').innerText = data.count;
-    } catch (error) {
-        console.error("Erreur compteur:", error);
-    }
-}
-updateCounter();
-</script>
+<script src="compteur.js"></script>
 
 
 <footer style="margin-top: 50px; text-align: center;">
@@ -115,7 +99,6 @@ updateCounter();
     <div style="text-align: center; color: #00d1ff; font-family: 'Orbitron', sans-serif; padding: 10px; border: 1px solid #333; display: inline-block;">
     VISITES : <span id="visit-count">...</span>
     </div>
-    <script src="compteur.js"></script>
     
     <script src="footer.js"></script>
 </footer>
