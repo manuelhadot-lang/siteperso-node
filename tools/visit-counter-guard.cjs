@@ -37,12 +37,15 @@ function isLikelyBot(ua) {
 }
 
 /**
- * Compteur anti-abus : 1 hit / navigateur (cookie) et / IP sur une fenêtre donnée.
+ * Compteur anti-abus :
+ * - 1 hit / navigateur (cookie) sur cookieMaxAge
+ * - plafond par IP (pas 1 seul hit : un lycée partage souvent la même IP)
  * @param {{
  *   filePath: string,
  *   cookieName: string,
  *   cooldownMs?: number,
  *   cookieMaxAgeSec?: number,
+ *   maxHitsPerIp?: number,
  * }} opts
  */
 function createGuardedVisitCounter(opts) {
@@ -50,7 +53,8 @@ function createGuardedVisitCounter(opts) {
     const cookieName = opts.cookieName;
     const cooldownMs = opts.cooldownMs ?? 12 * 60 * 60 * 1000; // 12 h
     const cookieMaxAgeSec = opts.cookieMaxAgeSec ?? 60 * 60 * 24; // 24 h
-    /** @type {Map<string, number>} */
+    const maxHitsPerIp = Math.max(1, opts.maxHitsPerIp ?? 80);
+    /** @type {Map<string, number[]>} */
     const hitsByIp = new Map();
     let count = Number(readJsonFileSafe(filePath, { count: 0 }).count) || 0;
     let pruneAt = Date.now() + 60 * 60 * 1000;
@@ -86,9 +90,17 @@ function createGuardedVisitCounter(opts) {
     function prune(now) {
         if (now < pruneAt) return;
         pruneAt = now + 60 * 60 * 1000;
-        for (const [ip, t] of hitsByIp) {
-            if (now - t > cooldownMs) hitsByIp.delete(ip);
+        for (const [ip, times] of hitsByIp) {
+            const kept = times.filter((t) => now - t < cooldownMs);
+            if (kept.length === 0) hitsByIp.delete(ip);
+            else hitsByIp.set(ip, kept);
         }
+    }
+
+    function cookieHeader() {
+        return `${cookieName}=1; Path=/; Max-Age=${cookieMaxAgeSec}; HttpOnly; SameSite=Lax${
+            process.env.NODE_ENV === "production" ? "; Secure" : ""
+        }`;
     }
 
     /**
@@ -109,32 +121,18 @@ function createGuardedVisitCounter(opts) {
             return { count, counted: false };
         }
 
-        // Requêtes hors navigateur (pas d’Accept HTML typique) : souvent des scripts.
-        const accept = String(req.headers.accept || "");
-        if (accept && !/text\/html|application\/json|\*\//i.test(accept) && !accept.includes("*/*")) {
-            // leave as soft check — fetch() sends */* so OK
-        }
-
         const ip = clientIp(req);
-        const last = hitsByIp.get(ip) || 0;
-        if (now - last < cooldownMs) {
-            // Même IP récente : cookie pour éviter les retries, pas d’incrément.
-            res.append(
-                "Set-Cookie",
-                `${cookieName}=1; Path=/; Max-Age=${cookieMaxAgeSec}; HttpOnly; SameSite=Lax`
-            );
+        const times = (hitsByIp.get(ip) || []).filter((t) => now - t < cooldownMs);
+        if (times.length >= maxHitsPerIp) {
+            res.append("Set-Cookie", cookieHeader());
             return { count, counted: false };
         }
 
-        hitsByIp.set(ip, now);
+        times.push(now);
+        hitsByIp.set(ip, times);
         count += 1;
         persist();
-        res.append(
-            "Set-Cookie",
-            `${cookieName}=1; Path=/; Max-Age=${cookieMaxAgeSec}; HttpOnly; SameSite=Lax${
-                process.env.NODE_ENV === "production" ? "; Secure" : ""
-            }`
-        );
+        res.append("Set-Cookie", cookieHeader());
         return { count, counted: true };
     }
 

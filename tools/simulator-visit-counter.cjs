@@ -20,6 +20,7 @@ function mountSimulatorVisitRoutes(app, repoRoot) {
         cookieName: "sti2d_sim_visit",
         cooldownMs: 12 * 60 * 60 * 1000,
         cookieMaxAgeSec: 60 * 60 * 24,
+        maxHitsPerIp: 80,
     });
     simulatorVisitCounter = counter;
 

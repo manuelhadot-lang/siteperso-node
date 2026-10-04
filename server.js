@@ -855,6 +855,7 @@ const siteVisitCounter = createGuardedVisitCounter({
     cookieName: "sti2d_visit",
     cooldownMs: 12 * 60 * 60 * 1000,
     cookieMaxAgeSec: 60 * 60 * 24,
+    maxHitsPerIp: 80,
 });
 // Force relecture après éventuelle remise à zéro du fichier sur disque.
 siteVisitCounter.reloadFromDisk();
