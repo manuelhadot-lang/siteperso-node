@@ -403,9 +403,11 @@ const ADMIN_PASS = process.env.ADMIN_PASS;
 // Sur Render, monter un disque persistant et définir DATA_DIR=/var/data
 // pour conserver dépôts élèves + JSON runtime entre les déploiements.
 const REPO_ROOT = __dirname;
+/** Render pose RENDER=true. Sans DATA_DIR, on écrit sur le disque /var/data s’il est monté. */
+const ON_RENDER = String(process.env.RENDER || "").toLowerCase() === "true";
 const DATA_DIR = process.env.DATA_DIR
     ? path.resolve(process.env.DATA_DIR)
-    : REPO_ROOT;
+    : (ON_RENDER ? "/var/data" : REPO_ROOT);
 const USE_PERSISTENT_DATA = path.resolve(DATA_DIR) !== path.resolve(REPO_ROOT);
 
 function ensureDirSync(dirPath) {
