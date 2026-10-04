@@ -19,7 +19,7 @@ services:
     disk:
       name: siteperso-data
       mountPath: /var/data
-      sizeGB: 2
+      sizeGB: 10
     envVars:
       - key: DATA_DIR
         value: /var/data

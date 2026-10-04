@@ -416,18 +416,22 @@ function dataFile(fileName) {
     return path.join(DATA_DIR, fileName);
 }
 
-/** Copie récursive (fichiers + dossiers) — seed initial du disque persistant. */
-function copyRecursiveSync(src, dest) {
+/**
+ * Copie récursive. `overwrite` : true = remplace, false = n’ajoute que les fichiers absents
+ * (ne pas écraser un dépôt élève plus récent déjà sur le disque).
+ */
+function copyRecursiveSync(src, dest, overwrite = true) {
     if (!fs.existsSync(src)) return;
     const st = fs.statSync(src);
     if (st.isDirectory()) {
         ensureDirSync(dest);
         for (const name of fs.readdirSync(src)) {
             if (name === "." || name === "..") continue;
-            copyRecursiveSync(path.join(src, name), path.join(dest, name));
+            copyRecursiveSync(path.join(src, name), path.join(dest, name), overwrite);
         }
         return;
     }
+    if (!overwrite && fs.existsSync(dest)) return;
     ensureDirSync(path.dirname(dest));
     fs.copyFileSync(src, dest);
 }
@@ -445,10 +449,9 @@ function seedDataDirFromRepo(relDir, repoFallbackRel) {
     const dest = path.join(DATA_DIR, relDir);
     ensureDirSync(dest);
     if (!USE_PERSISTENT_DATA) return;
-    const existing = fs.readdirSync(dest).filter((f) => !f.startsWith("."));
-    if (existing.length > 0) return;
     const src = path.join(REPO_ROOT, repoFallbackRel || relDir);
-    copyRecursiveSync(src, dest);
+    // Fusion : recopie les fichiers manquants du dépôt Git vers le disque, sans écraser.
+    copyRecursiveSync(src, dest, false);
 }
 
 ensureDirSync(DATA_DIR);
@@ -858,7 +861,7 @@ if (siteVisitCounter.getCount() === 0) {
     siteVisitCounter.resetToZero();
 }
 
-const BACKUP_ZIP_MAX_BYTES = 256 * 1024 * 1024; // 256 Mo — JSON + dépôts élèves
+const BACKUP_ZIP_MAX_BYTES = 512 * 1024 * 1024; // 512 Mo — JSON + dépôts élèves
 
 const uploadBackupZip = multer({
     storage: multer.memoryStorage(),
@@ -877,6 +880,59 @@ function backupZipUploadErrorMessage(err) {
     }
     return err.message || "Upload invalide.";
 }
+
+function pruneDatedDiskBackups(backupsRoot, keep = 5) {
+    if (!fs.existsSync(backupsRoot)) return;
+    const dirs = fs
+        .readdirSync(backupsRoot)
+        .filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n))
+        .sort();
+    while (dirs.length > keep) {
+        const old = dirs.shift();
+        fs.rmSync(path.join(backupsRoot, old), { recursive: true, force: true });
+    }
+}
+
+/** Miroir des dépôts + JSON sur le disque persistant (survît aux déploiements). */
+function backupPersistentData(reason) {
+    if (!USE_PERSISTENT_DATA) return;
+    try {
+        const backupsRoot = path.join(DATA_DIR, "backups");
+        const latest = path.join(backupsRoot, "latest");
+        ensureDirSync(latest);
+        copyRecursiveSync(dirUploads, path.join(latest, "upload-tp"), true);
+        copyRecursiveSync(dirQuizAssets, path.join(latest, "quiz-assets"), true);
+        for (const name of BACKUP_JSON_FILES) {
+            const src = dataFile(name);
+            if (fs.existsSync(src)) fs.copyFileSync(src, path.join(latest, name));
+        }
+        const stamp = new Date().toISOString().slice(0, 10);
+        const dated = path.join(backupsRoot, stamp);
+        if (!fs.existsSync(dated)) {
+            copyRecursiveSync(latest, dated, true);
+        }
+        pruneDatedDiskBackups(backupsRoot, 5);
+        console.log(`[data] sauvegarde disque (${reason}) → ${latest}`);
+    } catch (err) {
+        console.warn("[data] sauvegarde disque échouée:", err?.message || err);
+    }
+}
+
+function backupUploadedTpFile(filePath) {
+    if (!USE_PERSISTENT_DATA || !filePath) return;
+    try {
+        const rel = path.relative(dirUploads, filePath);
+        if (!rel || rel.startsWith("..")) return;
+        const dest = path.join(DATA_DIR, "backups", "latest", "upload-tp", rel);
+        ensureDirSync(path.dirname(dest));
+        fs.copyFileSync(filePath, dest);
+    } catch (err) {
+        console.warn("[data] miroir dépôt:", err?.message || err);
+    }
+}
+
+backupPersistentData("démarrage");
+setInterval(() => backupPersistentData("périodique"), 6 * 60 * 60 * 1000).unref();
 
 function writeJsonAtomic(fileName, value) {
     const target = dataFile(fileName);
@@ -2360,7 +2416,8 @@ app.post('/upload-tp', upload.single('tp_file'), (req, res) => {
 
         // Compte élève 2 (binôme) : copie du même fichier
         if (binome) {
-            placeTpCopyForEleve(req.file.path, dir, binome, ext);
+            const dest2 = placeTpCopyForEleve(req.file.path, dir, binome, ext);
+            backupUploadedTpFile(dest2);
         }
     } catch (err) {
         console.warn("[upload-tp] dépôt fichier(s) :", err?.message || err);
@@ -2369,6 +2426,8 @@ app.post('/upload-tp', upload.single('tp_file'), (req, res) => {
             "<script>alert('Erreur lors de l’enregistrement du fichier.'); window.history.back();</script>"
         );
     }
+
+    backupUploadedTpFile(req.file.path);
 
     const qui = binome
         ? `${escapeHtml(primary.prenom)} ${escapeHtml(primary.nom)} &amp; ${escapeHtml(binome.prenom)} ${escapeHtml(binome.nom)}`
