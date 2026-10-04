@@ -5,10 +5,23 @@
 #   ADMIN_USER = ton identifiant (HTTP Basic)
 #   ADMIN_PASS = ton mot de passe
 # Ces variables ne passent pas par le Dockerfile ni par npm ; le conteneur les lit au runtime.
+#
+# Disque persistant : conserve upload-tp/ (dépôts élèves), quiz-assets et les JSON
+# runtime (élèves, notes, plannings…) entre les déploiements / upgrades.
+# Requis : plan payant (starter ou plus) — le plan free n’autorise pas les disques.
 
 services:
   - type: web
     name: siteperso-docker
     env: docker
-    plan: free
+    plan: starter
     dockerfilePath: ./Dockerfile
+    disk:
+      name: siteperso-data
+      mountPath: /var/data
+      sizeGB: 2
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: NODE_ENV
+        value: production

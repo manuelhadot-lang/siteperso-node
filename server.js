@@ -21,7 +21,10 @@ const {
 } = require("./tools/ngspice-bundle.cjs");
 const { mountArduinoRoutes } = require("./tools/arduino-routes.cjs");
 const { parseJsonText, readJsonFileSafe } = require("./tools/read-json-safe.cjs");
-const { extractAllowedFilesFromZip } = require("./tools/unzip-backup.cjs");
+const {
+    extractAllowedFilesFromZip,
+    extractPrefixTreeFromZip,
+} = require("./tools/unzip-backup.cjs");
 
 const XSPICE_DIGITAL_CM_PLACEHOLDER = "__XSPICE_DIGITAL_CM__";
 
@@ -397,11 +400,86 @@ const ADMIN_USER = process.env.ADMIN_USER;
 const ADMIN_PASS = process.env.ADMIN_PASS;
 
 // --- 1. CONFIGURATION DES CHEMINS ---
-const dirUploads = path.join(__dirname, 'upload-tp');
-const dirDocs = path.join(__dirname, 'doc'); 
+// Sur Render, monter un disque persistant et définir DATA_DIR=/var/data
+// pour conserver dépôts élèves + JSON runtime entre les déploiements.
+const REPO_ROOT = __dirname;
+const DATA_DIR = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : REPO_ROOT;
+const USE_PERSISTENT_DATA = path.resolve(DATA_DIR) !== path.resolve(REPO_ROOT);
+
+function ensureDirSync(dirPath) {
+    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function dataFile(fileName) {
+    return path.join(DATA_DIR, fileName);
+}
+
+/** Copie récursive (fichiers + dossiers) — seed initial du disque persistant. */
+function copyRecursiveSync(src, dest) {
+    if (!fs.existsSync(src)) return;
+    const st = fs.statSync(src);
+    if (st.isDirectory()) {
+        ensureDirSync(dest);
+        for (const name of fs.readdirSync(src)) {
+            if (name === "." || name === "..") continue;
+            copyRecursiveSync(path.join(src, name), path.join(dest, name));
+        }
+        return;
+    }
+    ensureDirSync(path.dirname(dest));
+    fs.copyFileSync(src, dest);
+}
+
+function seedDataFileFromRepo(fileName) {
+    const dest = dataFile(fileName);
+    if (fs.existsSync(dest)) return;
+    const src = path.join(REPO_ROOT, fileName);
+    if (!USE_PERSISTENT_DATA || !fs.existsSync(src)) return;
+    ensureDirSync(path.dirname(dest));
+    fs.copyFileSync(src, dest);
+}
+
+function seedDataDirFromRepo(relDir, repoFallbackRel) {
+    const dest = path.join(DATA_DIR, relDir);
+    ensureDirSync(dest);
+    if (!USE_PERSISTENT_DATA) return;
+    const existing = fs.readdirSync(dest).filter((f) => !f.startsWith("."));
+    if (existing.length > 0) return;
+    const src = path.join(REPO_ROOT, repoFallbackRel || relDir);
+    copyRecursiveSync(src, dest);
+}
+
+ensureDirSync(DATA_DIR);
+
+const dirUploads = USE_PERSISTENT_DATA
+    ? path.join(DATA_DIR, "upload-tp")
+    : path.join(REPO_ROOT, "upload-tp");
+const dirDocs = path.join(REPO_ROOT, "doc");
 const mesSousDossiersDocs = ["Digicode", "Robo_Cytron", "RobotTriPostal", "StationMeteoConnectee", "UltraSon", "Veilleur_intelligent", "documents", "3D"];
-const dirQuizAssets = path.join(__dirname, 'public', 'quiz-assets');
-const dirSimulateur = path.join(__dirname, 'Simulateur');
+const dirQuizAssets = USE_PERSISTENT_DATA
+    ? path.join(DATA_DIR, "quiz-assets")
+    : path.join(REPO_ROOT, "public", "quiz-assets");
+const dirSimulateur = path.join(REPO_ROOT, "Simulateur");
+
+seedDataDirFromRepo("upload-tp", "upload-tp");
+seedDataDirFromRepo("quiz-assets", path.join("public", "quiz-assets"));
+for (const name of [
+    "eleves.json",
+    "quizzes.json",
+    "planning_projets.json",
+    "planning_docs.json",
+    "chat_messages.json",
+    "visits.json",
+    "simulator-visits.json",
+]) {
+    seedDataFileFromRepo(name);
+}
+console.log(
+    `[data] DATA_DIR=${DATA_DIR}` +
+        (USE_PERSISTENT_DATA ? " (disque persistant)" : " (répertoire projet — local)")
+);
 const SIM_UI_VERSION = 'empty-sketch1';
 const ngspiceDeckModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "spice-netlist-v2.mjs")).href;
 const ngspiceResultParserModuleUrl = pathToFileURL(path.join(__dirname, "Simulateur", "Engine", "v2", "result-parser.mjs")).href;
@@ -493,7 +571,7 @@ function isWin32Platform() {
 }
 
 // --- CHARGEMENT DES ELEVES ---
-let baseEleves = readJsonFileSafe("./eleves.json", {});
+let baseEleves = readJsonFileSafe(dataFile("eleves.json"), {});
 
 /** @param {unknown} code */
 function normalizeStudentCode(code) {
@@ -689,12 +767,11 @@ app.get('/api/check-student-name', (req, res) => {
 });
 
 // Création automatique
-if (!fs.existsSync(dirUploads)) fs.mkdirSync(dirUploads);
-if (!fs.existsSync(dirDocs)) fs.mkdirSync(dirDocs);
-if (!fs.existsSync(dirQuizAssets)) fs.mkdirSync(dirQuizAssets, { recursive: true });
+ensureDirSync(dirUploads);
+ensureDirSync(dirDocs);
+ensureDirSync(dirQuizAssets);
 mesSousDossiersDocs.forEach(sd => {
-    const p = path.join(dirDocs, sd);
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+    ensureDirSync(path.join(dirDocs, sd));
 });
 
 // Liste de tes classes (Modifie ces noms selon tes besoins)
@@ -728,11 +805,11 @@ function ensurePlanningProjetsDefaults(persist = true) {
     return changed;
 }
 
-let planningProjets = readJsonFileSafe("./planning_projets.json", { ...DEFAULT_PLANNING_PROJETS });
+let planningProjets = readJsonFileSafe(dataFile("planning_projets.json"), { ...DEFAULT_PLANNING_PROJETS });
 ensurePlanningProjetsDefaults(true);
-let planningDocs = readJsonFileSafe("./planning_docs.json", {});
-let quizzes = readJsonFileSafe("./quizzes.json", {});
-let chatMessages = readJsonFileSafe("./chat_messages.json", []);
+let planningDocs = readJsonFileSafe(dataFile("planning_docs.json"), {});
+let quizzes = readJsonFileSafe(dataFile("quizzes.json"), {});
+let chatMessages = readJsonFileSafe(dataFile("chat_messages.json"), []);
 
 // --- 3. CONFIGURATION MULTER ---
 const storage = multer.diskStorage({
@@ -769,7 +846,7 @@ const BACKUP_JSON_FILES = [
 
 const { createGuardedVisitCounter } = require("./tools/visit-counter-guard.cjs");
 const siteVisitCounter = createGuardedVisitCounter({
-    filePath: path.join(__dirname, "visits.json"),
+    filePath: dataFile("visits.json"),
     cookieName: "sti2d_visit",
     cooldownMs: 12 * 60 * 60 * 1000,
     cookieMaxAgeSec: 60 * 60 * 24,
@@ -781,7 +858,7 @@ if (siteVisitCounter.getCount() === 0) {
     siteVisitCounter.resetToZero();
 }
 
-const BACKUP_ZIP_MAX_BYTES = 64 * 1024 * 1024; // 64 Mo — quizzes.json peut grossir
+const BACKUP_ZIP_MAX_BYTES = 256 * 1024 * 1024; // 256 Mo — JSON + dépôts élèves
 
 const uploadBackupZip = multer({
     storage: multer.memoryStorage(),
@@ -802,7 +879,9 @@ function backupZipUploadErrorMessage(err) {
 }
 
 function writeJsonAtomic(fileName, value) {
-    fs.writeFileSync(path.join(__dirname, fileName), JSON.stringify(value, null, 2));
+    const target = dataFile(fileName);
+    ensureDirSync(path.dirname(target));
+    fs.writeFileSync(target, JSON.stringify(value, null, 2));
 }
 
 function applyBackupJsonFile(fileName, parsed) {
@@ -902,6 +981,8 @@ app.get('/favicon.ico', (req, res) => {
     res.type('image/svg+xml');
     res.sendFile(path.join(__dirname, 'public', 'favicon.svg'));
 });
+// Images quiz persistantes (DATA_DIR) — avant le static public pour primer.
+app.use("/quiz-assets", express.static(dirQuizAssets));
 app.use(express.static('public'));
 app.get('/Simulateur/__ui', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -2081,7 +2162,7 @@ app.post("/api/simulate", async (req, res) => {
 mountArduinoRoutes(app);
 
 const { mountSimulatorVisitRoutes } = require("./tools/simulator-visit-counter.cjs");
-mountSimulatorVisitRoutes(app, __dirname);
+mountSimulatorVisitRoutes(app, DATA_DIR);
 
 const { mountSimulatorExamplesRoutes } = require("./tools/simulator-examples-api.cjs");
 mountSimulatorExamplesRoutes(app, __dirname);
@@ -2316,7 +2397,7 @@ app.post('/api/chat', (req, res) => {
         const msg = { id: Date.now(), time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), author: escapeHtml(author), text: escapeHtml(text), isProf: !!isProf };
         chatMessages.push(msg);
         if(chatMessages.length > 200) chatMessages.shift(); // Garde l'historique propre
-        fs.writeFileSync('./chat_messages.json', JSON.stringify(chatMessages));
+        writeJsonAtomic("chat_messages.json", chatMessages);
         res.json({success: true});
     } else res.status(400).json({error: "Données manquantes"});
 });
@@ -2719,7 +2800,7 @@ app.post('/update-dates', authentificationProf, (req, res) => {
 
 app.post('/update-docs-dates', authentificationProf, (req, res) => {
     planningDocs = Object.assign(planningDocs, req.body);
-    fs.writeFileSync('./planning_docs.json', JSON.stringify(planningDocs));
+    writeJsonAtomic("planning_docs.json", planningDocs);
     res.send("<script>alert('Dates Documents sauvegardées !'); window.location='/espace-correction';</script>");
 });
 
@@ -3100,8 +3181,17 @@ app.get('/admin/backup-zip', authentificationProf, (req, res) => {
     archive.pipe(res);
 
     BACKUP_JSON_FILES.forEach(file => {
-        if (fs.existsSync(file)) archive.file(file, { name: file });
+        const full = dataFile(file);
+        if (fs.existsSync(full)) archive.file(full, { name: file });
     });
+
+    // Dépôts élèves (upload-tp) — essentiels pour ne rien perdre hors disque Render.
+    if (fs.existsSync(dirUploads)) {
+        archive.directory(dirUploads, "upload-tp");
+    }
+    if (fs.existsSync(dirQuizAssets)) {
+        archive.directory(dirQuizAssets, "quiz-assets");
+    }
 
     archive.finalize();
 });
@@ -3136,6 +3226,18 @@ app.post("/admin/restore-zip", authentificationProf, (req, res) => {
                 applyBackupJsonFile(fileName, parseJsonText(raw.toString("utf8")));
                 restored.push(fileName);
             }
+            ensureDirSync(dirUploads);
+            ensureDirSync(dirQuizAssets);
+            const nUploads = extractPrefixTreeFromZip(req.file.buffer, "upload-tp", dirUploads);
+            const nQuizAssets = extractPrefixTreeFromZip(
+                req.file.buffer,
+                "quiz-assets",
+                dirQuizAssets
+            );
+            if (nUploads > 0) restored.push(`upload-tp (${nUploads} fichier${nUploads > 1 ? "s" : ""})`);
+            if (nQuizAssets > 0) {
+                restored.push(`quiz-assets (${nQuizAssets} fichier${nQuizAssets > 1 ? "s" : ""})`);
+            }
             if (restored.length === 0 && skipped.length === 0) {
                 return res.send(adminAlertRedirect("Aucun fichier de sauvegarde reconnu dans ce ZIP."));
             }
@@ -3165,7 +3267,7 @@ app.post('/api/upload-asset', authentificationProf, uploadQuiz.single('file'), (
 });
 
 function writeQuizzesToDisk() {
-    fs.writeFileSync("./quizzes.json", JSON.stringify(quizzes, null, 2));
+    writeJsonAtomic("quizzes.json", quizzes);
 }
 
 function isProfAuthorized(req) {
@@ -3505,7 +3607,7 @@ app.post('/admin/ajouter-eleve', authentificationProf, (req, res) => {
     if (!baseEleves[classe]) baseEleves[classe] = [];
     // On nettoie les entrées au cas où (même si escapeHtml est utilisé à l'affichage)
     baseEleves[classe].push({ nom: nom.trim(), prenom: prenom.trim(), code: code.trim(), notes: {} });
-    fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
+    writeJsonAtomic("eleves.json", baseEleves);
     res.redirect('/espace-correction');
 });
 
@@ -3519,7 +3621,7 @@ app.post('/admin/supprimer-eleve', authentificationProf, (req, res) => {
         // Si la classe est vide après suppression, on peut choisir de la supprimer aussi
         if (baseEleves[classe].length === 0) delete baseEleves[classe];
         
-        fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
+        writeJsonAtomic("eleves.json", baseEleves);
     }
     res.redirect('/espace-correction');
 });
@@ -3558,7 +3660,7 @@ app.post('/admin/modifier-eleve', authentificationProf, (req, res) => {
     eleve.prenom = nextPrenom;
     eleve.code = nextCode;
 
-    fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
+    writeJsonAtomic("eleves.json", baseEleves);
     res.redirect('/espace-correction');
 });
 
@@ -3569,7 +3671,7 @@ app.post('/admin/supprimer-note', authentificationProf, (req, res) => {
         let eleve = baseEleves[classe].find(e => e.code === code);
         if (eleve && eleve.notes && eleve.notes[quiz]) {
             delete eleve.notes[quiz];
-            fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
+            writeJsonAtomic("eleves.json", baseEleves);
         }
     }
     res.redirect('/espace-correction');
@@ -3590,7 +3692,7 @@ app.post('/api/save-note', (req, res) => {
     }
 
     if (trouve) {
-        fs.writeFileSync('./eleves.json', JSON.stringify(baseEleves, null, 2));
+        writeJsonAtomic("eleves.json", baseEleves);
         res.json({ success: true });
     } else {
         res.status(404).json({ error: "Code élève inconnu" });
