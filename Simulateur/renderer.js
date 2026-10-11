@@ -1901,7 +1901,8 @@ function drawComponentBody(comp) {
             rCtx.font = 'bold 11px Arial';
             rCtx.textAlign = 'left';
             rCtx.textBaseline = 'middle';
-            rCtx.fillText(`${Math.round(pos)}%`, 0, 0);
+            // Affichage inversé (100 - pos) : bas = 0 %, haut = 100 % — sans changer le modèle électrique.
+            rCtx.fillText(`${Math.round(100 - pos)}%`, 0, 0);
         });
         drawLabels(comp.label, comp.value || '10k', rot);
     }

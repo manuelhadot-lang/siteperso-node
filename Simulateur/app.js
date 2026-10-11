@@ -960,9 +960,11 @@ canvas.addEventListener('dblclick', async (e) => {
             if (v) {
                 if (!live) saveState();
                 target.value = v.trim();
-                const p = await showValuePrompt('Position du curseur (0–100 %) :', String(target.position ?? 50));
+                const shownPct = 100 - (target.position ?? 50);
+                const p = await showValuePrompt('Position du curseur (0–100 %) :', String(shownPct));
                 if (p !== null && p.trim() !== '' && !isNaN(parseFloat(p))) {
-                    target.position = Math.min(100, Math.max(0, parseFloat(p)));
+                    // Saisie = % affiché ; stockage interne = 100 - affichage.
+                    target.position = Math.min(100, Math.max(0, 100 - parseFloat(p)));
                 }
                 draw();
                 if (live) requestLiveSimulation();
