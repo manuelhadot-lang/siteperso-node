@@ -491,7 +491,13 @@ export function componentHitTest(comp, mx, my) {
     if (comp.type === 'nmos') return dx < 44 && dy < 62;
     if (comp.type === 'switch_spdt') return dx < 38 && dy < 38;
     if (comp.type === 'push_button') return dx < 34 && dy < 26;
-    if (comp.type === 'potentiometer') return dx < 34 && dy < 38;
+    // Zone élargie vers le bas (écran) pour les boutons ▲ / ▼
+    if (comp.type === 'potentiometer') {
+        const sx = mx - comp.x;
+        const sy = my - comp.y;
+        if (Math.abs(sx) <= 14 && sy >= 12 && sy <= 44) return true;
+        return dx < 34 && dy < 38;
+    }
     if (comp.type === 'ldr') return dx < 42 && dy < 58;
     return dx < 30 && dy < 30;
 }
@@ -506,13 +512,27 @@ export function compLocalCoords(comp, mx, my) {
     };
 }
 
-/** Clic sur ◀ / ▶ du potentiomètre. */
+/**
+ * Clic sur ▲ / ▼ du potentiomètre.
+ * Zones en coordonnées écran (par rapport au centre) : la flèche du bas
+ * diminue toujours la valeur, quelle que soit la rotation du composant.
+ */
 export function potentiometerControlHit(comp, mx, my) {
     if (comp.type !== 'potentiometer') return null;
-    const { x, y } = compLocalCoords(comp, mx, my);
-    if (x >= -16 && x <= -2 && y >= 11 && y <= 25) return 'dec';
-    if (x >= 2 && x <= 16 && y >= 11 && y <= 25) return 'inc';
+    const sx = mx - comp.x;
+    const sy = my - comp.y;
+    // ▲ (haut) → inc ; ▼ (bas) → dec — même empilement après rotation
+    if (Math.abs(sx) <= 12 && sy >= 14 && sy <= 26) return 'inc';
+    if (Math.abs(sx) <= 12 && sy >= 28 && sy <= 42) return 'dec';
     return null;
+}
+
+/** Offset local pour dessiner un point situé en (sx,sy) écran sous rotation du composant. */
+export function potScreenOffsetToLocal(rotationDeg, sx, sy) {
+    const rad = (rotationDeg || 0) * Math.PI / 180;
+    const c = Math.cos(rad);
+    const s = Math.sin(rad);
+    return { x: sx * c + sy * s, y: -sx * s + sy * c };
 }
 
 /** Clic sur ◀ / ▶ de la photorésistance (luminosité). */
