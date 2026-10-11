@@ -1771,11 +1771,14 @@ export function buildNetlistFromGraphicalState(state, opts = {}) {
             const n1 = nodeFor(`${c.id}#1`);
             const n2 = nodeFor(`${c.id}#2`);
             const total = Math.max(parseResistanceOhm(c.value), 1);
-            const pos = Math.min(100, Math.max(0, Number(c.position) || 50)) / 100;
-            const r1 = Math.max(1e-3, total * pos);
-            const r2 = Math.max(1e-3, total * (1 - pos));
-            lines.push(`${spiceBranchName("R", c.id)}a ${n0} ${n1} ${r1}`);
-            lines.push(`${spiceBranchName("R", c.id)}b ${n1} ${n2} ${r2}`);
+            // Attention : position 0 est valide (ne pas utiliser `|| 50`).
+            // Convention UI : 0 % → borne out (_out), 100 % → borne in (_in).
+            const posRaw = Number(c.position);
+            const pos = Math.min(100, Math.max(0, Number.isFinite(posRaw) ? posRaw : 50)) / 100;
+            const rInWip = Math.max(1e-3, total * (1 - pos));
+            const rWipOut = Math.max(1e-3, total * pos);
+            lines.push(`${spiceBranchName("R", c.id)}a ${n0} ${n1} ${rInWip}`);
+            lines.push(`${spiceBranchName("R", c.id)}b ${n1} ${n2} ${rWipOut}`);
         } else if (c.type === "switch_spdt") {
             const nCom = nodeFor(`${c.id}#0`);
             const nA = nodeFor(`${c.id}#1`);

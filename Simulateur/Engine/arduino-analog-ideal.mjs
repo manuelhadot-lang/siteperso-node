@@ -297,10 +297,13 @@ export function resolveNetVoltage(jonctionId, ctx, visiting = new Set()) {
         const branch = new Set(visiting);
         const vIn = resolveNetVoltage(`${comp.label}_in`, ctx, branch);
         const vOut = resolveNetVoltage(`${comp.label}_out`, ctx, branch);
-        const pos = Math.min(100, Math.max(0, Number(comp.position) || 50)) / 100;
+        // Attention : position 0 est valide (ne pas utiliser `|| 50`).
+        // Convention UI : 0 % → _out, 100 % → _in (ex. VCC sur in, GND sur out → 0 % ≈ 0 V).
+        const posRaw = Number(comp.position);
+        const pos = Math.min(100, Math.max(0, Number.isFinite(posRaw) ? posRaw : 50)) / 100;
         const vi = Number.isFinite(vIn) ? vIn : 5;
         const vo = Number.isFinite(vOut) ? vOut : 0;
-        return vi * (1 - pos) + vo * pos;
+        return vi * pos + vo * (1 - pos);
     }
 
     const dividerV = tryResistorDivider(jonctionId, ctx, visiting);

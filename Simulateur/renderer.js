@@ -1864,17 +1864,28 @@ function drawComponentBody(comp) {
         });
     }
     else if (comp.type === 'potentiometer') {
-        const pos = Math.min(100, Math.max(0, comp.position ?? 50));
-        const wx = -20 + (pos / 100) * 40;
+        const pos = Math.min(100, Math.max(0, Number(comp.position) ?? 50));
+        // Indicateur mobile sur la piste ; broche _wip reste au centre (x=0).
+        // 0 % côté _out (droite), 100 % côté _in (gauche) — aligné sur le modèle électrique.
+        const wx = 20 - (pos / 100) * 40;
         rCtx.strokeStyle = '#007acc'; rCtx.lineWidth = 2; rCtx.fillStyle = COLORS.componentFill;
         rCtx.fillRect(-20, -10, 40, 20); rCtx.strokeRect(-20, -10, 40, 20);
         rCtx.beginPath();
         rCtx.moveTo(-40, 0); rCtx.lineTo(-20, 0);
         rCtx.moveTo(20, 0); rCtx.lineTo(40, 0);
-        rCtx.moveTo(wx, -10); rCtx.lineTo(wx, -22);
-        rCtx.moveTo(0, -22); rCtx.lineTo(wx, -22);
+        // Sortie curseur fixe au centre
+        rCtx.moveTo(0, -10); rCtx.lineTo(0, -22);
+        rCtx.stroke();
+        // Curseur mobile (repère visuel seulement)
+        rCtx.strokeStyle = '#ff9800';
+        rCtx.lineWidth = 2;
+        rCtx.beginPath();
+        rCtx.moveTo(wx, -8); rCtx.lineTo(wx, 8);
         rCtx.stroke();
         rCtx.fillStyle = '#ff9800';
+        rCtx.beginPath();
+        rCtx.arc(wx, 0, 3, 0, Math.PI * 2);
+        rCtx.fill();
         rCtx.font = 'bold 13px Arial';
         rCtx.textAlign = 'center';
         rCtx.textBaseline = 'middle';

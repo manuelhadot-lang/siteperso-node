@@ -203,11 +203,10 @@ export function getComponentJonctions(comp) {
     } else if (comp.type === 'servo_motor') {
         localPts = servoMotorJonctions(comp.label);
     } else if (comp.type === 'potentiometer') {
-        const pos = Math.min(100, Math.max(0, comp.position ?? 50));
-        const wipX = -20 + (pos / 100) * 40;
+        // Broche curseur fixe (le % ne doit pas déplacer le point de connexion).
         localPts = [
             { id: `${comp.label}_in`, x: -40, y: 0 },
-            { id: `${comp.label}_wip`, x: wipX, y: -22 },
+            { id: `${comp.label}_wip`, x: 0, y: -22 },
             { id: `${comp.label}_out`, x: 40, y: 0 },
         ];
     } else if (comp.type === 'switch_spdt') {

@@ -1121,8 +1121,9 @@ function servoAngleFromPot(servoLabel, vcc) {
     const vo = resolveNetVoltage(`${pot.label}_out`, ctx, new Set(loopGuard));
     const viN = Number.isFinite(vi) ? vi : vcc;
     const voN = Number.isFinite(vo) ? vo : 0;
-    const pos = Math.min(100, Math.max(0, Number(pot.position) ?? 50)) / 100;
-    const vsig = viN * (1 - pos) + voN * pos;
+    const posRaw = Number(pot.position);
+    const pos = Math.min(100, Math.max(0, Number.isFinite(posRaw) ? posRaw : 50)) / 100;
+    const vsig = viN * pos + voN * (1 - pos);
     return Math.max(0, Math.min(180, (vsig / vcc) * 180));
 }
 

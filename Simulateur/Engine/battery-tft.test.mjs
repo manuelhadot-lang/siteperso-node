@@ -42,7 +42,7 @@ const components = [
     { type: "joyit_tft18", label: "TFT1", lastCompileOk: true },
     { type: "vcc", label: "V3", value: 3.3 },
     { type: "gnd", label: "GND1" },
-    { type: "potentiometer", label: "POT1", value: "10k", position: 20 },
+    { type: "potentiometer", label: "POT1", value: "10k", position: 80 },
 ];
 const wires = [
     { fromJonctionId: "V3_out", toJonctionId: "POT1_in" },
