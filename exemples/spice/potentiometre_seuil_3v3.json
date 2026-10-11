@@ -1,0 +1,107 @@
+{
+    "name": "potentiometre_seuil_3v3",
+    "components": [
+        {
+            "type": "battery",
+            "x": 280,
+            "y": 360,
+            "label": "V1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5,
+            "value": 3.3
+        },
+        {
+            "type": "potentiometer",
+            "x": 520,
+            "y": 360,
+            "label": "POT1",
+            "rotation": 0,
+            "state": 0,
+            "highVoltage": 5,
+            "value": "10k",
+            "position": 50
+        },
+        {
+            "type": "voltmeter",
+            "x": 760,
+            "y": 280,
+            "label": "VM1",
+            "rotation": 90,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 280,
+            "y": 520,
+            "label": "GND1",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        },
+        {
+            "type": "gnd",
+            "x": 760,
+            "y": 520,
+            "label": "GND2",
+            "rotation": 270,
+            "state": 0,
+            "highVoltage": 5
+        }
+    ],
+    "wires": [
+        {
+            "fromJonctionId": "V1_out",
+            "points": [
+                { "x": 280, "y": 320 },
+                { "x": 480, "y": 320 },
+                { "x": 480, "y": 360 }
+            ],
+            "toJonctionId": "POT1_in"
+        },
+        {
+            "fromJonctionId": "POT1_out",
+            "points": [
+                { "x": 560, "y": 360 },
+                { "x": 560, "y": 480 },
+                { "x": 280, "y": 480 },
+                { "x": 280, "y": 400 }
+            ],
+            "toJonctionId": "V1_in"
+        },
+        {
+            "fromJonctionId": "V1_in",
+            "points": [
+                { "x": 280, "y": 400 },
+                { "x": 280, "y": 480 }
+            ],
+            "toJonctionId": "GND1_out"
+        },
+        {
+            "fromJonctionId": "POT1_wip",
+            "points": [
+                { "x": 520, "y": 338 },
+                { "x": 520, "y": 240 },
+                { "x": 760, "y": 240 }
+            ],
+            "toJonctionId": "VM1_in"
+        },
+        {
+            "fromJonctionId": "VM1_out",
+            "points": [
+                { "x": 760, "y": 320 },
+                { "x": 760, "y": 480 }
+            ],
+            "toJonctionId": "GND2_out"
+        }
+    ],
+    "autoJunctions": [],
+    "counters": {
+        "battery": 1,
+        "resistor": 0,
+        "potentiometer": 1,
+        "voltmeter": 1,
+        "gnd": 2
+    }
+}
