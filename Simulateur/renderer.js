@@ -174,7 +174,7 @@ import {
     clampUpesyVbat,
     UPESY_DEFAULT_VBAT,
 } from './esp32-upesy-lp-layout.js';
-import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction, syncWireEndpointsToJonctions, potScreenOffsetToLocal } from './geometry.js';
+import { getComponentJonctions, isJonctionConnected, getVoltageAtJonction, syncWireEndpointsToJonctions } from './geometry.js';
 import { getBottomPanelHeight } from './source-panel.js';
 import { getArduinoPanelWidth } from './arduino-editor.js';
 import { isGroveLcdWiredToBoard } from './Engine/grove-lcd-ideal.mjs';
@@ -1866,7 +1866,7 @@ function drawComponentBody(comp) {
     else if (comp.type === 'potentiometer') {
         const pos = Math.min(100, Math.max(0, Number(comp.position) ?? 50));
         // Indicateur mobile sur la piste ; broche _wip reste au centre (x=0).
-        // 0 % côté _out (local +x), 100 % côté _in (local -x).
+        // 0 % côté _out (droite), 100 % côté _in (gauche).
         const wx = 20 - (pos / 100) * 40;
         rCtx.strokeStyle = '#007acc'; rCtx.lineWidth = 2; rCtx.fillStyle = COLORS.componentFill;
         rCtx.fillRect(-20, -10, 40, 20); rCtx.strokeRect(-20, -10, 40, 20);
@@ -1886,25 +1886,17 @@ function drawComponentBody(comp) {
         rCtx.beginPath();
         rCtx.arc(wx, 0, 3, 0, Math.PI * 2);
         rCtx.fill();
-        // ▲ / ▼ toujours droits à l'écran : bas = diminuer
-        const upLocal = potScreenOffsetToLocal(rot, 0, 20);
-        const downLocal = potScreenOffsetToLocal(rot, 0, 34);
-        drawUprightTextAt(rot, upLocal.x, upLocal.y, () => {
-            rCtx.fillStyle = '#ff9800';
-            rCtx.font = 'bold 14px Arial';
-            rCtx.textAlign = 'center';
-            rCtx.textBaseline = 'middle';
-            rCtx.fillText('▲', 0, 0);
-        });
-        drawUprightTextAt(rot, downLocal.x, downLocal.y, () => {
-            rCtx.fillStyle = '#ff9800';
-            rCtx.font = 'bold 14px Arial';
-            rCtx.textAlign = 'center';
-            rCtx.textBaseline = 'middle';
-            rCtx.fillText('▼', 0, 0);
-        });
-        const pctLocal = potScreenOffsetToLocal(rot, 18, 27);
-        drawUprightTextAt(rot, pctLocal.x, pctLocal.y, () => {
+        rCtx.font = 'bold 13px Arial';
+        rCtx.textAlign = 'center';
+        rCtx.textBaseline = 'middle';
+        // ◀ augmente, ▶ diminue (après rotation 90°, ▶ = flèche du bas)
+        rCtx.fillText('◀', -10, 18);
+        rCtx.fillText('▶', 8, 18);
+        const rotNorm = ((rot % 360) + 360) % 360;
+        const potVertical = rotNorm === 90 || rotNorm === 270;
+        const pctX = potVertical ? 26 : 22;
+        const pctY = 18;
+        drawUprightTextAt(rot, pctX, pctY, () => {
             rCtx.fillStyle = '#ff9800';
             rCtx.font = 'bold 11px Arial';
             rCtx.textAlign = 'left';
