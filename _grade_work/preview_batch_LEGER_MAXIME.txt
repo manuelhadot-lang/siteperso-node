@@ -1,0 +1,50 @@
+LEGER_Maxime_2026-10-12 (2).zip
+
+TP 2/
+TP 2/IMG_4826.mov
+TP 2/TP2.odt
+1
+- Représenter le schéma d’un pont diviseur
+(E=3,3V, R1,R2 et V22)
+2. formule du pont diviseur : U= (E x 
+R1)\ R1 + R2
+3.Si R1=R2 que vaut V22 ? 
+Si R1=R2 alors V22=1,6 car
+V22= (E x
+R1)\\(2R1)
+V22=E\2 
+or E=3,3
+donc E\2=3,3\2 = 1,65V
+4. Que signifie les lettres LDR ?
+LDR signifie Light Dependent Resistor
+5.
+5. Quel est le rôle de ce composant dans le projet ?
+Ce composant sert a détecter la présence de luminosité simuler .
+6. Que mes
+ure un multimètre ?
+Un multimètre permet de mesurer la tension, le courant et la résistance.
+7. Donner les valeurs de N en décimal et en binaire pour U22 égale à 0V, 1.6V et 3.3V ?
+0 V =
+00 0000 0000 
+= 0
+1,6 V =
+01 1111 0000 
+= 496
+3,3 V =
+11 1111 1111 
+=1023
+Dans la fonction setup qui s'exécute une seule fois au démarrage on initialise la communication série à une vitesse de cent quinze mille deux cents bauds pour pouvoir envoyer des messages vers l'ordinateur.Toujours dans le setup on affiche un message textuel de confirmation pour indiquer que le TP est prêt et que le système a bien démarré sur la broche vingt-deux.La fonction loop prend ensuite le relais pour tourner en boucle infinie et effectuer des mesures en continu à chaque instant.À l'intérieur de cette boucle on lit la valeur analogique brute de la broche vingt-deux grâce à la fonction analogRead qui renvoie un nombre compris entre zéro et quatre mille quatre-vingt-quinze suivant la luminosité perçue par la photorésistance.On calcule ensuite la tension réelle en volts en divisant cette valeur brute par quatre mille quatre-vingt-quinze virgule zéro puis en multipliant le tout par trois virgule trois qui correspond à la tension maximale de référence.On utilise ensuite plusieurs instructions de la liaison série pour afficher d'abord le texte explicatif de la valeur brute puis le chiffre correspondant mesuré par la carte.On complète l'affichage en écrivant également la tension calculée et arrondie à deux chiffres après la virgule suivie de l'unité en volts pour rendre les données
+plus lisibles.Enfin on ajoute une pause de trois cents millisecondes avec la fonction delay pour ralentir le rythme des mesures et éviter de saturer le moniteur série de l'ordinateur.
+La valeurs de ADC est de 4054 et la valeur de U22 est de 3,27 V pour 10 000 lx
+La valeur de ADC est de 2048 et la valeur de U22 est de 1065 V pour 10 lx
+1.3V
+moins de lumière donc moins
+d’énergie
+1.9V
+baisse de lumièree donc baisse d’énergie
+3.2V
+plus de lumière donc plus d’énergie
+http://purl.org/dc/elements/1.1/
+http://www.w3.org/1998/Math/MathML
+http://www.w3.org/2002/xforms
+http://www.w3.org/1999/xlink

@@ -1,0 +1,7 @@
+﻿BAZIN_FRANCOIS {'TP2_Q1_Schema': 1, 'TP2_Q8_Spice': 1, 'TP2_Q10_VideoU': 2}
+ROHAUT_ANDREA {'TP2_Q8_Spice': 1, 'TP2_Q10_VideoU': 2}
+LEYE_MARIAMA {'TP2_Q8_Spice': 1, 'TP2_Q10_VideoU': 2}
+DUPONT_FOUCAULD {'TP2_Q1_Schema': 1}
+WIPFF_HUGO {'TP2_Q10_VideoU': 2}
+HOEFFLER_LEO {'TP2_Q10_VideoU': 2}
+CHEVANNE-CARENCO_GABRIEL {'TP2_Q1_Schema': 1, 'TP2_Q8_Spice': 1, 'TP2_Q10_VideoU': 2}

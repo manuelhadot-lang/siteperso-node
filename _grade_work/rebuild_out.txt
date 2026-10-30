@@ -1,0 +1,55 @@
+﻿Backup: Notes_TP1_TP2_avant_rebuild_TP2.xlsx
+
+=== 1├¿re STI2D 1 ===
+  ANCENAY Romain: TP2=14/20
+  BENOIT Constance: TP2=14/20
+  BIENFAIT No├®: TP2 vide (non rendu)
+  BOUCHER Jules: TP2=13/20
+  CAROL Thibaut: TP2 vide (non rendu)
+  COCOL Alexis: TP2=16/20
+  DARMON FONSAGRIVES Jules: TP2 vide (non rendu)
+  DE LAMARZERELLE Th├®ophile: TP2 vide (non rendu)
+  DIOWO Corentin: TP2=16/20
+  DUPONT Foucauld: TP2 vide (non rendu)
+  HOEFFLER L├®o: TP2=17/20
+  KOMMEGNE Anna├½lle: TP2=14/20
+  KUCHLY Lucien: TP2=18/20
+  LEGER Maxime: TP2=18/20
+  LOCHEGNIES Jules: TP2 vide (non rendu)
+  MEHREZI Nahil: TP2=19/20
+  MONTERO Pierre: TP2 vide (non rendu)
+  MOREAU Antoine: TP2=16/20
+  PROSPERI Flora: TP2 vide (non rendu)
+  RESTOUT Rapha├½l: TP2=16/20
+  ROUSSEAU Pierre: TP2 vide (non rendu)
+  SIMON Arthur: TP2 vide (non rendu)
+  WIPFF Hugo: TP2=17/20
+
+=== 1├¿re STI2D 2 ===
+  BAZIN Francois: TP2=18/20
+  BODILIS Paul: TP2 vide (non rendu)
+  BRAHMI Kalis: TP2 vide (non rendu)
+  CHEVANNE-CARENCO Gabriel: TP2=18/20
+  COJANU Alexandre: TP2=16/20
+  D'HOKERS-ALLUSSON Adam: TP2=18/20
+  FEAUGAS Jean Charles: TP2=18/20
+  FRANCOIS Alban: TP2=18/20
+  GIRCOURT Mathieu: TP2 vide (non rendu)
+  GROULT Gr├®goire: TP2=18/20
+  LEMONDE-SAN Sorya: TP2=8/20
+  LEYE Mariama: TP2=18/20
+  MEUDIC Thomas: TP2=16/20
+  NOEL Timoth├®e: TP2=18/20
+  NORMAND Maxime: TP2=18/20
+  PERE Alban: TP2 vide (non rendu)
+  RACHI Marwane: TP2=18/20
+  RECHE Victor: TP2=14/20
+  RIGAMONTI Cl├®ment: TP2=18/20
+  ROHAUT Andr├®a: TP2 vide (non rendu)
+  ROUVEL Gabin: TP2 vide (non rendu)
+  VARILLON Amaury: TP2=18/20
+  VERDYS Maxime: TP2 vide (non rendu)
+
+OK ├®crit: C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2.xlsx
+TP2 remplis: 29 | sans TP2: 17
+TP1 non modifi├®. Backup: C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2_avant_rebuild_TP2.xlsx

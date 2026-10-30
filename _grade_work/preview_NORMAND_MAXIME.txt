@@ -1,0 +1,69 @@
+
+Normand_Francois
+
+IMG_1620.mov
+TP2.docx
+Représentation du schéma d’un pont diviseur.
+F
+ormule du pont diviseur de tension
+.
+Us=Ue . R
+2
+ 
+/ (R1+R2)
+3. 
+Si R1=R2 que vaut V22 ?
+Si R1=R2 aolrs V
+22
+ vaut 2,8 V
+4. 
+Que signifie les lettres LDR ?
+LDR signifi photoresistance. 
+5. 
+Quel est le rôle de ce composant dans le projet ?
+Le rôle de ce composant est de capter la luminosité.
+6. Que mesure le multimètre ?
+Il mesure des tensions.
+7.
+ 
+Donner les valeurs de N en décimal et en binaire pour U22 égale à 0V, 1.6V et 3.3V ?
+Pour U
+22
+=0V N
+2
+= 0000 et N
+10
+=0
+Pour U
+22
+=1,6V N
+2
+= 0111 1100 0001 N
+10
+= 1985
+Pour U
+22
+=3,3V N
+2
+= 1111 1111 1111 N
+10
+ = 4095
+8.
+ 
+Expliquer ce programme en commentant chacune des lignes
+// TP2 - Lecture LDR (R1) via pont avec R2 - GPIO22 (schema KiCad)
+const int PIN_LDR = 22 ;
+void setup() { : Cette fonction nets executer une seule fois au demarage
+  Serial.begin(115200); : Demart la comunication
+}
+void loop() { : Repetition de la partie
+  int brut = analogRead(PIN_LDR); // 0 .. 4095 : lit la valeure analogique du capteur LDR
+  float tension = (brut / 4095.0) * 3.3; // estimation en volts : Transforme la valeur ADC en une tension
+  Serial.print("ADC="); : Affiche une information sur le port serie
+  Serial.print(brut);
+  Serial.print(" U22=");
+  Serial.print(tension, 2);
+  Serial.println(" V");
+  delay(300); :Attemps 300ms et puis recommence
+}
+9. Quelles sont les valeurs de ADC et de U22 pour 10 000 lx (lumière vive), 10 lx (faible lumière) et 1 px (ob

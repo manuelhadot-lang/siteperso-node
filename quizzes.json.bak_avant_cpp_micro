@@ -1,0 +1,1666 @@
+{
+  "quiz_elec_mixte_1": {
+    "id": "quiz_elec_mixte_1",
+    "title": "Éval. n°1 — résistances, Ohm, binaire, multiples",
+    "questions": [
+      {
+        "text": "Convertir 10000000₂ (8 bits) en décimal :",
+        "answers": [
+          "64",
+          "128",
+          "256"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si on double R en gardant U constant, P :",
+        "answers": [
+          "Ne change pas",
+          "Est multipliée par 2",
+          "Est divisée par 2"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Une capacité de 4700 µF = ?",
+        "answers": [
+          "4,7 nF",
+          "470 mF",
+          "4,7 mF"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Pont diviseur : R1 = 2 kΩ, R2 = 2 kΩ, U = 5 V. Tension milieu = ?",
+        "answers": [
+          "1 V",
+          "5 V",
+          "2,5 V"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
+        "answers": [
+          "4 V",
+          "6 V",
+          "8 V"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "P = 2 W sous 10 V → I = ?",
+        "answers": [
+          "0,2 A",
+          "20 A",
+          "5 A"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "1 Go (giga-octet, usage courant) ≈ ?",
+        "answers": [
+          "10³ octets",
+          "10⁶ octets",
+          "10⁹ octets"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 0xA0 (8 bits) en décimal :",
+        "answers": [
+          "10",
+          "160",
+          "170"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Combien de valeurs non signées sur 8 bits ?",
+        "answers": [
+          "256 (0 à 255)",
+          "8",
+          "128"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Une résistance de puissance 1/4 W peut dissiper au max :",
+        "answers": [
+          "1 W",
+          "0,25 W",
+          "4 W"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "MSB signifie :",
+        "answers": [
+          "Bit de poids fort (Most Significant Bit)",
+          "Octet mémoire",
+          "Bit de poids faible"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "La puissance électrique vaut souvent :",
+        "answers": [
+          "P = U / I",
+          "P = U + I",
+          "P = U × I"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si U = 12 V et R = 4 Ω, alors I = ?",
+        "answers": [
+          "48 A",
+          "3 A",
+          "0,33 A"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 75 (décimal) en binaire 8 bits :",
+        "answers": [
+          "01001010",
+          "01001100",
+          "01001011"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "Sur le neutre uniquement",
+          "En parallèle",
+          "En série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1 mV = ?",
+        "answers": [
+          "0,001 V",
+          "1000 V",
+          "0,01 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir FF₁₆ (8 bits) en décimal :",
+        "answers": [
+          "256",
+          "255",
+          "240"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R1 = 1,2 kΩ // R2 = 1,8 kΩ ≈ ?",
+        "answers": [
+          "600 Ω",
+          "720 Ω",
+          "3 kΩ"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Trois résistances 120 Ω, 180 Ω, 300 Ω en série. Rtot = ?",
+        "answers": [
+          "40 Ω",
+          "600 Ω",
+          "120 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Combien d'octets dans 64 bits ?",
+        "answers": [
+          "16",
+          "8",
+          "4"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13",
+    "published": false
+  },
+  "quiz_elec_mixte_2": {
+    "id": "quiz_elec_mixte_2",
+    "title": "Éval. n°2 — résistances, Ohm, binaire, multiples",
+    "questions": [
+      {
+        "text": "Mot 8 bits : b7, b6 et b5 à 1 (11100000₂) → ?",
+        "answers": [
+          "240",
+          "192",
+          "224"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "1 µA = ?",
+        "answers": [
+          "10⁻³ A",
+          "10⁻⁹ A",
+          "10⁻⁶ A"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Association : (100 Ω // 100 Ω) puis + 50 Ω en série :",
+        "answers": [
+          "150 Ω",
+          "50 Ω",
+          "100 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 7F₁₆ (8 bits) en décimal :",
+        "answers": [
+          "128",
+          "255",
+          "127"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "47 kΩ = ? Ω",
+        "answers": [
+          "47000 Ω",
+          "470 Ω",
+          "4,7 Ω"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "P = U² / R : U = 12 V, R = 24 Ω → P = ?",
+        "answers": [
+          "6 W",
+          "2 W",
+          "288 W"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : b3+b2+b1+b0 à 1 (00001111₂) → ?",
+        "answers": [
+          "15",
+          "240",
+          "16"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Deux branches en parallèle sous 10 V : 100 Ω et 200 Ω. I total = ?",
+        "answers": [
+          "150 mA",
+          "50 mA",
+          "100 mA"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "100 Ω // 100 Ω = ?",
+        "answers": [
+          "200 Ω",
+          "100 Ω",
+          "50 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Combien de bits dans 2 octets ?",
+        "answers": [
+          "8",
+          "16",
+          "2"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R = 220 Ω, I = 20 mA → U = ?",
+        "answers": [
+          "4,4 V",
+          "0,044 V",
+          "4400 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "204",
+          "216"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R1 = 1,2 kΩ // R2 = 1,8 kΩ ≈ ?",
+        "answers": [
+          "720 Ω",
+          "3 kΩ",
+          "600 Ω"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "En série",
+          "En parallèle",
+          "Sur le neutre uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Convertir 75 (décimal) en binaire 8 bits :",
+        "answers": [
+          "01001010",
+          "01001100",
+          "01001011"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente : I = ?",
+        "answers": [
+          "R / U",
+          "U × R",
+          "U / R"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 00001111₂ (8 bits) en décimal :",
+        "answers": [
+          "240",
+          "16",
+          "15"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : seuls b7 et b0 à 1 → valeur = ?",
+        "answers": [
+          "129",
+          "127",
+          "128"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Formule équivalente : R = ?",
+        "answers": [
+          "U / I",
+          "U × I",
+          "I / U"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "1 MΩ = ?",
+        "answers": [
+          "0,001 Ω",
+          "1000 Ω",
+          "1 000 000 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13",
+    "published": false
+  },
+  "quiz_elec_mixte_3": {
+    "id": "quiz_elec_mixte_3",
+    "title": "Éval. n°3 — résistances, Ohm, binaire, multiples",
+    "questions": [
+      {
+        "text": "Convertir 1010₂ en décimal :",
+        "answers": [
+          "12",
+          "8",
+          "10"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "I = 40 mA dans 560 Ω → P ≈ ?",
+        "answers": [
+          "0,022 W",
+          "22,4 W",
+          "0,90 W"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "1 Go (giga-octet, usage courant) ≈ ?",
+        "answers": [
+          "10⁶ octets",
+          "10⁹ octets",
+          "10³ octets"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. I total = ?",
+        "answers": [
+          "60 mA",
+          "40 mA",
+          "120 mA"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le préfixe nano (n) signifie :",
+        "answers": [
+          "× 10⁻³",
+          "× 10⁻⁹",
+          "× 10⁻⁶"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "5 V = ? mV",
+        "answers": [
+          "5000 mV",
+          "5 mV",
+          "0,005 mV"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le préfixe méga (M) signifie :",
+        "answers": [
+          "× 10⁶",
+          "× 10⁻⁶",
+          "× 10³"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 10000000₂ (8 bits) en décimal :",
+        "answers": [
+          "128",
+          "256",
+          "64"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Batterie 3,7 V, charge 180 Ω → I ≈ ?",
+        "answers": [
+          "≈ 666 mA",
+          "≈ 2 mA",
+          "≈ 20,6 mA"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "4 × 100 Ω toutes en parallèle :",
+        "answers": [
+          "100 Ω",
+          "25 Ω",
+          "400 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "1 kio (kibioctet) vaut :",
+        "answers": [
+          "1024 octets",
+          "1000 bits",
+          "1000 octets"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Sur 8 bits non signés, la plus grande valeur est :",
+        "answers": [
+          "256",
+          "128",
+          "255"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "216",
+          "204"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Association : (100 Ω // 100 Ω) puis + 50 Ω en série :",
+        "answers": [
+          "150 Ω",
+          "100 Ω",
+          "50 Ω"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Alim 5 V, R = 220 Ω → I ≈ ? puis P ≈ ?",
+        "answers": [
+          "≈ 230 mA et ≈ 1,1 W",
+          "≈ 23 mA et ≈ 1,1 W",
+          "≈ 23 mA et ≈ 0,11 W"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Qu'est-ce qu'un bit ?",
+        "answers": [
+          "Un groupe de 8 chiffres",
+          "La plus petite unité d'information (0 ou 1)",
+          "Une unité de tension"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La loi d'Ohm s'écrit :",
+        "answers": [
+          "U = R / I",
+          "U = R + I",
+          "U = R × I"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si un octet vaut 0xC3, sa valeur décimale est :",
+        "answers": [
+          "203",
+          "163",
+          "195"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
+        "answers": [
+          "8 V",
+          "4 V",
+          "6 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "LED 2 V, alimentation 12 V, I = 20 mA → R = ?",
+        "answers": [
+          "600 Ω",
+          "100 Ω",
+          "500 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13",
+    "published": false
+  },
+  "quiz_elec_mixte_4": {
+    "id": "quiz_elec_mixte_4",
+    "title": "Éval. n°4 — résistances, Ohm, binaire, multiples",
+    "questions": [
+      {
+        "text": "5 V = ? mV",
+        "answers": [
+          "0,005 mV",
+          "5000 mV",
+          "5 mV"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Octet 01101110₂ en hexadécimal :",
+        "answers": [
+          "E6",
+          "76",
+          "6E"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Convertir 3C₁₆ en binaire 8 bits :",
+        "answers": [
+          "00111100",
+          "00110000",
+          "11000011"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Convertir 11001100₂ (8 bits) en décimal :",
+        "answers": [
+          "192",
+          "204",
+          "216"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En informatique, 1 octet = ?",
+        "answers": [
+          "1000 bits",
+          "1024 bits",
+          "8 bits"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Si U = 9 V et I = 3 A, alors R = ?",
+        "answers": [
+          "27 Ω",
+          "0,33 Ω",
+          "3 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : tous les bits impairs b1,b3,b5,b7 → ?",
+        "answers": [
+          "85",
+          "170",
+          "255"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Deux résistances de 100 Ω en série :",
+        "answers": [
+          "50 Ω",
+          "100 Ω",
+          "200 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Mixte : 50 Ω en série avec (150 Ω // 75 Ω). Rtot = ?",
+        "answers": [
+          "100 Ω",
+          "125 Ω",
+          "75 Ω"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le préfixe méga (M) signifie :",
+        "answers": [
+          "× 10⁻⁶",
+          "× 10⁶",
+          "× 10³"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sous 12 V : R1 = 100 Ω et R2 = 200 Ω en série. U sur R2 = ?",
+        "answers": [
+          "8 V",
+          "4 V",
+          "6 V"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Résistances en série : Rtot = ?",
+        "answers": [
+          "R1 + R2 + …",
+          "min(R1, R2)",
+          "(R1×R2)/(R1+R2)"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le préfixe nano (n) signifie :",
+        "answers": [
+          "× 10⁻³",
+          "× 10⁻⁹",
+          "× 10⁻⁶"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "R = 47 Ω sous U = 4,7 V → I = ?",
+        "answers": [
+          "1 A",
+          "10 mA",
+          "100 mA"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Un voltmètre se branche :",
+        "answers": [
+          "Sur le neutre uniquement",
+          "En série",
+          "En parallèle"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Mot 8 bits : b7+b3 à 1 (10001000₂) → ?",
+        "answers": [
+          "136",
+          "8",
+          "128"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "Le nibble de poids fort de 10110100₂ est :",
+        "answers": [
+          "1011₂ (= 11)",
+          "0100₂ (= 4)",
+          "1100₂"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "I = 40 mA dans 560 Ω → P ≈ ?",
+        "answers": [
+          "0,022 W",
+          "0,90 W",
+          "22,4 W"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si on double R en gardant U constant, P :",
+        "answers": [
+          "Est divisée par 2",
+          "Est multipliée par 2",
+          "Ne change pas"
+        ],
+        "correct": 0,
+        "image": null
+      },
+      {
+        "text": "47 kΩ = ? Ω",
+        "answers": [
+          "4,7 Ω",
+          "470 Ω",
+          "47000 Ω"
+        ],
+        "correct": 2,
+        "image": null
+      }
+    ],
+    "date": "2026-09-13",
+    "published": false
+  },
+  "quiz_cpp_micro_1": {
+    "id": "quiz_cpp_micro_1",
+    "title": "Éval. n°1 — C++ & systèmes microprogrammés (bases)",
+    "questions": [
+      {
+        "text": "En C++, chaque instruction se termine en général par :",
+        "answers": [
+          "deux-points :",
+          "point-virgule ;",
+          "virgule ,"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un commentaire sur une ligne commence par :",
+        "answers": [
+          "/*",
+          "//",
+          "#"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La fonction exécutée une seule fois au démarrage est :",
+        "answers": [
+          "loop()",
+          "setup()",
+          "main()"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La fonction répétée sans arrêt sur Arduino / ESP32 est :",
+        "answers": [
+          "setup()",
+          "init()",
+          "loop()"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Le mot-clé void devant setup() signifie que la fonction :",
+        "answers": [
+          "renvoie un entier",
+          "ne renvoie pas de valeur",
+          "est obligatoire"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un système câblé, pour changer le comportement il faut :",
+        "answers": [
+          "téléverser un nouveau programme",
+          "recâbler / modifier le matériel",
+          "changer uniquement la RAM"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un système microprogrammé, on change le comportement en :",
+        "answers": [
+          "recâblant les composants",
+          "téléversant un nouveau programme",
+          "changeant l’horloge uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La chaîne d’information typique est :",
+        "answers": [
+          "actionneur → programme → capteur",
+          "capteur → entrée → programme → sortie → actionneur",
+          "programme → capteur → actionneur"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un microcontrôleur réunit sur une puce :",
+        "answers": [
+          "uniquement le processeur",
+          "processeur, mémoires et périphériques",
+          "uniquement la RAM"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un microprocesseur, contrairement au microcontrôleur :",
+        "answers": [
+          "contient déjà flash et EEPROM",
+          "est surtout l’unité de calcul (mémoires / E-S à part)",
+          "ne peut pas exécuter de programme"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "GPIO signifie :",
+        "answers": [
+          "entrée analogique uniquement",
+          "entrée-sortie à usage général",
+          "générateur de tension"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur un Arduino Uno, le niveau logique haut vaut environ :",
+        "answers": [
+          "3,3 V",
+          "5 V",
+          "12 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur un ESP32, le niveau logique haut vaut environ :",
+        "answers": [
+          "5 V",
+          "3,3 V",
+          "1,8 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le langage distingue les majuscules : n et N sont :",
+        "answers": [
+          "la même variable",
+          "deux variables différentes",
+          "interdits"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un bloc d’instructions est entouré par :",
+        "answers": [
+          "parenthèses ( )",
+          "accolades { }",
+          "crochets [ ]"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "L’algorithme décrit la méthode :",
+        "answers": [
+          "uniquement en C++",
+          "en français, sans détail de langage",
+          "uniquement en binaire"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "setup() sert typiquement à :",
+        "answers": [
+          "lire les capteurs en boucle",
+          "préparer les broches et la liaison série",
+          "éteindre la carte"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un actionneur typique est :",
+        "answers": [
+          "un bouton poussoir",
+          "une LED ou un moteur",
+          "une photorésistance"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un capteur typique est :",
+        "answers": [
+          "un moteur",
+          "une LED",
+          "un bouton ou une LDR"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Le processeur exécute les instructions :",
+        "answers": [
+          "toutes en même temps",
+          "l’une après l’autre",
+          "uniquement au téléversement"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_2": {
+    "id": "quiz_cpp_micro_2",
+    "title": "Éval. n°2 — C++ & systèmes microprogrammés (variables, cartes, IDE)",
+    "questions": [
+      {
+        "text": "Une variable est stockée principalement en :",
+        "answers": [
+          "flash",
+          "RAM",
+          "EEPROM uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type int sert à stocker :",
+        "answers": [
+          "un décimal",
+          "un entier",
+          "un texte long"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type float sert à stocker :",
+        "answers": [
+          "un entier uniquement",
+          "un nombre décimal",
+          "vrai ou faux"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type bool peut valoir :",
+        "answers": [
+          "seulement 0 à 255",
+          "true ou false",
+          "uniquement des lettres"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En C++, le point décimal s’écrit :",
+        "answers": [
+          "avec une virgule : 3,3",
+          "avec un point : 3.3",
+          "avec un slash : 3/3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "const int SEUIL = 25; signifie que SEUIL :",
+        "answers": [
+          "peut être modifié librement",
+          "ne doit plus être modifié par le programme",
+          "est stocké uniquement en RAM volatile"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On préfère const à #define car :",
+        "answers": [
+          "#define est plus précis",
+          "const a un type visible et détecte les erreurs",
+          "#define est obligatoire sur ESP32"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le symbole = sert à :",
+        "answers": [
+          "comparer deux valeurs",
+          "affecter (ranger) une valeur",
+          "déclarer un type"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le symbole == sert à :",
+        "answers": [
+          "affecter une valeur",
+          "comparer l’égalité",
+          "incrémenter"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un if, écrire if (n = 3) :",
+        "answers": [
+          "compare n à 3",
+          "range 3 dans n (affectation)",
+          "est une erreur de syntaxe toujours"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Arduino Uno : horloge typique :",
+        "answers": [
+          "240 MHz",
+          "16 MHz",
+          "1 MHz"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "ESP32 : horloge pouvant atteindre :",
+        "answers": [
+          "16 MHz",
+          "240 MHz",
+          "1 GHz"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Flash (programme) sur Arduino Uno : environ :",
+        "answers": [
+          "4 Mo",
+          "32 Ko",
+          "2 Ko"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead sur Uno renvoie typiquement un code de :",
+        "answers": [
+          "0 à 4095",
+          "0 à 1023",
+          "0 à 255"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead sur ESP32 renvoie typiquement un code de :",
+        "answers": [
+          "0 à 1023",
+          "0 à 4095",
+          "0 à 100"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans l’IDE Arduino, « Vérifier » sert à :",
+        "answers": [
+          "écrire en flash",
+          "compiler / détecter les erreurs",
+          "ouvrir le Wi-Fi"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "« Téléverser » sert à :",
+        "answers": [
+          "afficher le moniteur uniquement",
+          "écrire le programme dans la flash",
+          "effacer la RAM définitivement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le fichier croquis se termine en général par :",
+        "answers": [
+          ".cpp uniquement",
+          ".ino",
+          ".exe"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le dossier du croquis doit :",
+        "answers": [
+          "porter un nom quelconque",
+          "porter le même nom que le fichier .ino",
+          "s’appeler toujours Arduino"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Ne jamais appliquer à une broche ESP32 :",
+        "answers": [
+          "3,3 V",
+          "5 V",
+          "0 V"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_3": {
+    "id": "quiz_cpp_micro_3",
+    "title": "Éval. n°3 — C++ & systèmes microprogrammés (boucles, mémoires, E/S)",
+    "questions": [
+      {
+        "text": "for (int i = 0; i < 4; i++) exécute le bloc :",
+        "answers": [
+          "3 fois",
+          "4 fois",
+          "5 fois"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans ce for, les valeurs prises par i sont :",
+        "answers": [
+          "1, 2, 3, 4",
+          "0, 1, 2, 3",
+          "0, 1, 2, 3, 4"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On utilise plutôt for quand :",
+        "answers": [
+          "on ne connaît pas le nombre de tours",
+          "on connaît le nombre de tours",
+          "on attend un capteur sans compter"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On utilise plutôt while quand :",
+        "answers": [
+          "on compte exactement 10 tours",
+          "on répète jusqu’à un changement / condition",
+          "setup() doit boucler"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si la condition d’un while est fausse dès le début :",
+        "answers": [
+          "le bloc s’exécute une fois",
+          "le bloc ne s’exécute jamais",
+          "la carte redémarre"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un while qui attend une mesure, il faut :",
+        "answers": [
+          "ne jamais relire le capteur",
+          "relire le capteur dans la boucle",
+          "utiliser uniquement delay"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La mémoire flash : hors tension :",
+        "answers": [
+          "perd le programme",
+          "conserve le programme",
+          "conserve uniquement les variables"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La RAM : hors tension :",
+        "answers": [
+          "conserve les variables",
+          "perd son contenu",
+          "stocke le programme définitivement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur Arduino Uno, un réglage à garder hors tension va souvent en :",
+        "answers": [
+          "RAM",
+          "EEPROM",
+          "registre d’horloge"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, l’équivalent « réglage conservé » s’appelle souvent :",
+        "answers": [
+          "ROM cassée",
+          "NVS",
+          "SRAM vidéo"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "pinMode(p, OUTPUT) :",
+        "answers": [
+          "lit une tension",
+          "configure la broche en sortie",
+          "ouvre le moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "digitalWrite(p, HIGH) impose :",
+        "answers": [
+          "toujours 12 V",
+          "un niveau haut (5 V ou 3,3 V selon la carte)",
+          "une lecture analogique"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "digitalRead(p) lit :",
+        "answers": [
+          "une tension en volts exacts",
+          "un niveau haut ou bas",
+          "un fichier .ino"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead(p) renvoie :",
+        "answers": [
+          "directement des volts",
+          "un code entier (pas des volts)",
+          "un booléen"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "delay(500) :",
+        "answers": [
+          "attend 500 s",
+          "attend 500 ms et fige le programme",
+          "accélère la boucle"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Entre entiers, 5 / 2 vaut :",
+        "answers": [
+          "2,5",
+          "2",
+          "0"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "5 / 2.0 vaut :",
+        "answers": [
+          "2",
+          "2.5",
+          "0"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "i++ est équivalent à :",
+        "answers": [
+          "i = i - 1",
+          "i = i + 1",
+          "i == 1"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Une variable déclarée dans un bloc { } :",
+        "answers": [
+          "existe partout dans le fichier",
+          "n’existe que dans ce bloc",
+          "est toujours const"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Après coupure d’alimentation :",
+        "answers": [
+          "variables RAM et programme flash disparaissent",
+          "le programme flash reste, les variables RAM disparaissent",
+          "tout reste en RAM"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_4": {
+    "id": "quiz_cpp_micro_4",
+    "title": "Éval. n°4 — C++ & systèmes microprogrammés (ADC, série, pièges)",
+    "questions": [
+      {
+        "text": "Sur Uno, pleine échelle analogique typique :",
+        "answers": [
+          "3,3 V → 0…4095",
+          "5 V → 0…1023",
+          "12 V → 0…255"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, pleine échelle analogique typique :",
+        "answers": [
+          "5 V → 0…1023",
+          "3,3 V → 0…4095",
+          "3,3 V → 0…1023"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Plus le nombre de bits ADC est grand :",
+        "answers": [
+          "moins la mesure est fine",
+          "plus l’échelon de tension est fin",
+          "plus la RAM disparaît"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Serial.begin(9600) :",
+        "answers": [
+          "compile le programme",
+          "ouvre la liaison série à 9600 bauds",
+          "téléverse en flash"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si le moniteur série n’est pas à la même vitesse que Serial.begin :",
+        "answers": [
+          "rien ne change",
+          "les caractères sont illisibles",
+          "la carte fond"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Deux vitesses série courantes :",
+        "answers": [
+          "120 et 240",
+          "9600 et 115200",
+          "1 et 2"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Ordre typique :",
+        "answers": [
+          "Téléverser → Vérifier → écrire le code",
+          "Écrire → Vérifier → Téléverser → setup puis loop",
+          "loop → setup → téléverser"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Au démarrage, après téléversement :",
+        "answers": [
+          "loop() puis jamais setup()",
+          "setup() une fois, puis loop() sans fin",
+          "uniquement le moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Piège fréquent : écrire dans un if :",
+        "answers": [
+          "n == 3",
+          "n = 3 à la place de n == 3",
+          "n != 3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Piège fréquent dans un while :",
+        "answers": [
+          "augmenter le compteur / relire l’entrée",
+          "oublier d’augmenter le compteur ou de relire l’entrée",
+          "utiliser des accolades"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Compter un tour de trop vient souvent de :",
+        "answers": [
+          "i < 4",
+          "utiliser <= au lieu de <",
+          "i++"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Vouloir faire SEUIL = 30 alors que SEUIL est const :",
+        "answers": [
+          "est accepté",
+          "est refusé par le compilateur",
+          "efface la flash"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, les broches 34 à 39 sont souvent :",
+        "answers": [
+          "sorties PWM uniquement",
+          "entrées seules (pas de sortie)",
+          "alimentations 5 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Câble USB « charge seule » (sans données) empêche surtout :",
+        "answers": [
+          "d’alimenter la carte",
+          "de téléverser / communiquer",
+          "d’allumer une LED externe"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans l’exemple « au-dessus du seuil, clignoter 3 fois », le for fait :",
+        "answers": [
+          "1 clignotement",
+          "3 clignotements",
+          "une attente infinie"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le C++ du cours est :",
+        "answers": [
+          "interprété ligne à ligne comme MicroPython",
+          "compilé en langage machine",
+          "exécuté dans Excel"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "MicroPython sur ESP32 :",
+        "answers": [
+          "est le langage principal de ce cours",
+          "est interprété, ce n’est pas le langage du cours",
+          "remplace forcément le C++"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le bootloader est :",
+        "answers": [
+          "un fichier Excel",
+          "un petit programme déjà en flash qui démarre la carte",
+          "une résistance de pull-up"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "PWM (analogWrite sur Uno) sert notamment à :",
+        "answers": [
+          "mesurer une tension précise en volts",
+          "doser une LED ou un moteur en hachant le signal",
+          "changer la tension d’alimentation USB"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "À retenir : variables en RAM, programme en :",
+        "answers": [
+          "EEPROM uniquement",
+          "flash",
+          "moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  }
+}

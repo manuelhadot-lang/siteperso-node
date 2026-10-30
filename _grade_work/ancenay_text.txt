@@ -1,0 +1,35 @@
+ANCENAY_Romain_2026-10-05.docx
+Romain ANCENAY, Constance BENOIT – 1ereSTI2D-1
+TP 1 – SIN
+Question 1/
+Lorsque l’on simule le montage avec un programme vide, la LED ne s’allume pas.
+Question 2/
+Pour que la LED s’allume, il suffit de coder un programme dans la carte ESP32.
+Question3/
+La fonction « 
+pinMode
+ » permet d’appeler la broche de la carte que l’on va utiliser. On écrit « OUTPUT » pour indiquer qu’on fait le courant de la carte vers la LED et non l’inverse.
+La fonction « 
+digitalWrite
+ » permet d’allumer ou d’éteindre la LED. La fonction « HIGH » est comme la position « 1 », ou « OUVERT », donc la LED s’allume.
+Question 4/
+La fonction « 
+delay
+ » permet de mettre un temps définis en millisecondes entre les lignes de code.
+ Cette fonction est appelée 2 fois, avant l’allumage de la LED et après son extinction, pour laisser le temps à la LED de s’allumer et de s
+’
+éteindre.
+7/ 
+1)
+ 
+2)
+ 
+« 
+Serial.println
+ » permet d’afficher des choses dans la console en même temps que le programme tourne.
+ 
+3) 
+4)
+5) Inverser LOW/HIGH dans le code n’a aucun impact sur le montage. Que l’on commence par LOW ou pa
+r HIGH, le résultat est le même
+.

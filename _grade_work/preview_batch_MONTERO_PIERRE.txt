@@ -1,0 +1,35 @@
+MONTERO_Pierre_2026-10-12 (3).zip
+
+TP1 sin/
+TP1 sin/TP1.docx
+TP1 : Allumer une LED avec l’ESP32
+const int PIN_LED = 0;
+Cette instruction indique que la variable nommée PIN_LED correspond à la broche GPIO 0 de l’ESP32. Le mot-clé const signifie que cette valeur ne pourra pas être modifiée durant l’exécution du programme.
+void setup() {
+Cette fonction est exécutée une seule fois au démarrage de la carte. Elle permet d’effectuer les réglages nécessaires avant le lancement du programme principal. 
+PinMode(PIN_LED, OUTPUT);
+Cette ligne configure la broche reliée à la LED comme une sortie. Cela permet à l’ESP32 d’envoyer un signal électrique pour commander la LED. 
+Serial.begin(115200);
+active la communication série entre l’ESP32 et l’ordinateur. Le nombre 115200 représente la vitesse de transmission des données. 
+Serial.println("TP1 pret - LED sur GPIO0");
+affiche un message dans le moniteur série afin de confirmer que le programme a démarré correctement. 
+void loop() {
+Cette fonction est répétée indéfiniment tant que la carte reste alimentée.
+digitalWrite(PIN_LED, LOW);
+Cette commande place la broche à l’état logique LOW. Selon le montage du TP, ce
+t état permet d’allumer la LED.
+delay(500);
+met le programme en pause pendant 500 millisecondes, soit 0,5 seconde. Pendant cette durée, la LED reste allumée. 
+http://schemas.openxmlformats.org/markup-compatibility/2006
+http://schemas.openxmlformats.org/officeDocument/2006/relationships
+http://schemas.openxmlformats.org/officeDocument/2006/math
+http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing
+http://schemas.openxmlformats.org/wordprocessingml/2006/main
+http://schemas.microsoft.com/office/word/2006/wordml
+TP1 sin/TP1_LED (2).pdf
+[sujet-ignore:TP1_LED (2).pdf]
+TP1 sin/Vidéos/
+TP1 sin/Vidéos/1000016760.mp4
+TP1 sin/Vidéos/1000016762.mp4
+TP1 sin/Vidéos/1000016763.mp4
+TP1 sin/Vidéos/1000016769.mp4

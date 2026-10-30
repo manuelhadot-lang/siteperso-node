@@ -1,0 +1,86 @@
+﻿
+=== BAZIN_FRANCOIS paths=1 ===
+  (detecte TP2-only -> ignore score TP1)
+  files: ['BAZIN_Francois_2026-10-13.zip']
+  imgs=1 vids=1
+  TP1=non 0/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 1, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== BODILIS_PAUL paths=1 ===
+  files: ['BODILIS_Paul_2026-10-13.zip']
+  imgs=1 vids=3
+  TP1=oui 19/20 | TP2=non 0/20
+  TP2 nz {}
+
+=== COJANU_ALEXANDRE paths=1 ===
+  files: ['COJANU_Alexandre_2026-10-13 (1).zip']
+  imgs=3 vids=1
+  TP1=oui 9/20 | TP2=oui 16/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2}
+
+=== DHOKERS-ALLUSSON_ADAM paths=2 ===
+  files: ["D'HOKERS-ALLUSSON_Adam_2026-10-13.odt", "D'HOKERS-ALLUSSON_Adam_2026-10-13 (1).mov"]
+  imgs=2 vids=1
+  TP1=oui 9/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 1, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== FEAUGAS_JEAN_CHARLES paths=1 ===
+  files: ['FEAUGAS_Jean_Charles_2026-10-13 (1).odt']
+  imgs=2 vids=0
+  TP1=oui 4/20 | TP2=oui 16/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 1, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== LEMONDE-SAN_SORYA paths=1 ===
+  (detecte TP2-only -> ignore score TP1)
+  files: ['LEMONDE-SAN_Sorya_2026-10-13.zip']
+  imgs=1 vids=0
+  TP1=non 0/20 | TP2=oui 1/20
+  TP2 nz {'TP2_Q1_Schema': 1}
+
+=== RACHI_MARWANE paths=1 ===
+  files: ['RACHI_Marwane_2026-10-13.docx']
+  imgs=4 vids=0
+  TP1=oui 11/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== VARILLON_AMAURY paths=1 ===
+  (detecte TP2-only -> ignore score TP1)
+  files: ['VARILLON_Amaury_2026-10-13.zip']
+  imgs=0 vids=1
+  TP1=non 0/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 1, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== LEYE_MARIAMA paths=1 ===
+  files: ['LEYE_Mariama_2026-10-13.pdf']
+  imgs=0 vids=0
+  TP1=oui 3/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 1, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== RECHE_VICTOR paths=1 ===
+  files: ['RECHE_Victor_2026-10-13.pdf']
+  imgs=0 vids=0
+  TP1=oui 4/20 | TP2=oui 14/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 2, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== RIGAMONTI_CLEMENT paths=1 ===
+  files: ['RIGAMONTI_Cl├®ment_2026-10-13.pdf']
+  imgs=0 vids=0
+  TP1=oui 9/20 | TP2=oui 18/20
+  TP2 nz {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2}
+  OK 1├¿re STI2D 2 r3 BAZIN Francois <- BAZIN_FRANCOIS TP2=18
+  OK 1├¿re STI2D 2 r6 CHEVANNE-CARENCO Gabriel <- CHEVANNE-CARENCO_GABRIEL TP2=18
+  OK 1├¿re STI2D 2 r4 BODILIS Paul <- BODILIS_PAUL TP2=0
+  OK 1├¿re STI2D 2 r11 GIRCOURT Mathieu <- GIRCOURT_MATHIEU TP2=0
+  OK 1├¿re STI2D 2 r7 COJANU Alexandre <- COJANU_ALEXANDRE TP2=16
+  OK 1├¿re STI2D 2 r15 MEUDIC Thomas <- MEUDIC_THOMAS TP2=16
+  OK 1├¿re STI2D 2 r8 D'HOKERS-ALLUSSON Adam <- DHOKERS-ALLUSSON_ADAM TP2=18
+  OK 1├¿re STI2D 2 r9 FEAUGAS Jean Charles <- FEAUGAS_JEAN_CHARLES TP2=16
+  OK 1├¿re STI2D 2 r13 LEMONDE-SAN Sorya <- LEMONDE-SAN_SORYA TP2=1
+  OK 1├¿re STI2D 2 r19 RACHI Marwane <- RACHI_MARWANE TP2=18
+  OK 1├¿re STI2D 2 r24 VARILLON Amaury <- VARILLON_AMAURY TP2=18
+  OK 1├¿re STI2D 2 r14 LEYE Mariama <- LEYE_MARIAMA TP2=18
+  OK 1├¿re STI2D 2 r20 RECHE Victor <- RECHE_VICTOR TP2=14
+  OK 1├¿re STI2D 2 r21 RIGAMONTI Cl├®ment <- RIGAMONTI_CLEMENT TP2=18
+
+Sauv├®: C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2_1ere_STI2D_maj_TP2.xlsx
+Original intact: C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2_1ere_STI2D.xlsx

@@ -1,0 +1,79 @@
+TP2 — Mesurer la luminosité avec une LDR
+Projet : Veilleur de nuit intelligent  |  1ère STI2D  |  Durée : 4 h  |  Support : schéma KiCad « Veilleur
+Intelligent »
+1. Objectif
+Réaliser le pont diviseur photorésistance du schéma KiCad (R1 + R2), mesurer la tension au multimètre,
+puis lire la valeur numérique avec l'ADC (Analog To Digital Converter) de l'ESP32.
+2. Matériel (repères du schéma KiCad)
+Repère Composant Rôle
+U1 uPesy ESP32 Low Power Traitement + ADC 12 bits
+R1 LDR03 (photorésistance) Capteur de luminosité
+R2 Résistance 10 kΩ Pont diviseur avec R1
+— Multimètre Mesure de tension
+— Fils + plaquette Montage
+3. Câblage d'après le schéma KiCad
+Le schéma KiCad prévoit un pont diviseur entre +3,3 V et GND : R1 (LDR) côté +3,3 V, R2 (10 kΩ) côté
+GND. Le point milieu (jonction R1–R2) est la tension à mesurer.
+• R1 (LDR) entre +3,3 V (broche 3V3 de U1) et le point milieu.
+• R2 (10 kΩ) entre le point milieu et GND.
+• Point milieu → GPIO22 de U1 (entrée analogique seule, adaptée à l'ADC).
+• Masse commune : GND de la carte et du pont.
+Note
+GPIO22 est une entrée seule (pas de sortie). Ne pas utiliser GPIO22 (mesure batterie sur la carte Low Power). Tout le
+pont doit être alimenté en 3,3 V, jamais en 5 V. La tension V22 se trouve aux bornes de R2
+Page 1/2  —  Schéma KiCad : Schema.kicad_sch
+- Représenter le schéma d’un pont diviseur (E=3,3V, R1,R2 et V22) (1pt)
+- Quel est la formule du pont diviseur de tension ? (1pt)
+- Si R1=R2 que vaut V22 ? (2pts)
+- Que signifie les lettres LDR ? (1pt)
+- Quel est le rôle de ce composant dans le projet ?  (1pt)
+TP2 — LDR et mesure (schéma KiCad)
+4. Mesures multimètre (avant de programmer)
+5. Programme — lecture ADC (Simulation)
+Sur ESP32, analogRead() renvoie une valeur de 0 à 4095 (ADC 12 bits), pour une tension d'environ 0 à
+3,3 V. Suivant la formule : N=U22x4095/3,3
+ - Donner les valeurs de N en décimal et en binaire pour U22 égale à 0V, 1.6V et 3.3V ?  (2pts)  
+Page 2/2  —  Schéma KiCad : Schema.kicad_sch
+- Que mesure un multimètre ? (1pt)
+ Câbler le schéma précédent sur votre plaque LAB
+Aller sur Simulateur Spice du site et saisissez ce schéma (1pt) :
+  // TP2 - Lecture LDR (R1) via pont avec R2 - GPIO22 (schema KiCad)
+  const int PIN_LDR = 22 ;
+  
+  void setup() {
+    Serial.begin(115200);
+    Serial.println("TP2 pret - lecture GPIO22");
+  }
+  
+  void loop() {
+    int brut = analogRead(PIN_LDR);           // 0 .. 4095
+    float tension = (brut / 4095.0) * 3.3;    // estimation en volts
+  
+    Serial.print("ADC=");
+    Serial.print(brut);
+    Serial.print("   U22=");
+    Serial.print(tension, 2);
+    Serial.println(" V");
+    delay(300);
+  }
+On donne le programme suivant :
+
+Mesurer la tension au point milieu (par rapport à GND) dans trois situations en utilisant un multimètre.
+Complète le tableau :  (3pts)
+ - Monter (par une vidéo) les évolutions de la tension suivant la lumière sur le multimètre (2pts)
+Situation U milieu (V) Observation
+Lumière forte (lampe / fenêtre)
+Lumière faible (ombre avec la main)
+Transition (limite jour / nuit)
+7. À retenir
+• R1 = LDR (capteur), R2 = résistance fixe du pont (schéma KiCad).
+• L'ADC de l'ESP32 code la tension sur 12 bits (0–4095).
+• Un seuil numérique se choisit à partir de tes mesures, pas au hasard.
+- Expliquer ce programme en commentant chacune des lignes (2pts)
+- Simuler ce montage avec le simulateur Spice du site (pour observer les résultats de la simulation vous 
+devez regarder l’affichage du moniteur série) 
+ - Quelles sont les valeurs de ADC et de U22 pour 10 000 lx (lumière vive), 10 lx (faible lumière) et 1 px 
+(obscurité) (2pts)
+ - Quelle conclusion peux-t-on en déduire ? (1pt)
+6. Câblage 
+ Réaliser le câblage de circuit sur votre plaque LAB puis téléverser le programme précédent. 

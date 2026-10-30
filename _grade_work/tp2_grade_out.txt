@@ -1,0 +1,39 @@
+﻿TP_RECUP = c:\Users\mhado\Desktop\TP rÚcupÚrÚ exists= True
+
+=== Boucher/Tp2 (1).docx ===
+  keys: ['BOUCHER_JULES']
+  imgs/vids: 3 0 TP2= 13 /20
+  detail: {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 1, 'TP2_Q8_Spice': 0, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 0, 'TP2_Q11_Comment': 0, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 0}
+
+=== Normand_Francois/ (TP2.docx + IMG_1620.mov) ===
+  keys: ['NORMAND_MAXIME', 'FRANCOIS_ALBAN']
+  imgs/vids: 1 1 TP2= 18 /20
+  detail: {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 0, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q8_Spice': 0, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== SIN_TP2_Constance_BENOIT_Romain_ANCENAY.zip ===
+  keys: ['BENOIT_CONSTANCE', 'ANCENAY_ROMAIN']
+  imgs/vids: 5 1 TP2= 14 /20
+  detail: {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 0, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 0, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q8_Spice': 0, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 0, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== TP_2_HOEFFLER_LÚo_WIPFF_Hugo_1STI2D1.zip ===
+  keys: ['HOEFFLER_LEO', 'WIPFF_HUGO']
+  imgs/vids: 5 1 TP2= 17 /20
+  detail: {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 2, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q8_Spice': 0, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 0, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 1}
+
+=== TP_2_Mesurer_la_luminositÚ_avec_une_LDR.docx (Alexis & Corentin) ===
+  keys: ['COCOL_ALEXIS', 'DIOWO_CORENTIN']
+  imgs/vids: 8 3 TP2= 16 /20
+  detail: {'TP2_Q1_Schema': 1, 'TP2_Q2_Formule': 1, 'TP2_Q3_Egal': 0, 'TP2_Q4_LDR': 1, 'TP2_Q5_Role': 1, 'TP2_Q6_Multi': 1, 'TP2_Q7_Nbin': 2, 'TP2_Q8_Spice': 0, 'TP2_Q9_Tableau': 3, 'TP2_Q10_VideoU': 2, 'TP2_Q11_Comment': 2, 'TP2_Q12_SimLx': 2, 'TP2_Q13_Concl': 0}
+Copie: Notes_TP1_TP2_1ere_STI2D.xlsx -> Notes_TP1_TP2_1ere_STI2D_maj_TP2.xlsx
+  OK 1Þre STI2D 1 | ANCENAY Romain <- ANCENAY_ROMAIN TP2=14/20
+  OK 1Þre STI2D 1 | BENOIT Constance <- BENOIT_CONSTANCE TP2=14/20
+  OK 1Þre STI2D 1 | BOUCHER Jules <- BOUCHER_JULES TP2=13/20
+  OK 1Þre STI2D 1 | COCOL Alexis <- COCOL_ALEXIS TP2=16/20
+  OK 1Þre STI2D 1 | DIOWO Corentin <- DIOWO_CORENTIN TP2=16/20
+  OK 1Þre STI2D 1 | HOEFFLER LÚo <- HOEFFLER_LEO TP2=17/20
+  OK 1Þre STI2D 1 | WIPFF Hugo <- WIPFF_HUGO TP2=17/20
+  OK 1Þre STI2D 2 | FRANCOIS Alban <- FRANCOIS_ALBAN TP2=18/20
+  OK 1Þre STI2D 2 | NORMAND Maxime <- NORMAND_MAXIME TP2=18/20
+
+Excel Úcrit (nouveau fichier): C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2_1ere_STI2D_maj_TP2.xlsx
+Original intact: C:\Users\mhado\Desktop\site\site\site\site\site\sitepersoLight (1)\sitepersoLight\siteperso\siteperso\siteperso\siteperso-node-main\siteperso-node-main\doc\Veilleur_intelligent\Notes_TP1_TP2_1ere_STI2D.xlsx

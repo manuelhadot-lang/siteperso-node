@@ -1,1 +1,372 @@
-{}
+﻿{
+  "1ere_STI2D1": [
+    {
+      "nom": "ANCENAY",
+      "prenom": "Romain",
+      "code": "AR125",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "BENOIT",
+      "prenom": "Constance",
+      "code": "BC150",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 17
+      }
+    },
+    {
+      "nom": "HOEFFLER",
+      "prenom": "Léo",
+      "code": "HL300",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "KOMMEGNE",
+      "prenom": "Annaëlle",
+      "code": "KA360",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 11
+      }
+    },
+    {
+      "nom": "MOREAU",
+      "prenom": "Antoine",
+      "code": "MA400",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "RESTOUT",
+      "prenom": "Raphaël",
+      "code": "RR500",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "ROUSSEAU",
+      "prenom": "Pierre",
+      "code": "RP650",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "BIENFAIT",
+      "prenom": "Noé",
+      "code": "BN710",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 19
+      }
+    },
+    {
+      "nom": "BOUCHER",
+      "prenom": "Jules",
+      "code": "BJ750",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 14
+      }
+    },
+    {
+      "nom": "CAROL",
+      "prenom": "Thibaut",
+      "code": "CT820",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "COCOL",
+      "prenom": "Alexis",
+      "code": "CA830",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "DARMON FONSAGRIVES",
+      "prenom": "Jules",
+      "code": "DFJ840",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 10
+      }
+    },
+    {
+      "nom": "DE LAMARZERELLE",
+      "prenom": "Théophile",
+      "code": "LT900",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 17
+      }
+    },
+    {
+      "nom": "DIOWO",
+      "prenom": "Corentin",
+      "code": "DC960",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 11
+      }
+    },
+    {
+      "nom": "DUPONT",
+      "prenom": "Foucauld",
+      "code": "DF1000",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 10
+      }
+    },
+    {
+      "nom": "KUCHLY",
+      "prenom": "Lucien",
+      "code": "KL1020",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 11
+      }
+    },
+    {
+      "nom": "LEGER",
+      "prenom": "Maxime",
+      "code": "LM1050",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 7
+      }
+    },
+    {
+      "nom": "LOCHEGNIES",
+      "prenom": "Jules",
+      "code": "LJ1060",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 10
+      }
+    },
+    {
+      "nom": "MEHREZI",
+      "prenom": "Nahil",
+      "code": "MN1100",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 11
+      }
+    },
+    {
+      "nom": "MONTERO",
+      "prenom": "Pierre",
+      "code": "MP1120",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 9
+      }
+    },
+    {
+      "nom": "PROSPERI",
+      "prenom": "Flora",
+      "code": "PF1200",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 7
+      }
+    },
+    {
+      "nom": "SIMON",
+      "prenom": "Arthur",
+      "code": "SA1250",
+      "notes": {
+        "Éval. n°3 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "WIPFF",
+      "prenom": "Hugo",
+      "code": "WH1300",
+      "notes": {
+        "Éval. n°2 — résistances, Ohm, binaire, multiples": 14
+      }
+    }
+  ],
+  "1ere_STI2D2": [
+    {
+      "nom": "GROULT",
+      "prenom": "Grégoire",
+      "code": "GG2020",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "LEYE",
+      "prenom": "Mariama",
+      "code": "LM2060",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 14
+      }
+    },
+    {
+      "nom": "MEUDIC",
+      "prenom": "Thomas",
+      "code": "MT2350",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 17
+      }
+    },
+    {
+      "nom": "NOEL",
+      "prenom": "Timothée",
+      "code": "NT2410",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "RACHI",
+      "prenom": "Marwane",
+      "code": "RM2450",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 20
+      }
+    },
+    {
+      "nom": "RIGAMONTI",
+      "prenom": "Clément",
+      "code": "RC2530",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 19
+      }
+    },
+    {
+      "nom": "ROHAUT",
+      "prenom": "Andréa",
+      "code": "RA2590",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "ROUVEL",
+      "prenom": "Gabin",
+      "code": "RG2650",
+      "notes": {}
+    },
+    {
+      "nom": "BODILIS",
+      "prenom": "Paul",
+      "code": "BP2700",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "BRAHMI",
+      "prenom": "Kalis",
+      "code": "BK2680",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 9
+      }
+    },
+    {
+      "nom": "CHEVANNE-CARENCO",
+      "prenom": "Gabriel",
+      "code": "CCG2800",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "COJANU",
+      "prenom": "Alexandre",
+      "code": "CA2830",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 6
+      }
+    },
+    {
+      "nom": "D'HOKERS-ALLUSSON",
+      "prenom": "Adam",
+      "code": "HAA2900",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 15
+      }
+    },
+    {
+      "nom": "FEAUGAS",
+      "prenom": "Jean Charles",
+      "code": "FJC2920",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 11
+      }
+    },
+    {
+      "nom": "FRANCOIS",
+      "prenom": "Alban",
+      "code": "FA3000",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "GIRCOURT",
+      "prenom": "Mathieu",
+      "code": "GM3020",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 14
+      }
+    },
+    {
+      "nom": "LEMONDE-SAN",
+      "prenom": "Sorya",
+      "code": "LMS3050",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "NORMAND",
+      "prenom": "Maxime",
+      "code": "NM3060",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "PERE",
+      "prenom": "Alban",
+      "code": "PA3100",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 13
+      }
+    },
+    {
+      "nom": "RECHE",
+      "prenom": "Victor",
+      "code": "RV3200",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 12
+      }
+    },
+    {
+      "nom": "VARILLON",
+      "prenom": "Amaury",
+      "code": "VA3300",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 17
+      }
+    },
+    {
+      "nom": "VERDYS",
+      "prenom": "Maxime",
+      "code": "VM3500",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 17
+      }
+    },
+    {
+      "nom": "BAZIN",
+      "prenom": "Francois",
+      "code": "BF2000",
+      "notes": {
+        "Éval. n°4 — résistances, Ohm, binaire, multiples": 9
+      }
+    }
+  ]
+}

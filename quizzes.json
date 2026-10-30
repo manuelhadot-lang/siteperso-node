@@ -830,5 +830,837 @@
     ],
     "date": "2026-09-13",
     "published": false
+  },
+  "quiz_cpp_micro_1": {
+    "id": "quiz_cpp_micro_1",
+    "title": "Éval. n°1 — C++ & systèmes microprogrammés (bases)",
+    "questions": [
+      {
+        "text": "En C++, chaque instruction se termine en général par :",
+        "answers": [
+          "deux-points :",
+          "point-virgule ;",
+          "virgule ,"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un commentaire sur une ligne commence par :",
+        "answers": [
+          "/*",
+          "//",
+          "#"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La fonction exécutée une seule fois au démarrage est :",
+        "answers": [
+          "loop()",
+          "setup()",
+          "main()"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La fonction répétée sans arrêt sur Arduino / ESP32 est :",
+        "answers": [
+          "setup()",
+          "init()",
+          "loop()"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Le mot-clé void devant setup() signifie que la fonction :",
+        "answers": [
+          "renvoie un entier",
+          "ne renvoie pas de valeur",
+          "est obligatoire"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un système câblé, pour changer le comportement il faut :",
+        "answers": [
+          "téléverser un nouveau programme",
+          "recâbler / modifier le matériel",
+          "changer uniquement la RAM"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un système microprogrammé, on change le comportement en :",
+        "answers": [
+          "recâblant les composants",
+          "téléversant un nouveau programme",
+          "changeant l’horloge uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La chaîne d'information typique est :",
+        "answers": [
+          "actionneur -> programme -> capteur",
+          "capteur -> entrée -> programme -> sortie -> actionneur",
+          "programme -> capteur -> actionneur"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un microcontrôleur réunit sur une puce :",
+        "answers": [
+          "uniquement le processeur",
+          "processeur, mémoires et périphériques",
+          "uniquement la RAM"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un microprocesseur, contrairement au microcontrôleur :",
+        "answers": [
+          "contient déjà flash et EEPROM",
+          "est surtout l’unité de calcul (mémoires / E-S à part)",
+          "ne peut pas exécuter de programme"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "GPIO signifie :",
+        "answers": [
+          "entrée analogique uniquement",
+          "entrée-sortie à usage général",
+          "générateur de tension"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur un Arduino Uno, le niveau logique haut vaut environ :",
+        "answers": [
+          "3,3 V",
+          "5 V",
+          "12 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur un ESP32, le niveau logique haut vaut environ :",
+        "answers": [
+          "5 V",
+          "3,3 V",
+          "1,8 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le langage distingue les majuscules : n et N sont :",
+        "answers": [
+          "la même variable",
+          "deux variables différentes",
+          "interdits"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un bloc d’instructions est entouré par :",
+        "answers": [
+          "parenthèses ( )",
+          "accolades { }",
+          "crochets [ ]"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "L’algorithme décrit la méthode :",
+        "answers": [
+          "uniquement en C++",
+          "en français, sans détail de langage",
+          "uniquement en binaire"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "setup() sert typiquement à :",
+        "answers": [
+          "lire les capteurs en boucle",
+          "préparer les broches et la liaison série",
+          "éteindre la carte"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un actionneur typique est :",
+        "answers": [
+          "un bouton poussoir",
+          "une LED ou un moteur",
+          "une photorésistance"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Un capteur typique est :",
+        "answers": [
+          "un moteur",
+          "une LED",
+          "un bouton ou une LDR"
+        ],
+        "correct": 2,
+        "image": null
+      },
+      {
+        "text": "Le processeur exécute les instructions :",
+        "answers": [
+          "toutes en même temps",
+          "l’une après l’autre",
+          "uniquement au téléversement"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_2": {
+    "id": "quiz_cpp_micro_2",
+    "title": "Éval. n°2 — C++ & systèmes microprogrammés (variables, cartes, IDE)",
+    "questions": [
+      {
+        "text": "Une variable est stockée principalement en :",
+        "answers": [
+          "flash",
+          "RAM",
+          "EEPROM uniquement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type int sert à stocker :",
+        "answers": [
+          "un décimal",
+          "un entier",
+          "un texte long"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type float sert à stocker :",
+        "answers": [
+          "un entier uniquement",
+          "un nombre décimal",
+          "vrai ou faux"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le type bool peut valoir :",
+        "answers": [
+          "seulement 0 à 255",
+          "true ou false",
+          "uniquement des lettres"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "En C++, le point décimal s’écrit :",
+        "answers": [
+          "avec une virgule : 3,3",
+          "avec un point : 3.3",
+          "avec un slash : 3/3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "const int SEUIL = 25; signifie que SEUIL :",
+        "answers": [
+          "peut être modifié librement",
+          "ne doit plus être modifié par le programme",
+          "est stocké uniquement en RAM volatile"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On préfère const à #define car :",
+        "answers": [
+          "#define est plus précis",
+          "const a un type visible et détecte les erreurs",
+          "#define est obligatoire sur ESP32"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le symbole = sert à :",
+        "answers": [
+          "comparer deux valeurs",
+          "affecter (ranger) une valeur",
+          "déclarer un type"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le symbole == sert à :",
+        "answers": [
+          "affecter une valeur",
+          "comparer l’égalité",
+          "incrémenter"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un if, écrire if (n = 3) :",
+        "answers": [
+          "compare n à 3",
+          "range 3 dans n (affectation)",
+          "est une erreur de syntaxe toujours"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Arduino Uno : horloge typique :",
+        "answers": [
+          "240 MHz",
+          "16 MHz",
+          "1 MHz"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "ESP32 : horloge pouvant atteindre :",
+        "answers": [
+          "16 MHz",
+          "240 MHz",
+          "1 GHz"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Flash (programme) sur Arduino Uno : environ :",
+        "answers": [
+          "4 Mo",
+          "32 Ko",
+          "2 Ko"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead sur Uno renvoie typiquement un code de :",
+        "answers": [
+          "0 à 4095",
+          "0 à 1023",
+          "0 à 255"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead sur ESP32 renvoie typiquement un code de :",
+        "answers": [
+          "0 à 1023",
+          "0 à 4095",
+          "0 à 100"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans l’IDE Arduino, « Vérifier » sert à :",
+        "answers": [
+          "écrire en flash",
+          "compiler / détecter les erreurs",
+          "ouvrir le Wi-Fi"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "« Téléverser » sert à :",
+        "answers": [
+          "afficher le moniteur uniquement",
+          "écrire le programme dans la flash",
+          "effacer la RAM définitivement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le fichier croquis se termine en général par :",
+        "answers": [
+          ".cpp uniquement",
+          ".ino",
+          ".exe"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le dossier du croquis doit :",
+        "answers": [
+          "porter un nom quelconque",
+          "porter le même nom que le fichier .ino",
+          "s’appeler toujours Arduino"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Ne jamais appliquer à une broche ESP32 :",
+        "answers": [
+          "3,3 V",
+          "5 V",
+          "0 V"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_3": {
+    "id": "quiz_cpp_micro_3",
+    "title": "Éval. n°3 — C++ & systèmes microprogrammés (boucles, mémoires, E/S)",
+    "questions": [
+      {
+        "text": "for (int i = 0; i < 4; i++) exécute le bloc :",
+        "answers": [
+          "3 fois",
+          "4 fois",
+          "5 fois"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans ce for, les valeurs prises par i sont :",
+        "answers": [
+          "1, 2, 3, 4",
+          "0, 1, 2, 3",
+          "0, 1, 2, 3, 4"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On utilise plutôt for quand :",
+        "answers": [
+          "on ne connaît pas le nombre de tours",
+          "on connaît le nombre de tours",
+          "on attend un capteur sans compter"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "On utilise plutôt while quand :",
+        "answers": [
+          "on compte exactement 10 tours",
+          "on répète jusqu’à un changement / condition",
+          "setup() doit boucler"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si la condition d’un while est fausse dès le début :",
+        "answers": [
+          "le bloc s’exécute une fois",
+          "le bloc ne s’exécute jamais",
+          "la carte redémarre"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans un while qui attend une mesure, il faut :",
+        "answers": [
+          "ne jamais relire le capteur",
+          "relire le capteur dans la boucle",
+          "utiliser uniquement delay"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La mémoire flash : hors tension :",
+        "answers": [
+          "perd le programme",
+          "conserve le programme",
+          "conserve uniquement les variables"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "La RAM : hors tension :",
+        "answers": [
+          "conserve les variables",
+          "perd son contenu",
+          "stocke le programme définitivement"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur Arduino Uno, un réglage à garder hors tension va souvent en :",
+        "answers": [
+          "RAM",
+          "EEPROM",
+          "registre d’horloge"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, l’équivalent « réglage conservé » s’appelle souvent :",
+        "answers": [
+          "ROM cassée",
+          "NVS",
+          "SRAM vidéo"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "pinMode(p, OUTPUT) :",
+        "answers": [
+          "lit une tension",
+          "configure la broche en sortie",
+          "ouvre le moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "digitalWrite(p, HIGH) impose :",
+        "answers": [
+          "toujours 12 V",
+          "un niveau haut (5 V ou 3,3 V selon la carte)",
+          "une lecture analogique"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "digitalRead(p) lit :",
+        "answers": [
+          "une tension en volts exacts",
+          "un niveau haut ou bas",
+          "un fichier .ino"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "analogRead(p) renvoie :",
+        "answers": [
+          "directement des volts",
+          "un code entier (pas des volts)",
+          "un booléen"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "delay(500) :",
+        "answers": [
+          "attend 500 s",
+          "attend 500 ms et fige le programme",
+          "accélère la boucle"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Entre entiers, 5 / 2 vaut :",
+        "answers": [
+          "2,5",
+          "2",
+          "0"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "5 / 2.0 vaut :",
+        "answers": [
+          "2",
+          "2.5",
+          "0"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "i++ est équivalent à :",
+        "answers": [
+          "i = i - 1",
+          "i = i + 1",
+          "i == 1"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Une variable déclarée dans un bloc { } :",
+        "answers": [
+          "existe partout dans le fichier",
+          "n’existe que dans ce bloc",
+          "est toujours const"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Après coupure d’alimentation :",
+        "answers": [
+          "variables RAM et programme flash disparaissent",
+          "le programme flash reste, les variables RAM disparaissent",
+          "tout reste en RAM"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
+  },
+  "quiz_cpp_micro_4": {
+    "id": "quiz_cpp_micro_4",
+    "title": "Éval. n°4 — C++ & systèmes microprogrammés (ADC, série, pièges)",
+    "questions": [
+      {
+        "text": "Sur Uno, pleine échelle analogique typique :",
+        "answers": [
+          "3,3 V -> 0 a 4095",
+          "5 V -> 0 a 1023",
+          "12 V -> 0 a 255"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, pleine échelle analogique typique :",
+        "answers": [
+          "5 V -> 0 a 1023",
+          "3,3 V -> 0 a 4095",
+          "3,3 V -> 0 a 1023"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Plus le nombre de bits ADC est grand :",
+        "answers": [
+          "moins la mesure est fine",
+          "plus l’échelon de tension est fin",
+          "plus la RAM disparaît"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Serial.begin(9600) :",
+        "answers": [
+          "compile le programme",
+          "ouvre la liaison série à 9600 bauds",
+          "téléverse en flash"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Si le moniteur série n’est pas à la même vitesse que Serial.begin :",
+        "answers": [
+          "rien ne change",
+          "les caractères sont illisibles",
+          "la carte fond"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Deux vitesses série courantes :",
+        "answers": [
+          "120 et 240",
+          "9600 et 115200",
+          "1 et 2"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Ordre typique :",
+        "answers": [
+          "Téléverser -> Vérifier -> écrire le code",
+          "Écrire -> Vérifier -> Téléverser -> setup puis loop",
+          "loop -> setup -> téléverser"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Au démarrage, après téléversement :",
+        "answers": [
+          "loop() puis jamais setup()",
+          "setup() une fois, puis loop() sans fin",
+          "uniquement le moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Piège fréquent : écrire dans un if :",
+        "answers": [
+          "n == 3",
+          "n = 3 à la place de n == 3",
+          "n != 3"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Piège fréquent dans un while :",
+        "answers": [
+          "augmenter le compteur / relire l’entrée",
+          "oublier d’augmenter le compteur ou de relire l’entrée",
+          "utiliser des accolades"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Compter un tour de trop vient souvent de :",
+        "answers": [
+          "i < 4",
+          "utiliser <= au lieu de <",
+          "i++"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Vouloir faire SEUIL = 30 alors que SEUIL est const :",
+        "answers": [
+          "est accepté",
+          "est refusé par le compilateur",
+          "efface la flash"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Sur ESP32, les broches 34 à 39 sont souvent :",
+        "answers": [
+          "sorties PWM uniquement",
+          "entrées seules (pas de sortie)",
+          "alimentations 5 V"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Câble USB « charge seule » (sans données) empêche surtout :",
+        "answers": [
+          "d’alimenter la carte",
+          "de téléverser / communiquer",
+          "d’allumer une LED externe"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Dans l’exemple « au-dessus du seuil, clignoter 3 fois », le for fait :",
+        "answers": [
+          "1 clignotement",
+          "3 clignotements",
+          "une attente infinie"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le C++ du cours est :",
+        "answers": [
+          "interprété ligne à ligne comme MicroPython",
+          "compilé en langage machine",
+          "exécuté dans Excel"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "MicroPython sur ESP32 :",
+        "answers": [
+          "est le langage principal de ce cours",
+          "est interprété, ce n’est pas le langage du cours",
+          "remplace forcément le C++"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "Le bootloader est :",
+        "answers": [
+          "un fichier Excel",
+          "un petit programme déjà en flash qui démarre la carte",
+          "une résistance de pull-up"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "PWM (analogWrite sur Uno) sert notamment à :",
+        "answers": [
+          "mesurer une tension précise en volts",
+          "doser une LED ou un moteur en hachant le signal",
+          "changer la tension d’alimentation USB"
+        ],
+        "correct": 1,
+        "image": null
+      },
+      {
+        "text": "À retenir : variables en RAM, programme en :",
+        "answers": [
+          "EEPROM uniquement",
+          "flash",
+          "moniteur série"
+        ],
+        "correct": 1,
+        "image": null
+      }
+    ],
+    "date": "2026-10-30",
+    "published": false
   }
 }
