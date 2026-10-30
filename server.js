@@ -816,6 +816,40 @@ let planningDocs = readJsonFileSafe(dataFile("planning_docs.json"), {});
 let quizzes = readJsonFileSafe(dataFile("quizzes.json"), {});
 let chatMessages = readJsonFileSafe(dataFile("chat_messages.json"), []);
 
+/**
+ * Sur Render, quizzes.json du disque persistant n’est seedé qu’une fois.
+ * Les quiz ajoutés ensuite dans le dépôt Git n’apparaissent jamais.
+ * On fusionne ici les id manquants (sans écraser ceux déjà créés / modifiés).
+ */
+function mergeQuizzesFromRepo(persist = true) {
+    const repoPath = path.join(REPO_ROOT, "quizzes.json");
+    if (!fs.existsSync(repoPath)) return 0;
+    // En local sans DATA_DIR distinct, dataFile === dépôt : rien à fusionner.
+    if (!USE_PERSISTENT_DATA && path.resolve(dataFile("quizzes.json")) === path.resolve(repoPath)) {
+        return 0;
+    }
+    const repoQuizzes = readJsonFileSafe(repoPath, {});
+    if (!repoQuizzes || typeof repoQuizzes !== "object" || Array.isArray(repoQuizzes)) return 0;
+    let added = 0;
+    for (const [id, quiz] of Object.entries(repoQuizzes)) {
+        if (!id || !quiz || typeof quiz !== "object") continue;
+        if (quizzes[id]) continue;
+        quizzes[id] = {
+            ...quiz,
+            id: quiz.id || id,
+            published: quiz.published === true,
+        };
+        added += 1;
+    }
+    if (added && persist) {
+        writeJsonAtomic("quizzes.json", quizzes);
+        console.log(`[data] ${added} quiz(s) ajouté(s) depuis le dépôt Git`);
+    }
+    return added;
+}
+mergeQuizzesFromRepo(true);
+console.log(`[data] quizzes chargés: ${Object.keys(quizzes).length}`);
+
 // --- 3. CONFIGURATION MULTER ---
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -3423,6 +3457,17 @@ app.post('/api/delete-quiz', authentificationProf, (req, res) => {
     res.json({ success: true });
 });
 
+// 5b. Réinjecter les quiz du dépôt Git manquants sur le disque (sans écraser)
+app.post('/api/sync-quizzes-from-repo', authentificationProf, (req, res) => {
+    const added = mergeQuizzesFromRepo(true);
+    res.json({
+        success: true,
+        added,
+        count: Object.keys(quizzes).length,
+        list: Object.values(quizzes).map(quizListItem),
+    });
+});
+
 // 6. Interface Graphique de création de Quiz
 app.get('/gestion-quiz', authentificationProf, (req, res) => {
     res.send(`
@@ -3468,6 +3513,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
                 <button class="btn btn-success" onclick="createNew()">+ NOUVEAU QUIZ</button>
                 <a class="btn btn-primary" href="/quiz-global.html" target="_blank" style="text-decoration:none; display:inline-block;">👀 Voir la page élèves</a>
                 <button class="btn btn-mute" onclick="unpublishAll()">🔒 Tout retirer des élèves</button>
+                <button class="btn btn-warn" onclick="syncFromRepo()" title="Ajoute les quiz présents dans le dépôt Git qui manquent sur le serveur">↻ Sync dépôt Git</button>
             </div>
             <div id="quiz-list" style="margin-top:20px;"></div>
         </div>
@@ -3493,11 +3539,11 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
             }
 
             async function loadList() {
-                const res = await fetch(API_URL + '/list-quizzes?all=1');
+                const res = await fetch(API_URL + '/list-quizzes?all=1', { credentials: 'include' });
                 const list = await res.json();
                 const box = document.getElementById('quiz-list');
                 if (!Array.isArray(list) || list.length === 0) {
-                    box.innerHTML = "<p style='color:#94a3b8;'>Aucun quiz enregistré.</p>";
+                    box.innerHTML = "<p style='color:#94a3b8;'>Aucun quiz enregistré. Utilisez <b>Sync dépôt Git</b> après un déploiement, ou créez un nouveau quiz.</p>";
                     return;
                 }
                 box.innerHTML = list.map(q => {
@@ -3524,6 +3570,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
             async function setPublished(id, published) {
                 await fetch('/api/publish-quiz', {
                     method: 'POST',
+                    credentials: 'include',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ id, published: !!published })
                 });
@@ -3534,14 +3581,33 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
                 if (!confirm('Proposer uniquement ce quiz aux élèves (les autres seront masqués) ?')) return;
                 await fetch('/api/publish-quiz', {
                     method: 'POST',
+                    credentials: 'include',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ id, exclusive: true })
                 });
                 loadList();
             }
 
+            async function syncFromRepo() {
+                const res = await fetch('/api/sync-quizzes-from-repo', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: '{}'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Échec de la synchronisation');
+                    return;
+                }
+                alert(data.added
+                    ? (data.added + ' quiz ajouté(s) depuis le dépôt (total : ' + data.count + ').')
+                    : ('Aucun quiz manquant (total : ' + data.count + ').'));
+                loadList();
+            }
+
             async function unpublishAll() {
-                const res = await fetch(API_URL + '/list-quizzes?all=1');
+                const res = await fetch(API_URL + '/list-quizzes?all=1', { credentials: 'include' });
                 const list = await res.json();
                 if (!Array.isArray(list) || !list.length) return;
                 if (!confirm('Retirer tous les quiz de la page élèves ?')) return;
@@ -3549,6 +3615,7 @@ app.get('/gestion-quiz', authentificationProf, (req, res) => {
                     if (q.published) {
                         await fetch('/api/publish-quiz', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({ id: q.id, published: false })
                         });
