@@ -21,5 +21,10 @@ Simulateur/arduino-data/
 public/st_peters_square_night_4k.exr
 docs/Simulateur-Source-Complet.pdf
 
+# Devoirs élèves / artefacts de correction — hors image (persistance via DATA_DIR sur Render)
+upload-tp/
+_grade_work/
+quizzes.json.bak
+
 # Submodule git souvent vide au clone Render — BMP280 vient de arduino-cli (ARDUINO_DIRECTORIES_DATA)
 arduino-libraries/libraries/Adafruit_BMP280_Library

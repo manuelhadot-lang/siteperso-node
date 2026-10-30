@@ -55,5 +55,10 @@ public/*.exr
 # OBJ Jungle Mountain ~164 Mo : limite GitHub 100 Mo (garder en local, importer via le lab)
 3D/montagne/Jungle+Mountain/*.obj
 
+# Devoirs élèves + scripts de notation locaux (ne pas redeployer via Git)
+upload-tp/
+_grade_work/
+quizzes.json.bak
+
 # Cache Arduino local complet
 Simulateur/arduino-data/

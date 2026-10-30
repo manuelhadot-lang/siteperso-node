@@ -1,9 +1,0 @@
-﻿KEY ANCENAY_ROMAIN
-SUB ANCENAY_Romain_2026-10-05.docx backup 14714324
-imgs 9 vids 0 len 1149
-URLS 0
-HIT: Lorsque lÆon simule le montage avec un programme vide, la LED ne sÆallume pas.
---- score ---
-{'TP1_Q1_SimVide': 1, 'TP1_Q2_Allumer': 0, 'TP1_Q3_ProgOn': 3, 'TP1_Q4_ProgBlink': 2, 'TP1_Q5_PhotoMontage': 4, 'TP1_Q6_VideoCligno': 0, 'TP1_Q7_VideoDelais': 0, 'TP1_Q8_Inverse': 2}
-video evidence False
-photo evidence True
