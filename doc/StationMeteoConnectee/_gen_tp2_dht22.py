@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TP2 Station météo — DHT22 et moniteur série, mise en page des fiches du site."""
+"""TP1 Station météo — Lecture du capteur DHT22, mise en page des fiches du site."""
 import struct
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
@@ -7,7 +7,7 @@ from fpdf.enums import XPos, YPos
 FONT = r"C:\Windows\Fonts\DejaVuSans.ttf"
 FONT_B = r"C:\Windows\Fonts\DejaVuSans-Bold.ttf"
 FIG = r"doc\StationMeteoConnectee\_tp2_media"
-OUT = r"doc\StationMeteoConnectee\TP2_DHT22_serie.pdf"
+OUT = r"doc\StationMeteoConnectee\TP1_DHT22.pdf"
 
 
 def png_size(path):
@@ -36,7 +36,7 @@ class TP(FPDF):
         self.cell(
             0,
             6,
-            "TP2 — DHT22 et moniteur série  |  Station météo connectée",
+            "TP1 — Lecture du capteur DHT22  |  Station météo connectée",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
         )
@@ -176,7 +176,7 @@ def main():
     pdf.multi_cell(
         0,
         8,
-        "TP2 — Lecture du DHT22 et moniteur série",
+        "TP1 — Lecture du capteur DHT22",
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
