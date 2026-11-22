@@ -140,7 +140,7 @@ export function jonctionIdToTerminalKey(jonctionId, components, autoJunctions = 
                 if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
             }
         } else if (comp.type === 'grove_dht22') {
-            const pins = ['DATA', 'VCC', 'NC', 'GND'];
+            const pins = ['VCC', 'DATA', 'NC', 'GND'];
             for (let i = 0; i < pins.length; i++) {
                 if (jonctionId === `${id}_${pins[i]}`) return `${id}#${i}`;
             }

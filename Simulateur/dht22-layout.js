@@ -1,7 +1,8 @@
 /** Grove DHT22 (T° / humidité) — géométrie calée grille, origine = centre du module. */
 import { GRID_SIZE as G } from './grid-constants.js';
 
-export const GROVE_DHT22_PINS = ['DATA', 'VCC', 'NC', 'GND'];
+/** De haut en bas : VCC, DATA, NC, GND. */
+export const GROVE_DHT22_PINS = ['VCC', 'DATA', 'NC', 'GND'];
 export const GROVE_DHT22_PIN_COUNT = GROVE_DHT22_PINS.length;
 
 /** PCB bleu ~ 8×3,5 pas. */

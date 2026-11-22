@@ -59,7 +59,7 @@ const COMPONENT_PREFIX = {
     d_flipflop: 'DFF', jk_flipflop: 'JKFF', cd4511: 'CD4511', ic_74hc90: 'HC90', arduino_uno: 'UNO', esp32_c3: 'ESP', esp32_devkit: 'ESP32', esp32_upesy_lp: 'UPLP', led: 'LED', ldr: 'LDR', seg7: 'SEG', bargraph_dc10h: 'BAR', matrix_8x8: 'MX8', grove_lcd16x2: 'LCD', grove_dht22: 'DHT', grove_tsl2591: 'TSL', grove_bmp280: 'BMP', joyit_tft18: 'TFT',
     voltmeter: 'V', ammeter: 'A', ohmmeter: 'OHM', oscilloscope: 'Osci', bode_analyzer: 'Bode', speaker: 'HP', dc_motor: 'M', servo_motor: 'SV', gnd: 'GND', vcc: 'VCC', logic_terminal: 'LOGIC', gimp: 'GImp', gsin: 'Sin', gsqr: 'Sq',
 };
-const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'esp32_upesy_lp', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'nmos', 'opamp', 'lm386', 'ir2104', 'l293d', 'seg7', 'bargraph_dc10h', 'matrix_8x8', 'grove_dht22', 'grove_tsl2591', 'grove_bmp280']);
+const NON_ROTATABLE = new Set(['d_flipflop', 'jk_flipflop', 'cd4511', 'ic_74hc90', 'arduino_uno', 'esp32_c3', 'esp32_devkit', 'esp32_upesy_lp', 'gimp', 'gsin', 'gsqr', 'oscilloscope', 'npn', 'nmos', 'opamp', 'lm386', 'ir2104', 'l293d', 'seg7', 'bargraph_dc10h', 'matrix_8x8']);
 function ensureComponentCounter(type) {
     if (counters[type] == null || !Number.isFinite(counters[type])) counters[type] = 0;
     counters[type]++;
