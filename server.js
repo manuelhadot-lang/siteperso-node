@@ -813,6 +813,52 @@ function ensurePlanningProjetsDefaults(persist = true) {
 let planningProjets = readJsonFileSafe(dataFile("planning_projets.json"), { ...DEFAULT_PLANNING_PROJETS });
 ensurePlanningProjetsDefaults(true);
 let planningDocs = readJsonFileSafe(dataFile("planning_docs.json"), {});
+
+/** Date AAAA-MM-JJ, ou chaîne vide. Un tableau vient d'un nom de fichier présent dans plusieurs dossiers. */
+function normalizeDocDate(raw) {
+    if (Array.isArray(raw)) {
+        const dates = raw.map(normalizeDocDate).filter(Boolean);
+        return dates.sort().at(-1) || "";
+    }
+    const s = String(raw ?? "").trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+function docPlanningKey(sousDossier, nomFichier) {
+    return `${sousDossier}/${nomFichier}`;
+}
+
+/** Date de parution d'un fichier. La clé « dossier/fichier » prime sur l'ancien nom seul. */
+function docReleaseDate(sousDossier, nomFichier) {
+    const key = docPlanningKey(sousDossier, nomFichier);
+    if (Object.prototype.hasOwnProperty.call(planningDocs, key)) {
+        return normalizeDocDate(planningDocs[key]);
+    }
+    const legacy = planningDocs[nomFichier];
+    return typeof legacy === "string" ? normalizeDocDate(legacy) : "";
+}
+
+function sanitizePlanningDocs(persist = true) {
+    if (!planningDocs || typeof planningDocs !== "object" || Array.isArray(planningDocs)) {
+        planningDocs = {};
+    }
+    let changed = false;
+    for (const [key, value] of Object.entries(planningDocs)) {
+        if (Array.isArray(value) || typeof value !== "string") {
+            delete planningDocs[key];
+            changed = true;
+            continue;
+        }
+        const date = normalizeDocDate(value);
+        if (date !== value) {
+            planningDocs[key] = date;
+            changed = true;
+        }
+    }
+    if (changed && persist) writeJsonAtomic("planning_docs.json", planningDocs);
+    return changed;
+}
+sanitizePlanningDocs(true);
 let quizzes = readJsonFileSafe(dataFile("quizzes.json"), {});
 let chatMessages = readJsonFileSafe(dataFile("chat_messages.json"), []);
 
@@ -1008,6 +1054,7 @@ function applyBackupJsonFile(fileName, parsed) {
             throw new Error("planning_docs.json invalide.");
         }
         planningDocs = parsed;
+        sanitizePlanningDocs(false);
         writeJsonAtomic(fileName, planningDocs);
         return;
     }
@@ -2361,7 +2408,7 @@ app.get('/get-doc/:sousDossier/:nomFichier', (req, res) => {
     }
 
     const aujourdhui = new Date().toISOString().split('T')[0];
-    const dateAcces = planningDocs[nomFichier];
+    const dateAcces = docReleaseDate(sousDossier, nomFichier);
     if (dateAcces && aujourdhui < dateAcces) return res.send(`<script>alert("🔒 Disponible le ${dateAcces.split('-').reverse().join('/')}"); window.history.back();</script>`);
     
     const filePath = path.join(dirDocs, sousDossier, nomFichier);
@@ -2374,7 +2421,12 @@ app.get('/get-doc/:sousDossier/:nomFichier', (req, res) => {
 // API pour masquer les boutons sur les pages de cours
 app.get('/api/check-access/:nomFichier', (req, res) => {
     const aujourdhui = new Date().toISOString().split('T')[0];
-    const dateAcces = planningDocs[req.params.nomFichier];
+    const sousDossier = String(req.query.dossier || "");
+    const dateAcces = sousDossier
+        ? docReleaseDate(sousDossier, req.params.nomFichier)
+        : (typeof planningDocs[req.params.nomFichier] === "string"
+            ? normalizeDocDate(planningDocs[req.params.nomFichier])
+            : "");
     res.json({ accessible : !dateAcces || aujourdhui >= dateAcces });
 });
 
@@ -2543,16 +2595,22 @@ app.get('/espace-correction', authentificationProf, (req, res) => {
     let htmlDocs = "";
     mesSousDossiersDocs.forEach(sd => {
         const chemin = path.join(dirDocs, sd);
-        const fichiers = fs.existsSync(chemin) ? fs.readdirSync(chemin).filter(f => !f.startsWith('.')) : [];
+        const fichiers = fs.existsSync(chemin)
+            ? fs.readdirSync(chemin).filter((f) => {
+                if (!f || f.startsWith('.')) return false;
+                try { return fs.statSync(path.join(chemin, f)).isFile(); } catch { return false; }
+            })
+            : [];
         
         htmlDocs += `<div style="margin-bottom:10px; border-left:3px solid #00d1ff; padding-left:10px;">
                         <b style="color:#00d1ff; font-size:0.9rem;">📁 ${sd}</b>`;
         if (fichiers.length === 0) htmlDocs += `<p style="color:#666; font-size:0.7rem;">(Vide)</p>`;
         else {
             fichiers.forEach(f => {
+                const cleDoc = docPlanningKey(sd, f);
                 htmlDocs += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; background:#333; padding:4px; border-radius:3px;">
                                 <span style="font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;" title="${escapeHtml(f)}">${escapeHtml(f)}</span>
-                                <input type="date" name="${f}" value="${planningDocs[f] || ''}" style="font-size:0.7rem;">
+                                <input type="date" name="${escapeHtmlAttr(cleDoc)}" value="${escapeHtmlAttr(docReleaseDate(sd, f))}" style="font-size:0.7rem;">
                              </div>`;
             });
         }
@@ -2895,7 +2953,12 @@ app.post('/update-dates', authentificationProf, (req, res) => {
 });
 
 app.post('/update-docs-dates', authentificationProf, (req, res) => {
-    planningDocs = Object.assign(planningDocs, req.body);
+    const next = {};
+    for (const [key, value] of Object.entries(req.body || {})) {
+        if (!key || key.includes('..') || key.includes('\\') || key.includes('\0')) continue;
+        next[key] = normalizeDocDate(value);
+    }
+    planningDocs = next;
     writeJsonAtomic("planning_docs.json", planningDocs);
     res.send("<script>alert('Dates Documents sauvegardées !'); window.location='/espace-correction';</script>");
 });
